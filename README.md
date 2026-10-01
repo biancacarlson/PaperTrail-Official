@@ -1,0 +1,39 @@
+# PaperTrail
+A mobile-first tool for turning receipts, invoices and other freelance expense documents into clean, usable records.
+
+PaperTrail runs in your browser. Upload a receipt, invoice, screenshot or photo, review the fields, and copy the finished record into an ongoing Google Doc.
+
+## What it does
+- Reads uploaded receipts and invoices and fills in key fields: date, business or client, location, hours, and amount
+- Purchases: upload several screenshots at once, tap the circle on any personal item to exclude it, and the subtotal, tax and total update automatically
+- Purchase PDF: redact anything personal by dragging down over it (full-width bars by default, with dots to resize), highlight what matters (date, order number, subtotal, tax and total are highlighted automatically), then tap **Save PDF**. The file is named `[purchase date] Receipt`. Undo, Redo and Clear all marks are available while marking up (Clear all on the record can also be undone). Redactions are burned into the image, so they can't be undone from the saved file. **Copy Receipt Image** puts the marked-up receipt on the clipboard to paste into a doc.
+- Lets you review and edit every field before copying
+- Totals regular and overtime hours
+- Calculates wear and tear from the IRS business mileage rate for the job date
+- Calculates the Net 30 payout date from the event end date
+
+## Mileage
+PaperTrail does not look up driving distance. Tap **Search in Safari** or **Search in Chrome** to open a Google search in a separate tab, then type the round-trip miles into **Round-trip miles**.
+
+IRS business rate used for wear and tear:
+- Jan 1 - Jun 30, 2026: $0.725/mile
+- Jul 1 - Dec 31, 2026: $0.76/mile
+
+## Privacy
+- Your photo or PDF is read on your phone and is not uploaded to a server.
+- The reading tools (OCR and PDF) load from public servers (cdnjs, jsDelivr).
+- The "Identify unclear items from their photos" feature downloads an image model once (from jsDelivr and Hugging Face) and runs it on your phone. Your receipt images are not sent anywhere.
+- The job address is sent to Google only when you tap a search button.
+- Only the one passcode built into this app is accepted; it can't be set or changed from the site. After 3 wrong attempts the app locks on that device until the browser's site data is cleared. It is a screen lock in the browser, so the site address itself is still public. Nothing is stored on a server.
+
+## Deploy
+1. Upload the project files to your GitHub repo.
+2. Settings > Pages > Deploy from a branch.
+3. Branch `main`, folder `/docs`, then Save.
+4. Open the Pages URL once it finishes deploying.
+
+## Important
+PaperTrail is a recordkeeping tool, not tax, accounting or legal advice, and it does not guarantee accuracy. Read the full [DISCLAIMER](DISCLAIMER.md). IRS mileage rates are built into the code and must be checked each year against irs.gov.
+
+## License
+MIT, see `LICENSE`. The software is provided as is, without warranty.
