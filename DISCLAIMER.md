@@ -1,6 +1,6 @@
 # PaperTrail — Important Disclaimer
 
-Paper Trail is a software tool provided for informational, organizational, and recordkeeping purposes only. Paper Trail is not a tax preparation service, accounting service, legal service, financial advisory service, or professional tax advice.
+PaperTrail is a software tool provided for informational, organizational, and record-keeping purposes only. PaperTrail is not a tax preparation service, accounting service, legal service, financial advisory service, or professional tax advice.
 
 PaperTrail does not determine whether an expense, deduction, mileage amount, business expense, or other item is allowable for tax purposes. Nothing provided by PaperTrail should be interpreted as a representation, recommendation, or guarantee that any particular expense or deduction is deductible, reportable, reimbursable, or otherwise acceptable under federal, state, or local law.
 
