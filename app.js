@@ -132,13 +132,13 @@ function rows(r){const o=compute(r),G=[],g=k=>{const x={k,rows:[]};G.push(x);ret
  return{t:'FREELANCE JOB RECORD',G:G.filter(x=>x.rows.length)}}
 /* plain text (print + fallback) */
 function text(r){const{t,G}=rows(r),out=['~ '+t+' ~'];G.forEach(x=>{out.push('');x.rows.forEach(([l,v])=>out.push(l+': '+v))});return out}
-/* rich version for pasting into Google Docs / Word: three bordered 8pt tables, 3.9in wide */
+/* rich version for pasting into Google Docs / Word: three simple full-width tables */
 const hx=v=>String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-const TD='border:1pt solid #000;padding:5pt;vertical-align:top;font-size:8pt;';
-function html(r){const{t,G}=rows(r),sp='<p style="margin:0;font-size:8pt">&nbsp;</p>',nb='&nbsp;'.repeat(21);
- const cell=(w,txt,st)=>'<td style="'+TD+'width:'+w+'pt;'+st+'"><p style="margin:0;font-size:8pt;'+st+'"><span style="font-size:8pt;'+st+'">'+hx(txt)+'</span></p></td>';
- return'<p style="margin:0"><b>'+nb+'~ <u>'+hx(t)+'</u> ~</b></p>'+G.map(x=>{const sh=x.k=='det',bg=sh?'background-color:#f3f3f3;':'',ls=sh?'font-weight:bold;color:#434343;':'font-weight:bold;color:#45818e;';
-  return sp+'<table style="border-collapse:collapse;table-layout:fixed;width:280pt" border="1" cellspacing="0" cellpadding="0"><tbody>'+x.rows.map(([l,v])=>'<tr>'+cell(158,l,bg+ls)+cell(122,v,bg)+'</tr>').join('')+'</tbody></table>'}).join('')}
+const TD='border:1px solid #000;padding:4pt 6pt;vertical-align:top;font-size:10pt;font-family:Arial,sans-serif;';
+function html(r){const{t,G}=rows(r),sp='<p style="margin:0;font-size:6pt">&nbsp;</p>';
+ const cell=(w,txt,st)=>'<td width="'+w+'%" style="'+TD+'width:'+w+'%;'+st+'">'+hx(txt)+'</td>';
+ return'<p style="margin:0 0 4pt 0;text-align:center;font-size:12pt"><b><u>'+hx(t)+'</u></b></p>'+G.map(x=>{const bg=x.k=='det'?'background-color:#f3f3f3;':'';
+  return sp+'<table width="100%" style="border-collapse:collapse;width:100%" border="1" cellspacing="0" cellpadding="0"><tbody>'+x.rows.map(([l,v])=>'<tr>'+cell(62,l,bg+'font-weight:bold;')+cell(38,v,bg)+'</tr>').join('')+'</tbody></table>'}).join('')}
 /* Copy: 1) clipboard API  2) hidden textarea + execCommand  3) visible selectable panel. Never fails silently. */
 function copied(){$('#copypanel').style.display='none';st('');toast('Copied to clipboard');return true}
 async function copy(rs){const tx=rs.map(r=>text(r).join('\n')).join('\n\n');
