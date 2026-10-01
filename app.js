@@ -134,20 +134,43 @@ function rows(r){const o=compute(r),G=[],g=k=>{const x={k,rows:[]};G.push(x);ret
 function text(r){const{t,G}=rows(r),out=['~ '+t+' ~'];G.forEach(x=>{out.push('');x.rows.forEach(([l,v])=>out.push(l+': '+v))});return out}
 /* rich version for pasting into Google Docs / Word: three simple full-width tables */
 const hx=v=>String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-const TD='border:1px solid #000;padding:4pt 6pt;vertical-align:top;font-family:Arial,sans-serif;';
+const TD='border:1px solid #000;padding:4pt 6pt;vertical-align:top;font-family:Arial,sans-serif;box-sizing:border-box;';
 function html(r){const{t,G}=rows(r),sp='<p style="margin:0;font-size:6pt">&nbsp;</p>';
- const cell=(txt,st)=>'<td style="'+TD+st+'">'+hx(txt)+'</td>';
- return'<p style="margin:0 0 4pt 0;font-size:13pt"><b><u>'+hx(t)+'</u></b></p>'+G.map(x=>{const det=x.k=='det',info=x.k=='info',bg=det?'background-color:#f3f3f3;color:#434343;font-size:9pt;':'font-size:10pt;',w1=info?173:360,w2=info?287:100;
-  return sp+'<table style="border:none;border-collapse:collapse;" border="1" cellspacing="0" cellpadding="0"><colgroup><col width="'+w1+'"/><col width="'+w2+'"/></colgroup><tbody>'+x.rows.map(([l,v])=>'<tr>'+cell(l,bg+'font-weight:bold;')+cell(v,bg)+'</tr>').join('')+'</tbody></table>'}).join('')}
+ return'<p style="margin:0 0 4pt 0;font-size:13pt;font-family:Arial,sans-serif"><b><u>'+hx(t)+'</u></b></p>'+G.map(x=>{const det=x.k=='det',info=x.k=='info',bg=det?'background-color:#f3f3f3;color:#434343;font-size:9pt;':'font-size:10pt;',w1=info?173:360,w2=info?287:100,cell=(w,txt)=>'<td width="'+w+'" style="'+TD+bg+'width:'+w+'px;font-weight:'+(w==w1?'bold':'normal')+'">'+hx(txt)+'</td>';
+  return sp+'<table width="460" border="1" cellspacing="0" cellpadding="0" style="border-collapse:collapse;table-layout:fixed;width:460px"><colgroup><col width="'+w1+'"/><col width="'+w2+'"/></colgroup><tbody>'+x.rows.map(([l,v])=>'<tr>'+cell(w1,l)+cell(w2,v)+'</tr>').join('')+'</tbody></table>'}).join('')}
 /* Copy: 1) clipboard API  2) hidden textarea + execCommand  3) visible selectable panel. Never fails silently. */
 function copied(){$('#copypanel').style.display='none';st('');toast('Copied to clipboard');return true}
-async function copy(rs){const tx=rs.map(r=>text(r).join('\n')).join('\n\n');
+async function copyText(rs){const tx=rs.map(r=>text(r).join('\n')).join('\n\n');
 const rh='<div style="font-family:Arial,sans-serif">'+rs.map(html).join('<p style="margin:0"><br></p>')+'</div>';
+ try{const d=document.createElement('div');d.contentEditable='true';d.innerHTML=rh;d.style.cssText='position:fixed;top:0;left:0;width:500px;opacity:0;pointer-events:none;background:#fff';document.body.appendChild(d);const g=getSelection(),q=document.createRange();q.selectNodeContents(d);g.removeAllRanges();g.addRange(q);const k=document.execCommand('copy');g.removeAllRanges();d.remove();if(k)return copied()}catch(e){}
  try{if(navigator.clipboard&&navigator.clipboard.write&&window.ClipboardItem){await navigator.clipboard.write([new ClipboardItem({'text/html':new Blob([rh],{type:'text/html'}),'text/plain':new Blob([tx],{type:'text/plain'})})]);return copied()}}catch(e){}
- try{const d=document.createElement('div');d.contentEditable='true';d.innerHTML=rh;d.style.cssText='position:fixed;top:0;left:0;opacity:0';document.body.appendChild(d);const g=getSelection(),q=document.createRange();q.selectNodeContents(d);g.removeAllRanges();g.addRange(q);const k=document.execCommand('copy');g.removeAllRanges();d.remove();if(k)return copied()}catch(e){}
  try{if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(tx);return copied()}}catch(e){}
  try{const a=document.createElement('textarea');a.value=tx;a.setAttribute('readonly','');a.style.cssText='position:fixed;top:0;left:0;opacity:0;font-size:16px';document.body.appendChild(a);a.focus();a.select();a.setSelectionRange(0,tx.length);const k=document.execCommand('copy');a.remove();if(k)return copied()}catch(e){}
  const ta=$('#copyta');ta.value=tx;$('#copypanel').style.display='block';$('#copymsg').textContent='Select and copy the text below';st('');ta.focus();ta.select();try{ta.setSelectionRange(0,tx.length)}catch(e){}$('#copypanel').scrollIntoView({block:'center'});return false}
+/* Image copy: draws each record as one clean phone-sized card image (no tables), copies it as a PNG */
+function paintRecs(x,rs,draw){const W=900,P=36,IN=26,F='Arial,Helvetica,sans-serif',CW=W-2*P-2*IN;let y=P;
+ const wrap=(t,w)=>{const o=[];let l='';String(t).split(' ').forEach(wd=>{const n=l?l+' '+wd:wd;if(x.measureText(n).width>w&&l){o.push(l);l=wd}else l=n});if(l)o.push(l);return o};
+ const rr=(a,b,w,h,r)=>{x.beginPath();x.moveTo(a+r,b);x.arcTo(a+w,b,a+w,b+h,r);x.arcTo(a+w,b+h,a,b+h,r);x.arcTo(a,b+h,a,b,r);x.arcTo(a,b,a+w,b,r);x.closePath()};
+ rs.forEach((r,ri)=>{const{t,G}=rows(r);if(ri)y+=36;
+  if(draw){x.font='bold 46px '+F;x.fillStyle='#111';x.textAlign='left';x.fillText(t,P,y+46);x.fillStyle='#45818e';x.fillRect(P,y+62,90,6)}y+=98;
+  G.forEach(g=>{const info=g.k=='info',det=g.k=='det',lw=CW*(info?.40:.66),vw=CW*(info?.58:.32);
+   const L=g.rows.map(([l,v],i)=>{const last=g.k=='tot'&&i==g.rows.length-1,fs=last?32:28;
+    x.font=(info?'':(det?'':'bold '))+(info?'26':fs)+'px '+F;const a=wrap(l,lw);
+    x.font=(det?'':'bold ')+fs+'px '+F;const b=wrap(v,vw);return{a,b,fs,last,h:Math.max(a.length,b.length)*38+28}});
+   const H=L.reduce((s,q)=>s+q.h,0);
+   if(draw){rr(P,y,W-2*P,H,18);x.fillStyle=det?'#f3f4f6':'#fff';x.fill();x.lineWidth=2;x.strokeStyle='#d5dae0';x.stroke();
+    let ry=y;L.forEach((q,i)=>{if(i){x.fillStyle=q.last?'#9aa4ad':'#e3e7ea';x.fillRect(P+IN,ry,W-2*P-2*IN,q.last?3:2)}
+     x.fillStyle=info?'#5f6b76':'#111';x.font=(info?'':(det?'':'bold '))+(info?'26':q.fs)+'px '+F;if(det)x.fillStyle='#333';x.textAlign='left';
+     q.a.forEach((s,k)=>x.fillText(s,P+IN,ry+14+36+k*38-10));
+     x.fillStyle='#111';x.font=(det?'':'bold ')+q.fs+'px '+F;x.textAlign='right';
+     q.b.forEach((s,k)=>x.fillText(s,W-P-IN,ry+14+36+k*38-10));ry+=q.h})}
+   y+=H+24})});
+ return y+P-24}
+function recsBlob(rs){return new Promise((res,rej)=>{const c=document.createElement('canvas'),x=c.getContext('2d');c.width=900;c.height=paintRecs(x,rs,false);x.fillStyle='#fff';x.fillRect(0,0,900,c.height);paintRecs(x,rs,true);c.toBlob(b=>b?res(b):rej(new Error('img')),'image/png')})}
+async function copy(rs){
+ try{if(navigator.clipboard&&navigator.clipboard.write&&window.ClipboardItem){await navigator.clipboard.write([new ClipboardItem({'image/png':recsBlob(rs)})]);return copied()}}catch(e){}
+ try{const b=await recsBlob(rs),f=new File([b],'record.png',{type:'image/png'});if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f]});return true}}catch(e){}
+ return copyText(rs)}
 function toast(m){$('#status').style.color='#0a0';$('#status').textContent=m;setTimeout(()=>{$('#status').textContent='';$('#status').style.color=''},2500)}
 let ct;const copyRec=async()=>{if(await copy([S.rec])){const b=$('#cpbtn');b.textContent='Copied';clearTimeout(ct);ct=setTimeout(()=>b.textContent='Copy Clean Record',2500)}};
 function saveRec(){S.records.push(JSON.parse(JSON.stringify(S.rec)));toast('Saved for this session');renderRecs()}
