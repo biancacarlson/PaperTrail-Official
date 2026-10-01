@@ -1,6 +1,6 @@
 # PaperTrail — Important Disclaimer
 
-PaperTrail is a software tool provided for informational, organizational, and record-keeping purposes only. PaperTrail is not a tax preparation service, accounting service, legal service, financial advisory service, or professional tax advice.
+PaperTrail is a software tool provided for informational, organizational, and recordkeeping purposes only. PaperTrail is not a tax preparation service, accounting service, legal service, financial advisory service, or professional tax advice.
 
 PaperTrail does not determine whether an expense, deduction, mileage amount, business expense, or other item is allowable for tax purposes. Nothing provided by PaperTrail should be interpreted as a representation, recommendation, or guarantee that any particular expense or deduction is deductible, reportable, reimbursable, or otherwise acceptable under federal, state, or local law.
 
@@ -65,7 +65,7 @@ PaperTrail does not guarantee any particular financial, tax, reimbursement, audi
 
 ## Limitation of Liability
 
-To the maximum extent permitted by applicable law, the authors, contributors, copyright holders, and anyone involved in creating, maintaining, distributing, or providing Paper Trail shall not be liable for any direct, indirect, incidental, special, consequential, exemplary, or other damages or losses arising from or related to:
+To the maximum extent permitted by applicable law, the authors, contributors, copyright holders, and anyone involved in creating, maintaining, distributing, or providing PaperTrail shall not be liable for any direct, indirect, incidental, special, consequential, exemplary, or other damages or losses arising from or related to:
 
 - Use of the software
 - Inability to use the software
@@ -101,7 +101,7 @@ By using PaperTrail, you acknowledge that:
 - You are responsible for reviewing and verifying the information produced by the software.
 - You are responsible for retaining appropriate original documentation and supporting records.
 - You are responsible for determining the appropriate tax treatment of your expenses and records.
-- Paper Trail does not guarantee that any information, expense, deduction, mileage amount, or calculation will be accepted by a tax authority or other third party.
+- PaperTrail does not guarantee that any information, expense, deduction, mileage amount, or calculation will be accepted by a tax authority or other third party.
 - You should obtain professional advice when your circumstances require it.
 
 Use of PaperTrail constitutes acknowledgment of these limitations and responsibilities.
