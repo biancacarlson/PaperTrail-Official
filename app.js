@@ -152,7 +152,7 @@ function paintRecs(x,rs,draw){const W=900,P=36,IN=26,F='Arial,Helvetica,sans-ser
  const wrap=(t,w)=>{const o=[];let l='';String(t).split(' ').forEach(wd=>{const n=l?l+' '+wd:wd;if(x.measureText(n).width>w&&l){o.push(l);l=wd}else l=n});if(l)o.push(l);return o};
  const rr=(a,b,w,h,r)=>{x.beginPath();x.moveTo(a+r,b);x.arcTo(a+w,b,a+w,b+h,r);x.arcTo(a+w,b+h,a,b+h,r);x.arcTo(a,b+h,a,b,r);x.arcTo(a,b,a+w,b,r);x.closePath()};
  rs.forEach((r,ri)=>{const{t,G}=rows(r);if(ri)y+=36;
-  if(draw){x.font='bold 46px '+F;x.fillStyle='#111';x.textAlign='left';x.fillText(t,P,y+46);x.fillStyle='#45818e';x.fillRect(P,y+62,90,6)}y+=98;
+  if(draw){x.font='bold 46px '+F;x.fillStyle='#111';x.textAlign='left';x.fillText(t,P,y+46);x.fillStyle='#45818e';x.fillRect(P,y+62,Math.ceil(x.measureText(t).width),6)}y+=98;
   G.forEach(g=>{const info=g.k=='info',det=g.k=='det',lw=CW*(info?.40:.66),vw=CW*(info?.58:.32);
    const L=g.rows.map(([l,v],i)=>{const last=g.k=='tot'&&i==g.rows.length-1,fs=last?32:28;
     x.font=(info?'':(det?'':'bold '))+(info?'26':fs)+'px '+F;const a=wrap(l,lw);
@@ -166,7 +166,7 @@ function paintRecs(x,rs,draw){const W=900,P=36,IN=26,F='Arial,Helvetica,sans-ser
      q.b.forEach((s,k)=>x.fillText(s,W-P-IN,ry+14+36+k*38-10));ry+=q.h})}
    y+=H+24})});
  return y+P-24}
-function recsBlob(rs){return new Promise((res,rej)=>{const K=3,c=document.createElement('canvas'),x=c.getContext('2d'),h=paintRecs(x,rs,false);c.width=900*K;c.height=h*K;x.scale(K,K);x.fillStyle='#fff';x.fillRect(0,0,900,h);paintRecs(x,rs,true);c.toBlob(b=>b?res(b):rej(new Error('img')),'image/png')})}
+function recsBlob(rs){return new Promise((res,rej)=>{const c=document.createElement('canvas'),x=c.getContext('2d'),h=paintRecs(x,rs,false),K=Math.max(1,Math.min(4,Math.sqrt(15000000/(900*h))));c.width=Math.round(900*K);c.height=Math.round(h*K);x.scale(c.width/900,c.height/h);x.imageSmoothingEnabled=true;x.imageSmoothingQuality='high';x.fillStyle='#fff';x.fillRect(0,0,900,h);paintRecs(x,rs,true);c.toBlob(b=>b?res(b):rej(new Error('img')),'image/png')})}
 async function copy(rs){
  try{if(navigator.clipboard&&navigator.clipboard.write&&window.ClipboardItem){await navigator.clipboard.write([new ClipboardItem({'image/png':recsBlob(rs)})]);return copied()}}catch(e){}
  try{const b=await recsBlob(rs),f=new File([b],'record.png',{type:'image/png'});if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f]});return true}}catch(e){}
