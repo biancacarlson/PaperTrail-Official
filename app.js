@@ -171,6 +171,9 @@ async function copy(rs){
  try{if(navigator.clipboard&&navigator.clipboard.write&&window.ClipboardItem){await navigator.clipboard.write([new ClipboardItem({'image/png':recsBlob(rs)})]);return copied()}}catch(e){}
  try{const b=await recsBlob(rs),f=new File([b],'record.png',{type:'image/png'});if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f]});return true}}catch(e){}
  return copyText(rs)}
+async function saveImg(){try{const b=await recsBlob([S.rec]),f=new File([b],'record.png',{type:'image/png'});
+ if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f]});return}
+ const u=URL.createObjectURL(b);window.open(u,'_blank')}catch(e){if(e&&e.name=='AbortError')return;toast('Could not save image')}}
 function toast(m){$('#status').style.color='#0a0';$('#status').textContent=m;setTimeout(()=>{$('#status').textContent='';$('#status').style.color=''},2500)}
 let ct;const copyRec=async()=>{if(await copy([S.rec])){const b=$('#cpbtn');b.textContent='Copied';clearTimeout(ct);ct=setTimeout(()=>b.textContent='Copy Clean Record',2500)}};
 function saveRec(){S.records.push(JSON.parse(JSON.stringify(S.rec)));toast('Saved for this session');renderRecs()}
