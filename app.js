@@ -125,20 +125,20 @@ function rows(r){const o=compute(r),G=[],g=k=>{const x={k,rows:[]};G.push(x);ret
  if(r.mode=='purchase'){const i=g('info');i('Date',r.date);i('Merchant',niceMerch(r.merchant));i('Receipt/Invoice #',r.number);
   const d=g('det');r.items.filter(x=>!x.off).forEach(x=>d((String(x.n||'Item').replace(/\s*(\.{2,}|…)\s*$/,'').trim()),M(x.t)));
   const t=g('tot');t('Subtotal',M(o.sub));if(o.ship)t('Shipping',M(o.ship));if(N(r.tax)!=null)t('Tax',M(o.tax));t('Total',M(o.total));
-  return{t:'PURCHASE RECORD',G:G.filter(x=>x.rows.length)}}
+  return{t:'PURCHASE',G:G.filter(x=>x.rows.length)}}
  const i=g('info');i('Date',r.jobDate);i('Employer',r.employer);i('Client',r.client);i('Location',r.location);i('Invoice #',r.invoice);
  const d=g('det');d('Round-Trip Distance',o.rt!=null?o.rt.toFixed(1)+' mi':null);d('IRS Rate',o.rate!=null&&o.rt!=null?'$'+o.rate+'/mi':null);
  const t=g('tot');t('Amount Paid',fm(N(r.amount)));t('Mileage Deduction',fm(o.wear));
- return{t:'FREELANCE JOB RECORD',G:G.filter(x=>x.rows.length)}}
+ return{t:'CALL SHEET',G:G.filter(x=>x.rows.length)}}
 /* plain text (print + fallback) */
 function text(r){const{t,G}=rows(r),out=['~ '+t+' ~'];G.forEach(x=>{out.push('');x.rows.forEach(([l,v])=>out.push(l+': '+v))});return out}
 /* rich version for pasting into Google Docs / Word: three simple full-width tables */
 const hx=v=>String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-const TD='border:1px solid #000;padding:4pt 6pt;vertical-align:top;font-size:10pt;font-family:Arial,sans-serif;';
+const TD='border:1px solid #000;padding:4pt 6pt;vertical-align:top;font-family:Arial,sans-serif;';
 function html(r){const{t,G}=rows(r),sp='<p style="margin:0;font-size:6pt">&nbsp;</p>';
- const cell=(w,txt,st)=>'<td width="'+w+'%" style="'+TD+'width:'+w+'%;'+st+'">'+hx(txt)+'</td>';
- return'<p style="margin:0 0 4pt 0;text-align:center;font-size:12pt"><b><u>'+hx(t)+'</u></b></p>'+G.map(x=>{const bg=x.k=='det'?'background-color:#f3f3f3;':'';
-  return sp+'<table width="100%" style="border-collapse:collapse;width:100%" border="1" cellspacing="0" cellpadding="0"><tbody>'+x.rows.map(([l,v])=>'<tr>'+cell(62,l,bg+'font-weight:bold;')+cell(38,v,bg)+'</tr>').join('')+'</tbody></table>'}).join('')}
+ const cell=(w,txt,st)=>'<td style="'+TD+'width:'+w+'pt;'+st+'">'+hx(txt)+'</td>';
+ return'<p style="margin:0 0 4pt 0;font-size:13pt"><b><u>'+hx(t)+'</u></b></p>'+G.map(x=>{const det=x.k=='det',info=x.k=='info',bg=det?'background-color:#f3f3f3;color:#434343;font-size:9pt;':'font-size:10pt;',w1=info?130:270,w2=info?215:75;
+  return sp+'<table style="border-collapse:collapse;table-layout:fixed;width:345pt" border="1" cellspacing="0" cellpadding="0"><tbody>'+x.rows.map(([l,v])=>'<tr>'+cell(w1,l,bg+'font-weight:bold;')+cell(w2,v,bg)+'</tr>').join('')+'</tbody></table>'}).join('')}
 /* Copy: 1) clipboard API  2) hidden textarea + execCommand  3) visible selectable panel. Never fails silently. */
 function copied(){$('#copypanel').style.display='none';st('');toast('Copied to clipboard');return true}
 async function copy(rs){const tx=rs.map(r=>text(r).join('\n')).join('\n\n');
