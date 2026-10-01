@@ -136,9 +136,9 @@ function text(r){const{t,G}=rows(r),out=['~ '+t+' ~'];G.forEach(x=>{out.push('')
 const hx=v=>String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const TD='border:1px solid #000;padding:4pt 6pt;vertical-align:top;font-family:Arial,sans-serif;';
 function html(r){const{t,G}=rows(r),sp='<p style="margin:0;font-size:6pt">&nbsp;</p>';
- const cell=(w,txt,st)=>'<td style="'+TD+'width:'+w+'pt;'+st+'">'+hx(txt)+'</td>';
- return'<p style="margin:0 0 4pt 0;font-size:13pt"><b><u>'+hx(t)+'</u></b></p>'+G.map(x=>{const det=x.k=='det',info=x.k=='info',bg=det?'background-color:#f3f3f3;color:#434343;font-size:9pt;':'font-size:10pt;',w1=info?130:270,w2=info?215:75;
-  return sp+'<table style="border-collapse:collapse;table-layout:fixed;width:345pt" border="1" cellspacing="0" cellpadding="0"><tbody>'+x.rows.map(([l,v])=>'<tr>'+cell(w1,l,bg+'font-weight:bold;')+cell(w2,v,bg)+'</tr>').join('')+'</tbody></table>'}).join('')}
+ const cell=(txt,st)=>'<td style="'+TD+st+'">'+hx(txt)+'</td>';
+ return'<p style="margin:0 0 4pt 0;font-size:13pt"><b><u>'+hx(t)+'</u></b></p>'+G.map(x=>{const det=x.k=='det',info=x.k=='info',bg=det?'background-color:#f3f3f3;color:#434343;font-size:9pt;':'font-size:10pt;',w1=info?173:360,w2=info?287:100;
+  return sp+'<table style="border:none;border-collapse:collapse;" border="1" cellspacing="0" cellpadding="0"><colgroup><col width="'+w1+'"/><col width="'+w2+'"/></colgroup><tbody>'+x.rows.map(([l,v])=>'<tr>'+cell(l,bg+'font-weight:bold;')+cell(v,bg)+'</tr>').join('')+'</tbody></table>'}).join('')}
 /* Copy: 1) clipboard API  2) hidden textarea + execCommand  3) visible selectable panel. Never fails silently. */
 function copied(){$('#copypanel').style.display='none';st('');toast('Copied to clipboard');return true}
 async function copy(rs){const tx=rs.map(r=>text(r).join('\n')).join('\n\n');
