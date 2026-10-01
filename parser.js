@@ -1,0 +1,120 @@
+'use strict';
+/* Deterministic receipt/invoice parser. Pure function: parse(text, mode) -> {fields, items, found}. Never invents values. */
+(function(root){
+const fix=s=>s.replace(/(?<=\d)[Oo](?=\d|\b)/g,'0').replace(/(?<=\d)[lI](?=\d)/g,'1');
+const PRICE=/(-?\$?\s?\d{1,3}(?:,\d{3})*[.,]\d{2}|-?\$?\s?\d+[.,]\d{2})\s*-?\s*[A-Z]?\s*$/;
+const num=s=>{let n=parseFloat(s.replace(/[$\s]/g,'').replace(/,(?=\d{3})/g,'').replace(',','.'));return isNaN(n)?null:n};
+const MON='(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\\.?';
+const DATE=new RegExp('\\b(\\d{4}-\\d{2}-\\d{2}|\\d{1,2}[\\/.\\-]\\d{1,2}[\\/.\\-]\\d{2,4}|'+MON+'\\s+\\d{1,2},?\\s+\\d{4}|\\d{1,2}\\s+'+MON+'\\s+\\d{4})\\b','i');
+const PAY=/\b(visa|mastercard|master card|amex|american express|discover|debit|credit|cash|check|cheque|paypal|venmo|zelle|ach|apple pay|direct deposit)\b/i;
+const SKIP=/\bchange\b|cash tender|tendered|\bcard\b|visa|mastercard|amex|debit|balance due|thank|\bauth|\bref\b|approval|points|savings total|you saved/i;
+const LBL=/^(?:bill(?:ed)?\s*to|client|employer|customer|company|job|event|service|work|invoice|payment|pay|location|venue|address|site|hours|total|amount|mileage|miles|distance|fuel|gas|date|paid|one[\s-]*way|round[\s-]*trip|wear|vehicle|net|gross)\b/i;
+const PK=/^\d+(?:\/\d+)+\s*pcs?$/i;
+/* Turn a raw OCR'd marketplace title into a readable product name. v = variant line (e.g. "Blue 2") */
+const cleanName=(n,v)=>{let t=n.replace(/\s{2,}/g,' ').trim().split(' ');
+ /* truncated by the app ("Wire Cutters Se..."): drop the ellipsis and any cut-off fragment glued to it */
+ let last=t[t.length-1]||'';if(/(\.{2,}|\u2026)$/.test(last)){const b=last.replace(/(\.{2,}|\u2026)$/,'');if(b)t[t.length-1]=b;else t.pop();}
+ /* product-photo text read in front of the title: stray 1-2 letter bits, "OPCS", etc. */
+ while(t.length>2&&(/^[^\w]*$/.test(t[0])||(t[0].length<=2&&!/\d/.test(t[0])&&!/^[AI]$/.test(t[0]))||/^[O0]pcs$/i.test(t[0])))t.shift();
+ if(/^A(?=pcs?$)/.test(t[0]||''))t[0]='4'+t[0].slice(1);
+ /* "2pcs 2/5/10pcs ...": the photo's count echoed in front of the pack options */
+ if(t.length>2&&/^\d+p(?:cs|es)$/i.test(t[0])&&PK.test(t[1])){t[0]=t[0].replace(/pes$/i,'pcs');t.splice(1,1)}
+ /* "2/5/10pcs ..." with variant "Blue 2": the number in the variant is the pack actually bought */
+ else if(t.length&&PK.test(t[0])&&v){const opts=t[0].match(/\d+/g),m=(v.match(/\b\d+\b/g)||[]).find(x=>opts.includes(x));if(m)t[0]=m+'pcs'}
+ return t.join(' ').replace(/\s*[-\u2013\u2014,:;]+\s*$/,'').trim()};
+
+/* Short, readable product name from a cleaned marketplace title + variant line. Rules only; never invents a product. */
+const WORDS=['Set','Kit','Protector','Protectors','Protective','Combination','Mirror','Stickers','Sticker','Holder','Band','Brace','Bag','Case','Cover','Cutters','Screwdriver','Organizer','Charger','Cable','Adapter','Lights','Light','Clips','Clip','Pads','Pad','Storage','Handle','Strap','Gloves','Wrench','Pliers','Tape','Brush','Cleaner','Insoles','Lock'];
+const comp=f=>{const l=f.toLowerCase();if(l.length<2)return null;if(WORDS.some(w=>w.toLowerCase()==l))return f;return WORDS.find(w=>w.toLowerCase().startsWith(l))||null};
+function shortName(title,v,cut){let t=title.split(' ').filter(Boolean),q=null,set=false;
+ const di=t.findIndex((x,i)=>i>0&&/^[-\u2013\u2014]$/.test(x));if(di>0){t=t.slice(0,di);cut=false}
+ if(cut&&t.length>1){const f=t[t.length-1],c=/^[A-Za-z]+$/.test(f)?comp(f):null;if(c)t[t.length-1]=c;else t.pop()}
+ const vm=v&&v.match(/\b(\d+)\s*(?:pcs?|pieces?)\b/i);if(vm)q=+vm[1];
+ const out=[];for(let i=0;i<t.length;i++){const x=t[i];
+  let m=x.match(/^(\d+)\s?(?:pcs?|pes|pieces?)$/i);if(m){if(q==null)q=+m[1];continue}
+  if(PK.test(x)){continue}
+  if(/^\d+$/.test(x)&&/^set$/i.test(t[i+1]||'')){if(q==null)q=+x;continue}
+  if(/^set$/i.test(x)){set=true;continue}
+  if(/^\d+(?:\.\d+)?-?(?:inch|in|cm|mm)$/i.test(x))continue;
+  if(/^(a|an|the)$/i.test(x))continue;
+  out.push(x)}
+ let n=out.join(' ').replace(/\bCombination\b/gi,'Combo').replace(/\bProfessional\b/gi,'Pro').replace(/\bMultifunctional\b/gi,'Multi');if(/^[a-z]/.test(n))n=n.replace(/\b[a-z](?=[a-z]{2})/g,c=>c.toUpperCase());
+ if(!n)return title;
+ const qs=q>1?q+'pc ':'';
+ if(set)return q>1?qs+'Set of '+n:n+' Set';
+ return qs+n}
+const readable=n=>/[A-Za-z]{3,}/.test(n)&&!/^\W*(items?|qty|quantity|price)\W*$/i.test(n);
+function lines(t){const L=t.replace(/\r/g,'').replace(/\t/g,'   ').replace(/\u00a0/g,' ').split('\n').map(s=>s.trim()).filter(Boolean),out=[];
+ for(let i=0;i<L.length;i++){if(/^[A-Za-z][A-Za-z &\/#.\-]{1,30}$/.test(L[i])&&LBL.test(L[i])&&i+1<L.length&&!LBL.test(L[i+1])&&L[i+1].split(/\s{3,}/).length===1){out.push(L[i]+': '+L[i+1]);i++;continue}
+  const seg=L[i].split(/\s{3,}/);
+  if(seg.length>1&&seg.filter(x=>LBL.test(x)).length>=2){const nx=i+1<L.length?L[i+1].split(/\s{3,}/):[];
+   if(seg.every(x=>LBL.test(x)&&!/[:\d]/.test(x))&&nx.length===seg.length){seg.forEach((x,k)=>out.push(x+': '+nx[k]));i++;continue}
+   seg.forEach(x=>out.push(x));continue}
+  out.push(L[i])}
+ return out}
+const ONLYP=/^-?\$?\s?\d{1,6}[.,]\d{2}$/,QTY=/\d+\s*[x@]\s*\$?\d+[.,]\d{2}$/;
+/* OCR sometimes emits a price column after all the labels: pair loose prices with price-less labels, in order, only when counts match. */
+function pairColumns(L){const loose=L.filter(l=>ONLYP.test(l));if(!loose.length)return L;
+ const lab=L.map((l,i)=>(!ONLYP.test(l)&&i>0&&/[A-Za-z]{3}/.test(l)&&(!PRICE.test(l)||QTY.test(l))&&!DATE.test(l)&&!/paid|thank|invoice|receipt|card|tel|phone|www/i.test(l))?i:-1).filter(i=>i>=0);
+ if(lab.length!==loose.length)return L;const out=[...L.filter(l=>!ONLYP.test(l))];const res=L.filter(l=>!ONLYP.test(l)).map(l=>l);
+ let k=0;return L.filter(l=>!ONLYP.test(l)).map((l,_)=>{const i=L.indexOf(l);return lab.includes(i)?l+' '+loose[k++]:l})}
+function label(L,re){for(let i=0;i<L.length;i++){const m=L[i].match(re);if(m){const v=(m[1]||'').trim();if(v)return v;if(L[i+1])return L[i+1]}}return null}
+function dateNear(L,re){for(const l of L)if(re.test(l)){const m=l.match(DATE);if(m)return m[1]}return null}
+function invNo(L,tr){const re=new RegExp('\\b(?:invoice|inv|receipt|order|ticket'+(tr?'|trans(?:action)?':'')+')\\s*(?:no\\.?|number|num|#|id)\\s*[:#.]?\\s*([A-Z0-9][A-Z0-9\\-]*\\d[A-Z0-9\\-]*)','i'),re2=/\b(?:invoice|receipt)\s+#?\s*([A-Z]{0,4}-?\d{3,}[A-Z0-9\-]*)/i;
+ for(const l of L)for(const r of [re,re2]){const m=l.match(r);if(!m)continue;const d=l.slice(m.index+m[0].length-m[1].length).match(DATE);if(d&&d.index===0)continue;return [0,m[1]]}return null}
+function parse(text,mode){const L=pairColumns(lines(text)),F={},items=[],found={};const set=(k,v)=>{if(v!=null&&v!==''){F[k]=v;found[k]=1}};
+ const inv=invNo(L,mode==='purchase');
+ if(mode==='purchase'){
+  const m=L.find(l=>/[A-Za-z]{3}/.test(l)&&!DATE.test(l)&&!/^\W*(receipt|invoice|tel|phone|www|http)/i.test(l)&&!/\d{3}[-. ]\d{4}/.test(l));const km=text.match(/\b(temu|amazon|walmart|target|costco|home depot|lowe's|best buy|harbor freight|staples|aliexpress|shein)\b/i);if(km){set('merchant',km[1].replace(/(^|\s)\w/g,c=>c.toUpperCase()));found.mk=1}else set('merchant',m);
+  set('date',(text.match(DATE)||[])[1]);{const ic=text.match(/item details\s*\(\s*(\d+)\s*\)/i);if(ic)set('expected',+ic[1])}set('number',inv&&inv[1]);
+  for(const raw of L){const l=fix(raw),pm=l.match(PRICE);if(!pm){const qm=l.match(/(?:^|\s)[x×]\s?(\d+)\s*$/i),li=items[items.length-1];if(qm&&li&&+qm[1]>1&&li.q==1&&!li.qs){li.q=+qm[1];li.qs=1}if(qm&&li&&!li.v){li.v=l.replace(/\s*[x×]\s?\d+\s*$/i,'').trim();li.n=shortName(li.full||li.n,li.v,li.cut)}continue}const v=num(pm[1]);if(v==null)continue;const head=l.slice(0,pm.index).trim();
+   if(/[il1]tems?\s*\)?\s*\(?s?\)?\s*(total|discount)|extra bonus/i.test(head))continue;
+   if(/^\W*(items?|qty|quantity|price|amount|each|unit)\W*$/i.test(head))continue;
+   if(/after\s+promos?/i.test(head)&&items.length){const it=items[items.length-1];it.p=+(v/(it.q||1)).toFixed(2);continue}
+   if(/\b(shipping|delivery|handling)\b/i.test(head)&&!/item/i.test(head)){set('shipping',v);continue}
+   if(/sub\s?-?total/i.test(head))set('extSub',v);
+   else if(/\b(total|amount due|grand total)\b/i.test(head)&&!/savings|saved/i.test(head))set('extTotal',v);
+   else if(/\b(sales\s)?tax\b|\bvat\b|\bgst\b/i.test(head))set('tax',(F.tax||0)+v);
+   else if(/discount|coupon|promo|savings/i.test(head))set('discount',(F.discount||0)+Math.abs(v));
+   else if(/tip|gratuity/i.test(head)){} else if(!SKIP.test(head)&&head.length>1){
+    let q=1,p=v,n=head,m;
+    if(m=n.match(/^(\d+)\s*[x@]\s*(.+)/i)){q=+m[1];n=m[2];p=v/q}
+    else if(m=n.match(/^(.+?)\s+(\d+)\s*[x@]\s*\$?(\d+[.,]\d{2})$/i)){n=m[1];q=+m[2];p=num(m[3])}
+    else if(m=n.match(/^(.+?)\s+[x@]\s*(\d+)$/i)){n=m[1];q=+m[2];p=v/q}
+    if(v<0){set('discount',(F.discount||0)+Math.abs(v));continue}
+    {const cn=cleanName(n),pv=items[items.length-1],nz=x=>x.toLowerCase().replace(/[^a-z0-9]/g,'');if(!readable(cn))continue;if(pv&&pv.p==+p.toFixed(2)&&pv.q==q&&(nz(pv.n).includes(nz(cn))||nz(cn).includes(nz(pv.n))))continue;items.push({n:shortName(cn,null,/\S(\.{2,}|\u2026)$/.test(n.trim())),full:cn,cut:/\S(\.{2,}|\u2026)$/.test(n.trim()),n0:n,q,p:+p.toFixed(2),ext:1})}}}
+  if(F.discount!=null)F.discount=+F.discount.toFixed(2);if(F.tax!=null)F.tax=+F.tax.toFixed(2)}
+ else{
+  var D=new RegExp(DATE.source,'gi'),dts=l=>[...l.matchAll(D)].map(m=>m[1]);
+  var ev=w=>{for(let i=0;i<L.length;i++)if(new RegExp('event\\s*'+w+'\\s*date','i').test(L[i])){for(let j=i;j<Math.min(L.length,i+4);j++){const d=dts(L[j]);if(d.length)return w=='start'?d[0]:d[d.length>1?1:0]}}return null};
+  var tri=/(\d+(?:\.\d+)?)\s+\$\s?([\d,]+\.\d{2})\s+\$\s?([\d,]+\.\d{2})\s*$/,drow=L.filter(l=>/^\d{1,2}\/\d{1,2}\/\d{2,4}\b/.test(l)&&tri.test(l));
+  {const c=label(L,/^(?:bill(?:ed)?\s*to|client(?:\s*name)?|customer|company)\s*[:\-]?\s*(.*)$/i);if(c&&!DATE.test(c)&&!/^\$?[\d,.]+$/.test(c))set('client',c.split(/\s{3,}/)[0])}
+  set('invoice',inv&&inv[1]);
+  set('jobDate',dateNear(L,/(job|service|work|shift|event|date of service)\s*date|date of service|worked/i));
+  if(!F.jobDate){const l=L.find(l=>DATE.test(l)&&!/invoice|payment|paid|due|issued|deposit/i.test(l));if(l)F.jobDate=l.match(DATE)[1]}
+  set('location',label(L,/^(?:site|job\s*site|location|venue|address|job location)\s*[:\-]\s*(.*)$/i));
+  const hrs=[...text.matchAll(/(\d+(?:\.\d+)?)\s*(?:hrs?|hours)\b/gi)].map(m=>+m[1]);
+  const tot=label(L,/^(?:total\s*hours|hours\s*worked|hours)\s*[:\-]?\s*(\d+(?:\.\d+)?)\b(?!\s*[x×@])/i);
+  set('hours',tot!=null&&!isNaN(+tot)?tot:hrs.length?String(hrs.reduce((a,b)=>a+b,0)):null);
+  const ot=text.match(/\b(?:overtime|OT)\b\D{0,12}(\d+(?:\.\d+)?)/i);if(ot){F.notes='Overtime hours mentioned: '+ot[1]+' (verify).';found.notes=1}
+  let amt=null;for(const re of [/amount paid|total paid|total pay|net pay|gross pay/i,/amount due|total due/i,/(?<!sub)\btotal\b/i]){for(const raw of L){const l=fix(raw);if(!re.test(l)||/\btax\b|\brate\b|hours|hrs|sub\s?-?total/i.test(l.replace(re,'')))continue;const a=[...l.matchAll(/\$?\s?(\d[\d,]*\.\d{2})\b/g)];if(a.length)amt=a[a.length-1][1].replace(/,/g,'')}if(amt)break}
+  set('amount',amt)}
+  if(mode!=='purchase'){
+   const sd=ev('start'),ed=ev('end');if(sd)set('jobDate',sd);if(ed)set('endDate',ed);
+   if(!sd||!ed){const l=L.find(l=>/\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\s+\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\s*$/.test(l));if(l){const d=l.match(/(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})\s+(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})\s*$/);if(!sd)set('jobDate',d[1]);if(!ed)set('endDate',d[2])}}
+   for(const l of L){const m=l.match(/(?<!\w\s)\bDate\s+(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})/);if(m){set('closeDate',m[1]);break}}if(!F.closeDate){const d=dateNear(L,/invoice\s*date|date\s*issued|issued/i);if(d)set('closeDate',d)}
+   const loc=label(L,/^(?:event\s*location|job\s*location|service\s*location|work\s*location|job\s*site|site|venue|location|address)\s*[:\-]?\s*(.*)$/i);if(loc&&!/^\$?[\d,.]+$/.test(loc))set('location',loc.split(/\s{3,}/)[0]);
+   const nv=re=>{for(const raw of L){const m=fix(raw).match(re);if(m)return m}return null};
+   {const m=nv(/^(?:(round[\s-]*trip|one[\s-]*way)(?:\s*(?:miles?|mileage|distance))?|mileage|miles|distance)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(?:mi\b|miles?\b)?(.*)$/i);if(m){let v=+m[2];if(/one/i.test(m[1]||'')||/one[\s-]*way/i.test(m[3]||''))v=v*2;set('roundTrip',String(+v.toFixed(2)))}}
+   if(drow.length){const r=drow.map(l=>l.match(tri)),h=r.reduce((a,m)=>a+ +m[1],0),amt=r.reduce((a,m)=>a+ +m[3].replace(/,/g,''),0),low=Math.min(...r.map(m=>+m[2].replace(/,/g,'')));
+    set('hours',String(h));if(!found.amount)set('amount',amt.toFixed(2));
+    const ot=L.filter(l=>!/^\d{1,2}\/\d{1,2}\/\d{2,4}/.test(l)&&tri.test(l)).map(l=>l.match(tri)).filter(m=>+m[2].replace(/,/g,'')>low+.01).reduce((a,m)=>a+ +m[1],0);
+    const sub=L.filter(l=>!/^\d{1,2}\/\d{1,2}\/\d{2,4}/.test(l)&&tri.test(l)).map(l=>l.match(tri)),money=v=>'$'+(+v.replace(/,/g,'')).toFixed(2);
+    if(ot){set('overtime',String(ot));set('hours',String(+(h-ot).toFixed(2)));delete F.notes;delete found.notes;
+     if(sub.length>1){const pr=sub.map(m=>m[1]+' hrs × '+money(m[2])+' = '+money(m[3]));const lo=Math.min(...sub.map(m=>+m[2].replace(/,/g,''))),hi=Math.max(...sub.map(m=>+m[2].replace(/,/g,'')));
+      set('notes','Regular: '+pr[0]+'. Overtime: '+pr[pr.length-1]+(Math.abs(hi/lo-1.5)<.01?' (1.5× regular rate)':'')+'.')}}}}
+ return {fields:F,items,found}}
+function pd(s){s=String(s||'').trim();let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);if(m)return new Date(+m[1],m[2]-1,+m[3]);const d=new Date(s);return isNaN(d)?null:new Date(d.getFullYear(),d.getMonth(),d.getDate())}
+function net30(s,days){const d=pd(s);if(!d)return null;d.setDate(d.getDate()+(days||30));const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())}
+function irs(s){const d=pd(s);if(!d)return null;const y=d.getFullYear();if(y==2025)return 0.70;if(y==2026)return d>=new Date(2026,6,1)?0.76:0.725;return null}
+const api={parse,pd,net30,irs};if(typeof module!=='undefined')module.exports=api;root.Parser=api})(typeof globalThis!=='undefined'?globalThis:this);

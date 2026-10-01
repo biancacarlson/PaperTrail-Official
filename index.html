@@ -1,0 +1,102 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="PaperTrail"><meta name="referrer" content="no-referrer"><meta name="robots" content="noindex,nofollow"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; connect-src 'self' data: blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://tessdata.projectnaptha.com; worker-src 'self' blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1"><title>PaperTrail</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+:root{color-scheme:light;--bg:#f7f6f2;--card:#fcfbf9;--fg:#232f3a;--mut:#6b7780;--ln:#e2e0d8;--g:#4a8468;--gd:#3c6f56;--amb:#d99a4e;--ext:#e9f1ed;--usr:#fbf0de;--cal:#eef2ef;--warn:#fbe9e6;--mono:ui-monospace,SFMono-Regular,Menlo,monospace}
+*{box-sizing:border-box}
+html,body{max-width:100%;overflow-x:hidden}body{margin:0;font:15px/1.45 -apple-system,"SF Pro Text",system-ui,sans-serif;background:var(--bg);color:var(--fg);-webkit-text-size-adjust:100%}
+h2{letter-spacing:-.02em;margin:0 0 10px}
+h3,.gt{font:600 11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--mut);margin:0 0 12px}
+button,input,select,textarea{font:inherit;color:inherit;background:#fff;border:1px solid var(--ln);border-radius:10px;padding:10px 12px;letter-spacing:normal}
+input:focus,select:focus,textarea:focus{outline:2px solid rgba(74,132,104,.35);border-color:var(--g)}
+button{cursor:pointer;margin:0;font-weight:600;transition:transform .05s,background .15s}button:active{transform:scale(.97)}
+input,select,textarea{width:100%}
+a.btn{display:inline-block;text-align:center;text-decoration:none;background:var(--g);color:#fff;border-radius:10px;padding:10px 14px;font-weight:700;font-size:14px}
+button.on,button.pri{background:var(--g);color:#fff;border-color:var(--g)}
+label{display:block;font:600 10.5px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mut);margin:0 0 5px}
+.ext{background:var(--ext)!important;border-color:#b9d2c4!important}.usr{background:var(--usr)!important;border-color:#ecd3a8!important}.cal{background:var(--cal)}.warn{background:var(--warn)!important;border-color:#e0a59b!important}
+.row{display:flex;gap:8px;align-items:center;margin-bottom:8px}.row>*{flex:1;min-width:0}.row>.s{flex:0 0 72px}.row>.x{flex:0 0 44px;padding-inline:0}
+/* shell */
+.shell{display:grid;grid-template-columns:260px minmax(0,1fr);min-height:100vh}
+.side{background:var(--card);border-right:1px solid var(--ln);padding:24px 18px;display:flex;flex-direction:column;gap:18px;position:sticky;top:0;height:100vh;overflow:auto}
+.brand{display:flex;align-items:center;gap:10px}.brand b{font-size:21px;letter-spacing:-.04em;font-weight:800}
+.logo{width:36px;height:36px;border-radius:10px;background:var(--g);color:#fff;display:grid;place-items:center;font-weight:800;font-size:18px}
+.nav{display:flex;flex-direction:column;gap:6px}.nav .gt{margin:0 0 4px 2px}
+.nav button{text-align:left;background:transparent;border-color:transparent;padding:11px 14px;color:var(--fg)}
+.nav button:hover{background:var(--cal)}.nav button.on{background:var(--g);color:#fff}
+.pill{font-size:12px;font-weight:600;color:var(--gd);background:var(--ext);border:1px solid #c9ddd1;border-radius:8px;padding:8px 10px}
+#recs{margin-top:0}#recs h3{margin-bottom:8px}#recs button{width:100%;margin-bottom:6px}
+.sp{flex:1}
+.side details{border-top:1px solid var(--ln);padding-top:12px}summary{font-weight:600;color:var(--mut);cursor:pointer;font-size:13px}
+.side details label{margin-top:12px;text-transform:none;letter-spacing:0;font:12px var(--mono)}.side details button{width:100%;margin-top:8px}
+.logout{background:transparent;color:var(--mut)}
+.dt{font-size:12px;line-height:1.5;color:var(--mut);margin-top:10px}.dt h4{font-size:12px;font-weight:600;margin:14px 0 4px;color:var(--fg)}.dt p{margin:0 0 8px}.dt ul{margin:0 0 8px;padding-left:18px}.dt li{margin:0 0 2px}
+.main{padding:28px 32px 48px;min-width:0}
+.head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:20px}.head h1{font-size:28px;letter-spacing:-.04em;margin:0}
+.msg{color:#b3261e;font-size:14px;margin:0;min-height:0}#status:empty{display:none}#status{flex:1;min-width:200px}
+.work{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:24px;align-items:start}
+.src{position:sticky;top:20px;display:flex;flex-direction:column;gap:14px}
+.panel{background:var(--card);border:1px solid var(--ln);border-radius:16px;padding:18px}
+.drop{border:2px dashed #cfcdc3;border-radius:16px;background:var(--card);padding:22px 18px;text-align:center}.drop small{display:block;color:var(--mut);margin-bottom:12px}
+.drop button{margin-top:12px;background:transparent}
+input[type=file]{border:0;background:transparent;padding:0;width:100%;max-width:100%}input[type=file]::file-selector-button{background:var(--g);color:#fff;border:0;border-radius:8px;padding:10px 16px;font-weight:600;margin-right:10px}
+#view{height:50vh;overflow:hidden;border:1px solid var(--ln);border-radius:16px;background:#fff;touch-action:none;position:relative}#view img{transform-origin:0 0;max-width:none;position:absolute;top:0;left:0}
+#layer{touch-action:none}.wb{position:absolute;border-radius:2px}.wb.sel{background:rgba(217,154,78,.5);outline:1px solid var(--amb)}.wb.lowc{outline:1px dashed #d33}
+#ocr{display:none!important;white-space:pre-wrap;max-height:20vh;overflow:auto;border:1px solid var(--ln);border-radius:12px;padding:12px;font:12.5px/1.5 var(--mono);background:var(--card);user-select:text;margin-top:12px}
+#addbar{display:none;position:sticky;top:0;z-index:5;padding:10px;background:var(--card);border:1px solid var(--g);border-radius:12px;margin-top:10px}
+.out{display:flex;flex-direction:column;gap:16px;min-width:0}
+#form{display:flex;flex-direction:column;gap:16px}
+#form:empty{display:grid;place-items:center;min-height:240px;border:2px dashed var(--ln);border-radius:16px;color:var(--mut)}#form:empty::before{content:"Choose a document or enter manually to begin"}
+.src>*,.out>*,.grp,.panel,.drop{min-width:0;max-width:100%}.res,.grp,.panel{overflow-wrap:anywhere}.grp{background:var(--card);border:1px solid var(--ln);border-radius:16px;padding:18px}
+.fg{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}.f{min-width:0}.f.w{grid-column:1/-1}
+.srch{display:flex;gap:8px;margin-top:8px}.srch a{flex:1}
+.hint{font-size:12px;color:var(--mut)}
+#calc>.res{background:var(--g);color:#fff;border-radius:16px;padding:20px}
+#calc .res h3{color:rgba(255,255,255,.75)}
+.kpi{font-size:30px;font-weight:800;letter-spacing:-.04em;line-height:1.1}
+.tiles.rows{grid-template-columns:minmax(0,1fr)}.tile b{display:block;text-wrap:balance;overflow-wrap:normal}.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(130px,100%),1fr));gap:10px;margin-top:14px}
+.tile{background:rgba(255,255,255,.14);border-radius:12px;padding:12px}.tile span{display:block;font:600 10px var(--mono);letter-spacing:.1em;text-transform:uppercase;opacity:.8;margin-bottom:4px}.tile b{font-size:16px}
+.res .hint{color:rgba(255,255,255,.8);margin-top:10px}
+.res button{background:#fff;color:var(--gd);border-color:#fff;margin-top:10px}
+.res .msg{background:var(--warn);color:#b3261e;border-radius:10px;padding:8px 10px;margin-top:10px}
+#actions{position:sticky;bottom:0;background:var(--bg);padding:12px 0 calc(12px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--ln);display:none}
+.acts{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
+.quiet{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:10px}.quiet button{background:transparent;border:0;color:var(--mut);font-weight:500;font-size:13px;padding:6px 10px;text-decoration:underline}
+#lock{position:fixed;inset:0;background:var(--bg);z-index:99;padding:28px;display:none}#lock>*{max-width:380px;margin-inline:auto}#lock h2{margin-top:15vh;font-size:26px}#lock input{margin:10px 0}#lock button{width:100%}
+@media(max-width:900px){
+.shell{display:flex;flex-direction:column;padding:max(14px,env(safe-area-inset-top)) 14px 0}
+.side{display:contents}.brand{order:0;margin-bottom:12px}.nav{order:1;flex-direction:row;background:#eeece5;border-radius:12px;padding:4px}.nav .gt{display:none}.nav button{flex:1;text-align:center;border-radius:9px}
+.pill{order:2;margin-top:12px}.main{order:3;padding:16px 0 24px}#recs{order:4}.side details{order:5;margin-top:8px}.side .sp{display:none}.logout{order:6;margin:8px 0 30px;width:100%}
+.head h1{font-size:22px}.work{grid-template-columns:minmax(0,1fr);gap:16px}.src{position:static}#view{height:42vh}
+.fg{grid-template-columns:minmax(0,1fr)}#actions{margin:0 -14px;padding-inline:14px}.kpi{font-size:26px}}
+@media print{body>*:not(#print){display:none!important}#print{display:block!important}}#print{display:none;white-space:pre-wrap}
+</style></head><body>
+<div id="lock"></div>
+<div id="app"><div class="shell">
+<div class="side">
+<div class="brand"><span class="logo">$</span><b>PaperTrail</b></div>
+<div class="nav"><div class="gt">Record type</div><button id="m1" onclick="setMode('purchase')">Purchase</button><button id="m2" onclick="setMode('freelance')">Freelance Job</button></div>
+<div id="recs"></div>
+<div class="sp"></div>
+<details><summary>Settings</summary><label>Auto-logout after idle (minutes) - clears the session</label><input id="idle" type="number" min="1" value="15" onchange="setIdle()"><button onclick="nuke()">Delete all saved data</button></details>
+<details class="disc"><summary>Disclaimer</summary><div class="dt"><p>Paper Trail is a software tool provided for informational, organizational, and recordkeeping purposes only. Paper Trail is not a tax preparation service, accounting service, legal service, financial advisory service, or professional tax advice.</p><p>PaperTrail does not determine whether an expense, deduction, mileage amount, business expense, or other item is allowable for tax purposes. Nothing provided by PaperTrail should be interpreted as a representation, recommendation, or guarantee that any particular expense or deduction is deductible, reportable, reimbursable, or otherwise acceptable under federal, state, or local law.</p><h4>Accuracy of Extracted Information</h4><p>PaperTrail may extract information from receipts, invoices, screenshots, photographs, mileage records, and other documents. Automated extraction and calculations may contain errors, misinterpretations, or inaccuracies.</p><p>Users are solely responsible for reviewing and verifying ALL information produced by PaperTrail before relying on it for any purpose.</p><p>This includes, but is not limited to:</p><ul><li>Dates</li><li>Business names and locations</li><li>Hours worked</li><li>Amounts paid</li><li>Mileage and distance</li><li>Fuel expenses</li><li>Vehicle-related expenses</li><li>Wear-and-tear calculations</li><li>Expense classifications</li><li>Totals and calculations</li><li>Information copied or transferred into another document</li><li>Any other information used for accounting, tax, reimbursement, or reporting purposes</li></ul><p>Users should fully compare extracted information against the original receipt, invoice, document, or other source record before using it for tax or other official purposes.</p><h4>Tax and Audit Responsibility</h4><p>Users are solely responsible for determining the appropriate tax treatment of their expenses and records and for complying with all applicable federal, state, and local requirements.</p><p>Use of PaperTrail does not guarantee that any expense, deduction, mileage amount, business expense, record, calculation, or other information will be accepted by the Internal Revenue Service (IRS), a state taxing authority, or any other governmental agency.</p><p>PaperTrail does not guarantee that records created, organized, calculated, or stored using the software will satisfy the documentation or substantiation requirements applicable to a particular tax return, audit, examination, claim, reimbursement request, or other proceeding.</p><p>Users remain responsible for maintaining original receipts, invoices, mileage records, and other supporting documentation when required and for providing appropriate documentation to a tax authority, employer, client, auditor, or other authorized party when necessary.</p><h4>No Professional Advice</h4><p>Nothing in PaperTrail, its interface, calculations, documentation, source code, examples, or output constitutes tax, accounting, legal, financial, or other professional advice.</p><p>Users should consult a qualified tax professional, accountant, attorney, or other appropriate professional regarding their individual circumstances when professional advice is necessary.</p><h4>User Verification</h4><p>By using PaperTrail, you acknowledge that automated extraction and calculations are tools for assisting with record organization and are not a substitute for your own review.</p><p>You are responsible for verifying the information produced by PaperTrail before:</p><ul><li>Filing a tax return</li><li>Claiming a deduction</li><li>Submitting an expense for reimbursement</li><li>Providing records to an employer or client</li><li>Providing records to a tax professional</li><li>Responding to an audit or examination</li><li>Relying on the information for any financial, legal, or tax-related purpose</li></ul><h4>No Guarantee of Results</h4><p>PaperTrail makes no representation or guarantee regarding the accuracy, completeness, reliability, tax treatment, legal sufficiency, audit sufficiency, or suitability of any information generated or processed by the software.</p><p>PaperTrail does not guarantee any particular financial, tax, reimbursement, audit, or other outcome.</p><h4>Limitation of Liability</h4><p>To the maximum extent permitted by applicable law, the authors, contributors, copyright holders, and anyone involved in creating, maintaining, distributing, or providing Paper Trail shall not be liable for any direct, indirect, incidental, special, consequential, exemplary, or other damages or losses arising from or related to:</p><ul><li>Use of the software</li><li>Inability to use the software</li><li>Errors or inaccuracies in extracted information</li><li>Errors or inaccuracies in calculations</li><li>Missing or incomplete information</li><li>Reliance on information produced by the software</li><li>Tax filings or tax positions</li><li>Disallowed deductions or expenses</li><li>Tax assessments, penalties, interest, or additional tax liabilities</li><li>Audits, examinations, investigations, or disputes</li><li>Loss or corruption of records</li><li>Any other use of or reliance upon the software or its output</li></ul><p>This limitation applies regardless of the legal theory asserted and to the fullest extent permitted by applicable law.</p><h4>User Responsibility</h4><p>The user assumes responsibility for determining whether PaperTrail is appropriate for their intended use.</p><p>The user is responsible for maintaining appropriate backups and original source documentation and for independently verifying information before relying upon it.</p><h4>Software License</h4><p>The software is provided “AS IS”, without warranty of any kind, express or implied, to the fullest extent permitted by applicable law.</p><h4>Acknowledgment</h4><p>By using PaperTrail, you acknowledge that:</p><ul><li>PaperTrail is an organizational and recordkeeping tool, not a professional tax or accounting service.</li><li>Automated extraction and calculations may contain errors.</li><li>You are responsible for reviewing and verifying the information produced by the software.</li><li>You are responsible for retaining appropriate original documentation and supporting records.</li><li>You are responsible for determining the appropriate tax treatment of your expenses and records.</li><li>Paper Trail does not guarantee that any information, expense, deduction, mileage amount, or calculation will be accepted by a tax authority or other third party.</li><li>You should obtain professional advice when your circumstances require it.</li></ul><p>Use of PaperTrail constitutes acknowledgment of these limitations and responsibilities.</p></div></details>
+<button class="logout" onclick="lockNow()">Log out</button>
+</div>
+<main class="main">
+<div class="head"><h1>New record</h1><div id="status" class="msg"></div></div>
+<div class="work">
+<div class="src">
+<div id="restore"><span>Record cleared.</span><button class="pri" onclick="restoreCleared()">Undo clear</button><button onclick="dismissRestore()" aria-label="Dismiss">✕</button></div>
+<div class="drop"><input type="file" id="file" accept="image/*,.pdf,application/pdf" multiple onchange="handleFiles(this.files)"><br><button onclick="manual()">Enter manually instead</button></div>
+<div id="docwrap" style="display:none"><div id="view"></div><div id="addbar"><div class="row"><select id="addto"></select><button class="pri s" onclick="addSel()">Add</button><button class="s" onclick="clearSel()">Clear</button></div><div id="selt" style="font-size:12px;margin-top:4px"></div></div><div id="ocr"></div></div>
+<div id="pages"></div>
+</div>
+<div class="out">
+<div id="form"></div><div id="calc"></div>
+<div id="copypanel" class="panel" style="display:none"><div id="copymsg" class="msg" style="color:var(--fg)"></div><textarea id="copyta" readonly rows="14" style="font:13px/1.4 var(--mono)"></textarea></div>
+<div id="actions"><div class="acts"><button class="pri pdfx" style="display:none" onclick="savePdf()">Save PDF</button><button id="cpbtn" class="pri" onclick="copyRec()">Copy Clean Record</button></div>
+<div class="quiet"><button onclick="clearAll()">Clear all</button><button onclick="doPrint()">Print</button><button onclick="dl('csv')">CSV</button><button onclick="dl('json')">JSON</button></div></div>
+</div></div></main>
+</div></div><div id="print"></div>
+<script src="parser.js?v=12"></script><script src="app.js?v=40"></script><script></script></body></html>
