@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="PaperTrail"><meta name="referrer" content="no-referrer"><meta name="robots" content="noindex,nofollow"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; connect-src 'self' data: blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://tessdata.projectnaptha.com; worker-src 'self' blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1"><title>PaperTrail</title>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="PaperTrail"><meta name="referrer" content="no-referrer"><meta name="robots" content="noindex,nofollow"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; connect-src 'self' data: blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://tessdata.projectnaptha.com https://huggingface.co https://*.huggingface.co https://hf.co https://*.hf.co; worker-src 'self' blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1"><title>PaperTrail</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -71,7 +71,7 @@ input[type=file]{border:0;background:transparent;padding:0;width:100%;max-width:
 .head h1{font-size:22px}.work{grid-template-columns:minmax(0,1fr);gap:16px}.src{position:static}#view{height:42vh}
 .fg{grid-template-columns:minmax(0,1fr)}#actions{margin:0 -14px;padding-inline:14px}.kpi{font-size:26px}}
 @media print{body>*:not(#print){display:none!important}#print{display:block!important}}#print{display:none;white-space:pre-wrap}
-</style></head><body>
+#cpbtn{white-space:nowrap;overflow:visible;transition:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;min-height:44px;text-align:center}#cpbtn:active{transform:none;opacity:.8}#imgbtn{white-space:nowrap;transition:none;text-align:center;min-height:44px}#imgbtn:active{transform:none;opacity:.8}</style></head><body>
 <div id="lock"></div>
 <div id="app"><div class="shell">
 <div class="side">
@@ -95,7 +95,7 @@ input[type=file]{border:0;background:transparent;padding:0;width:100%;max-width:
 <div class="out">
 <div id="form"></div><div id="calc"></div>
 <div id="copypanel" class="panel" style="display:none"><div id="copymsg" class="msg" style="color:var(--fg)"></div><textarea id="copyta" readonly rows="14" style="font:13px/1.4 var(--mono)"></textarea></div>
-<div id="actions"><div class="acts"><button class="pri pdfx" style="display:none" onclick="savePdf()">Save PDF</button><button id="cpbtn" class="pri" onclick="copyRec()">Copy Clean Record</button></div>
+<div id="actions"><div class="acts"><button class="pri pdfx" style="display:none" onclick="savePdf()">Save PDF</button><button id="imgbtn" class="pri" onclick="saveImg()">Save Image</button></div>
 <div class="quiet"><button onclick="clearAll()">Clear all</button><button onclick="doPrint()">Print</button><button onclick="dl('csv')">CSV</button><button onclick="dl('json')">JSON</button></div></div>
 </div></div></main>
 </div></div><div id="print"></div>

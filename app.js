@@ -175,7 +175,8 @@ async function saveImg(){try{const b=await recsBlob([S.rec]),f=new File([b],'rec
  if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f]});return}
  const u=URL.createObjectURL(b);window.open(u,'_blank')}catch(e){if(e&&e.name=='AbortError')return;toast('Could not save image')}}
 function toast(m){$('#status').style.color='#0a0';$('#status').textContent=m;setTimeout(()=>{$('#status').textContent='';$('#status').style.color=''},2500)}
-let ct;const copyRec=async()=>{if(await copy([S.rec])){const b=$('#cpbtn');b.textContent='Copied';clearTimeout(ct);ct=setTimeout(()=>b.textContent='Copy Clean Record',2500)}};
+const noun=()=>S.mode=='purchase'?'Receipt':'Call Sheet';const cpLabel=()=>'Copy '+noun()+' Text';
+let ct;const copyRec=async()=>{if(await copy([S.rec])){const b=$('#cpbtn');clearTimeout(ct);requestAnimationFrame(()=>{b.textContent='Copied'});ct=setTimeout(()=>requestAnimationFrame(()=>{b.textContent=cpLabel()}),2500)}};
 function saveRec(){S.records.push(JSON.parse(JSON.stringify(S.rec)));toast('Saved for this session');renderRecs()}
 function key(r){const d=Parser.pd(r.date||r.jobDate);return d?+d:Infinity}
 function renderRecs(){persist();$('#recs').innerHTML=S.records.length?`<h3>Saved (${S.records.length}, this session only)</h3><button class="pri" onclick="copy([...S.records].sort((a,b)=>key(a)-key(b)))">Copy All Records</button><button onclick="S.records=[];renderRecs()">Delete all</button>`:''}
@@ -307,7 +308,7 @@ function baked(p){const c=document.createElement('canvas');c.width=p.w;c.height=
  x.globalCompositeOperation='multiply';x.fillStyle='#ffe600';p.marks.filter(m=>m.t=='h').forEach(m=>x.fillRect(m.x*p.w,m.y*p.h,m.w*p.w,m.h*p.h));
  x.globalCompositeOperation='source-over';x.fillStyle='#000';p.marks.filter(m=>m.t=='r').forEach(m=>x.fillRect(Math.floor(m.x*p.w),Math.floor(m.y*p.h),Math.ceil(m.w*p.w)+1,Math.ceil(m.h*p.h)+1));return c}
 function rname(){const d=Parser.pd(S.rec&&S.rec.date),p=n=>String(n).padStart(2,'0');return(d?d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' ':'')+'Receipt'}
-function refreshActs(){const on=S.mode=='purchase'&&S.pages&&S.pages.length>0;document.querySelectorAll('.pdfx').forEach(b=>b.style.display=on?'':'none');const c=$('#cpbtn');if(c)c.classList.toggle('pri',!on)}
+function refreshActs(){const on=S.mode=='purchase'&&S.pages&&S.pages.length>0;document.querySelectorAll('.pdfx').forEach(b=>b.style.display=on?'':'none');const c=$('#cpbtn'),m=$('#imgbtn');if(c){c.textContent=cpLabel()}if(m){m.textContent='Save '+noun()+' as Image'}}
 async function savePdf(){const J=window.jspdf&&window.jspdf.jsPDF;if(!J)return st('The PDF tool did not load. Check your connection and reload.');if(!S.pages.length)return;
  let d=null;S.pages.forEach(p=>{const W=595,H=+(W*p.h/p.w).toFixed(2),o=H>W?'p':'l',u=baked(p).toDataURL('image/jpeg',.92);if(!d)d=new J({unit:'pt',format:[W,H],orientation:o,compress:true});else d.addPage([W,H],o);d.addImage(u,'JPEG',0,0,W,H)});
  const n=rname()+'.pdf',f=new File([d.output('blob')],n,{type:'application/pdf'});
@@ -421,7 +422,7 @@ function phApply(it,label){const m=String(it.n||'').match(/^(\d+pc\s+)/i),pre=m?
 async function idPhotos(){const its=S.rec.items.filter(phVague),e=()=>$('#idst');
  if(!its.length){if(e())e().textContent='Every item name already looks clear.';return}
  if(e())e().textContent='Loading the on-device model (first time downloads about 100 MB)…';
- let clf;try{clf=await loadClip()}catch(x){if(e())e().textContent='Could not load the on-device model. Check your connection and try again.';return}
+ let clf;try{clf=await loadClip()}catch(x){if(e())e().textContent='Could not load the on-device model. Check your connection and try again. ('+String((x&&x.message)||x).slice(0,80)+')';return}
  S.idRes=S.idRes||[];let n=0;
  for(const it of its){if(S.idRes.some(r=>r.it===it))continue;const th=itemThumb(it);if(!th)continue;
   if(e())e().textContent='Looking at item '+(++n)+' of '+its.length+'…';
