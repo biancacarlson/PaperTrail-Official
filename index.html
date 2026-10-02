@@ -75,7 +75,7 @@ input[type=file]{border:0;background:transparent;padding:0;width:100%;max-width:
 <div id="lock"></div>
 <div id="app"><div class="shell">
 <div class="side">
-<div class="brand"><span class="logo">$</span><b>PaperTrail</b><span class="pill" id="ver">v38</span></div>
+<div class="brand"><span class="logo">$</span><b>PaperTrail</b><span class="pill" id="ver">v40</span></div>
 <div class="nav"><div class="gt">Record type</div><button id="m1" onclick="setMode('purchase')">Purchase</button><button id="m2" onclick="setMode('freelance')">Freelance Job</button></div>
 <div id="recs"></div>
 <div class="sp"></div>
@@ -88,7 +88,7 @@ input[type=file]{border:0;background:transparent;padding:0;width:100%;max-width:
 <div class="work">
 <div class="src">
 <div id="restore"><span>Record cleared.</span><button class="pri" onclick="restoreCleared()">Undo clear</button><button onclick="dismissRestore()" aria-label="Dismiss">✕</button></div>
-<div class="drop"><input type="file" id="file" accept="image/*,.pdf,application/pdf" multiple onchange="handleFiles(this.files)"><p class="dsub">You can select several screenshots at once.</p><button class="lnk" onclick="manual()">Enter manually instead</button></div>
+<div class="drop"><input type="file" id="file" accept="image/*,.pdf,application/pdf" multiple onchange="handleFiles(this.files)"><button class="lnk" onclick="manual()">Enter manually instead</button></div>
 <div id="docwrap" style="display:none"><div id="view"></div><div id="addbar"><div class="row"><select id="addto"></select><button class="pri s" onclick="addSel()">Add</button><button class="s" onclick="clearSel()">Clear</button></div><div id="selt" style="font-size:12px;margin-top:4px"></div></div><div id="ocr"></div></div>
 <div id="pages"></div>
 </div>
@@ -99,4 +99,4 @@ input[type=file]{border:0;background:transparent;padding:0;width:100%;max-width:
 <div class="quiet"><button onclick="clearAll()">Clear all</button><button onclick="dl('json')">JSON</button></div></div>
 </div></div></main>
 </div></div><div id="print"></div>
-<script src="parser.js?v=38"></script><script src="app.js?v=38"></script><script></script></body></html>
+<script src="parser.js?v=40"></script><script src="app.js?v=40"></script><script></script></body></html>

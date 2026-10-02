@@ -108,7 +108,7 @@ function calc(){const r=S.rec;if(!r)return;const o=compute(r);
  const row=(l,v,sub)=>'<div class="crow"><div class="cl">'+l+'</div><div class="cv">'+v+(sub?'<small>'+sub+'</small>':'')+'</div></div>',
   us=d=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d||''));return m?m[2]+'/'+m[3]+'/'+m[1]:d};
  let h='<div class="cal2"><h3>Calculated</h3>';
- if(r.mode=='purchase')h+=row('Items ('+(r.items.length-o.nOff)+')',M(o.sub))+(o.ship?row('Shipping',M(o.ship)):'')+(o.disc?row('Discount','−'+M(o.disc),'receipt discount'):'')+row('Tax',M(N(r.tax)==null?null:o.tax),o.nOff&&N(r.tax)?'adjusted to work items':'')+'<div class="hero tot"><span>'+(o.nOff?'Work-related total':'Total')+'</span><b>'+M(o.total)+'</b></div>'+o.warn.map(w=>'<div class="msg">⚠ '+w+'</div>').join('');
+ if(r.mode=='purchase')h+=row('Items ('+(r.items.length-o.nOff)+')',M(o.sub))+(o.ship?row('Shipping',M(o.ship)):'')+row('Tax',M(N(r.tax)==null?null:o.tax),o.nOff&&N(r.tax)?'adjusted to work items':'')+'<div class="hero tot"><span>'+(o.nOff?'Work-related total':'Total')+'</span><b>'+M(o.total)+'</b></div>'+o.warn.map(w=>'<div class="msg">⚠ '+w+'</div>').join('');
  else{const d=est(r);
   if(d)h+='<div class="hero"><span>Net-30 payout'+(r.endDate?'':' (estimate)')+'</span><b>'+us(d)+'</b><small>'+(r.endDate?'30 days after the event end date':'No event end date found, so counted from the job date')+'</small><button onclick="addCal()">Add to Calendar</button></div>';
   h+=row('Hours',o.tot==null?'Not entered':o.tot+' total',o.tot==null?'':(N(r.hours)||0)+' regular + '+(N(r.overtime)||0)+' overtime')
