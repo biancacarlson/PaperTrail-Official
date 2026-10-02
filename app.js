@@ -108,7 +108,7 @@ function calc(){const r=S.rec;if(!r)return;const o=compute(r);
  const row=(l,v,sub)=>'<div class="crow"><div class="cl">'+l+'</div><div class="cv">'+v+(sub?'<small>'+sub+'</small>':'')+'</div></div>',
   us=d=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d||''));return m?m[2]+'/'+m[3]+'/'+m[1]:d};
  let h='<div class="cal2"><h3>Calculated</h3>';
- if(r.mode=='purchase')h+='<div class="hero"><span>'+(o.nOff?'Work-related total':'Total')+'</span><b>'+M(o.total)+'</b>'+''+'</div>'+row('Items ('+(r.items.length-o.nOff)+')',M(o.sub))+(o.ship?row('Shipping',M(o.ship)):'')+(o.disc?row('Discount','−'+M(o.disc),'receipt discount'):'')+row('Tax',M(N(r.tax)==null?null:o.tax),o.nOff&&N(r.tax)?'adjusted to work items':'')+o.warn.map(w=>'<div class="msg">⚠ '+w+'</div>').join('');
+ if(r.mode=='purchase')h+=row('Items ('+(r.items.length-o.nOff)+')',M(o.sub))+(o.ship?row('Shipping',M(o.ship)):'')+(o.disc?row('Discount','−'+M(o.disc),'receipt discount'):'')+row('Tax',M(N(r.tax)==null?null:o.tax),o.nOff&&N(r.tax)?'adjusted to work items':'')+'<div class="hero tot"><span>'+(o.nOff?'Work-related total':'Total')+'</span><b>'+M(o.total)+'</b></div>'+o.warn.map(w=>'<div class="msg">⚠ '+w+'</div>').join('');
  else{const d=est(r);
   if(d)h+='<div class="hero"><span>Net-30 payout'+(r.endDate?'':' (estimate)')+'</span><b>'+us(d)+'</b><small>'+(r.endDate?'30 days after the event end date':'No event end date found, so counted from the job date')+'</small><button onclick="addCal()">Add to Calendar</button></div>';
   h+=row('Hours',o.tot==null?'Not entered':o.tot+' total',o.tot==null?'':(N(r.hours)||0)+' regular + '+(N(r.overtime)||0)+' overtime')
@@ -249,7 +249,7 @@ function tidyName(n){let t=String(n||'').replace(/\bCombination\b/gi,'Combo').re
  const m=t.match(/^(\d+pc )(.+) Set$/i);if(m)t=m[1]+'Set of '+m[2];
  return t}
 function itemsHtml(){const r=S.rec,on=r.items.filter(i=>!i.off).length;r.items.forEach(it=>{it.n=tidyName(it.n)});
- const card=(it,i)=>`<div class="ic${it.off?' off':''}"><button class="ck" onclick="tog(${i})" aria-label="Include or exclude item">${it.off?'':'✓'}</button><div class="ib"><textarea class="in" rows="2" placeholder="Item name" oninput="it(${i},'n',this.value)">${esc(it.n)}</textarea>${it.inf?'<div class="inf">The store cut this title off. Completed as gloves from the words that were there. Edit if that is wrong.</div>':''}<div class="il"><div class="mf"><label>Qty</label><input class="q" type="number" inputmode="numeric" value="${it.q}" oninput="it(${i},'q',this.value)"></div><span class="mx">×</span><div class="mf"><label>Price</label><input class="p" type="number" inputmode="decimal" step="0.01" value="${it.p}" oninput="it(${i},'p',this.value)"></div><div class="tt"><label>Total</label><b id="it_${i}">${M(+((it.q||0)*(it.p||0)).toFixed(2))}</b></div></div></div><button class="x" onclick="r_del(${i})" aria-label="Delete item">✕</button></div>`;
+ const card=(it,i)=>`<div class="ic${it.off?' off':''}"><button class="ck" onclick="tog(${i})" aria-label="Include or exclude item">${it.off?'':'✓'}</button><div class="ib"><label class="nl">Item name</label><textarea class="in" rows="2" placeholder="Item name" oninput="it(${i},'n',this.value)">${esc(it.n)}</textarea>${it.inf?'<div class="inf">Receipt title was cut off. Completed based on available context.</div>':''}<div class="il"><div class="mf"><label>Qty</label><input class="q" type="number" inputmode="numeric" value="${it.q}" oninput="it(${i},'q',this.value)"></div><span class="mx">×</span><div class="mf"><label>Price</label><input class="p" type="number" inputmode="decimal" step="0.01" value="${it.p}" oninput="it(${i},'p',this.value)"></div><div class="tt"><label>Total</label><b id="it_${i}">${M(+((it.q||0)*(it.p||0)).toFixed(2))}</b></div></div></div><button class="x" onclick="r_del(${i})" aria-label="Delete item">✕</button></div>`;
  return '<section class="grp"><div class="ih"><h3>Items</h3>'+(r.items.length?'<span class="chip">'+on+' of '+r.items.length+' work-related</span>':'')+'</div>'
  +(r.items.length?'<p class="ihint">Tap the check to leave out personal items.</p>':'<div class="empty">No items could be read from this receipt. Add them below, or use Identify unclear items.</div>')
  +r.items.map(card).join('')
@@ -501,3 +501,12 @@ function idSkip(a){S.idRes.splice(a,1);render()}
 'input.ext,input.warn{text-overflow:ellipsis}'
 ].join('');document.head.appendChild(s)})();
 (function(){const s=document.createElement('style');s.textContent='.ic .inf{font-size:12px;color:#8a5a12;background:var(--usr);border-radius:8px;padding:6px 8px;margin-top:6px;line-height:1.35}';document.head.appendChild(s)})();
+
+
+/* build 34: item names look editable */
+(function(){const s=document.createElement('style');s.textContent=[
+'.ic .nl{display:block;font:600 10px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mut);margin:0 0 4px}',
+'.ic .ib textarea.in{display:block;width:100%;box-sizing:border-box;background:#fff!important;border:1.5px solid #b9c4bd!important;border-radius:10px!important;padding:9px 34px 9px 10px!important;font-size:16px;line-height:1.35;min-height:46px;background-image:url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'16\' height=\'16\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%237a8a82\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpath d=\'M12 20h9\'/%3E%3Cpath d=\'M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z\'/%3E%3C/svg%3E")!important;background-repeat:no-repeat!important;background-position:right 10px top 12px!important}',
+'.ic .ib textarea.in:focus{border-color:var(--g)!important;box-shadow:0 0 0 3px rgba(74,124,89,.18)!important;outline:0}',
+'.ic.off .ib textarea.in{background-color:var(--card)!important}'
+].join('');document.head.appendChild(s)})();
