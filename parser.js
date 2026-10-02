@@ -11,6 +11,8 @@ const SKIP=/\bchange\b|cash tender|tendered|\bcard\b|visa|mastercard|amex|debit|
 const LBL=/^(?:bill(?:ed)?\s*to|client|employer|customer|company|job|event|service|work|invoice|payment|pay|location|venue|address|site|hours|total|amount|mileage|miles|distance|fuel|gas|date|paid|one[\s-]*way|round[\s-]*trip|wear|vehicle|net|gross)\b/i;
 const PK=/^\d+(?:\/\d+)+\s*pcs?$/i;
 /* Turn a raw OCR'd marketplace title into a readable product name. v = variant line (e.g. "Blue 2") */
+/* ALL-CAPS brand words (4+ letters) become Title case: DURATECH -> Duratech. Short ones (LED, USB) stay. */
+const uncap=s=>String(s).replace(/\b[A-Z]{4,}\b/g,w=>w[0]+w.slice(1).toLowerCase());
 const cleanName=(n,v)=>{let t=n.replace(/\s{2,}/g,' ').trim().split(' ');
  /* truncated by the app ("Wire Cutters Se..."): drop the ellipsis and any cut-off fragment glued to it */
  let last=t[t.length-1]||'';if(/(\.{2,}|\u2026)$/.test(last)){const b=last.replace(/(\.{2,}|\u2026)$/,'');if(b)t[t.length-1]=b;else t.pop();}
@@ -23,7 +25,7 @@ const cleanName=(n,v)=>{let t=n.replace(/\s{2,}/g,' ').trim().split(' ');
  else if(t.length&&PK.test(t[0])&&v){const opts=t[0].match(/\d+/g),m=(v.match(/\b\d+\b/g)||[]).find(x=>opts.includes(x));if(m)t[0]=m+'pcs'}
  let s=t.join(' ').replace(/\s+\S{0,3}\s+(?:sold|shipped)\s*by\b.*$/i,'').replace(/\s*(?:sold|shipped)\s*by\b.*$/i,'');
  const seen=new Set();s=s.split(' ').filter(w=>{const k=w.toLowerCase().replace(/[^a-z0-9]/g,'');if(k.length<4)return true;if(seen.has(k))return false;seen.add(k);return true}).join(' ');
- return s.replace(/\s*[-\u2013\u2014,:;]+\s*$/,'').trim()};
+ return uncap(s.replace(/\s*[-\u2013\u2014,:;]+\s*$/,'').trim())};
 
 /* Short, readable product name from a cleaned marketplace title + variant line. Rules only; never invents a product. */
 const WORDS=['Set','Kit','Protector','Protectors','Protective','Combination','Mirror','Stickers','Sticker','Holder','Band','Brace','Bag','Case','Cover','Cutters','Screwdriver','Organizer','Charger','Cable','Adapter','Lights','Light','Clips','Clip','Pads','Pad','Storage','Handle','Strap','Gloves','Wrench','Pliers','Tape','Brush','Cleaner','Insoles','Lock'];
