@@ -110,8 +110,7 @@ function calc(){const r=S.rec;if(!r)return;const o=compute(r);
   if(d)h+='<div class="hero"><span>Net-30 payout'+(r.endDate?'':' (estimate)')+'</span><b>'+us(d)+'</b><small>'+(r.endDate?'30 days after the event end date':'No event end date found, so counted from the job date')+'</small><button onclick="addCal()">Add to Calendar</button></div>';
   h+=row('Hours',o.tot==null?'Not entered':o.tot+' total',o.tot==null?'':(N(r.hours)||0)+' regular + '+(N(r.overtime)||0)+' overtime')
    +row('Round trip',o.rt==null?'Not entered':o.rt.toFixed(1)+' mi')
-   +row('Mileage Deduction',M(o.wear),o.wear!=null?o.rt.toFixed(1)+' mi × $'+o.rate+'/mi<br>IRS standard mileage rate':o.rate==null&&o.rt!=null?'No IRS rate on file for this year':'')
-   +'<div class="note">Recordkeeping info, not tax advice.</div>'}
+   +row('Mileage Deduction',M(o.wear),o.wear!=null?o.rt.toFixed(1)+' mi × $'+o.rate+'/mi<br>IRS standard mileage rate':o.rate==null&&o.rt!=null?'No IRS rate on file for this year':'')}
  $('#calc').innerHTML=h+'</div>';persist()}
 /* ---------- selection → field ---------- */
 document.addEventListener('selectionchange',updBar);
@@ -121,14 +120,14 @@ const fm=v=>v==null?null:'$'+v.toFixed(2);
 /* Uniform record layout (same for every log): title, info table, detail table (shaded), totals table.
    groups: [{k:'info'|'det'|'tot', rows:[[label,value]]}] */
 const niceMerch=m=>{m=String(m||'').trim();return m.length>=4&&m===m.toUpperCase()&&/[A-Z]/.test(m)?m.toLowerCase().replace(/\b[a-z]/g,c=>c.toUpperCase()):m};
-function rows(r){const o=compute(r),G=[],g=k=>{const x={k,rows:[]};G.push(x);return(l,v)=>{if(v!=null&&String(v).trim()!=='')x.rows.push([l,String(v).trim()])}};
+function rows(r){const o=compute(r),G=[],g=k=>{const x={k,rows:[]};G.push(x);return(l,v,h)=>{if(v!=null&&String(v).trim()!=='')x.rows.push([l,String(v).trim(),!!h])}};
  if(r.mode=='purchase'){const i=g('info');i('Date',r.date);i('Merchant',niceMerch(r.merchant));i('Receipt/Invoice #',r.number);
   const d=g('det');r.items.filter(x=>!x.off).forEach(x=>d((String(x.n||'Item').replace(/\s*(\.{2,}|…)\s*$/,'').trim()),M(x.t)));
   const t=g('tot');t('Subtotal',M(o.sub));if(o.ship)t('Shipping',M(o.ship));if(N(r.tax)!=null)t('Tax',M(o.tax));t('Total',M(o.total));
   return{t:'PURCHASE',G:G.filter(x=>x.rows.length)}}
- const i=g('info');i('Date',r.jobDate);i('Employer',r.employer);i('Client',r.client);i('Location',r.location);i('Invoice #',r.invoice);
+ const i=g('info');i('Date',r.jobDate,1);i('Employer',r.employer);i('Client',r.client,1);i('Location',r.location);i('Invoice #',r.invoice,1);
  const d=g('det');d('Round-Trip Distance',o.rt!=null?o.rt.toFixed(1)+' mi':null);d('IRS Rate',o.rate!=null&&o.rt!=null?'$'+o.rate+'/mi':null);
- const t=g('tot');t('Amount Paid',fm(N(r.amount)));t('Mileage Deduction',fm(o.wear));
+ const t=g('tot');t('Amount Paid',fm(N(r.amount)),1);t('Mileage Deduction',fm(o.wear),1);
  return{t:'CALL SHEET',G:G.filter(x=>x.rows.length)}}
 /* plain text (print + fallback) */
 function text(r){const{t,G}=rows(r),out=['~ '+t+' ~'];G.forEach(x=>{out.push('');x.rows.forEach(([l,v])=>out.push(l+': '+v))});return out}
@@ -136,8 +135,8 @@ function text(r){const{t,G}=rows(r),out=['~ '+t+' ~'];G.forEach(x=>{out.push('')
 const hx=v=>String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const TD='border:1px solid #000;padding:4pt 6pt;vertical-align:top;font-family:Arial,sans-serif;box-sizing:border-box;';
 function html(r){const{t,G}=rows(r),sp='<p style="margin:0;font-size:6pt">&nbsp;</p>';
- return'<p style="margin:0 0 4pt 0;font-size:13pt;font-family:Arial,sans-serif"><b><u>'+hx(t)+'</u></b></p>'+G.map(x=>{const det=x.k=='det',info=x.k=='info',bg=det?'background-color:#f3f3f3;color:#434343;font-size:9pt;':'font-size:10pt;',w1=info?173:360,w2=info?287:100,cell=(w,txt)=>'<td width="'+w+'" style="'+TD+bg+'width:'+w+'px;font-weight:'+(w==w1?'bold':'normal')+'">'+hx(txt)+'</td>';
-  return sp+'<table width="460" border="1" cellspacing="0" cellpadding="0" style="border-collapse:collapse;table-layout:fixed;width:460px"><colgroup><col width="'+w1+'"/><col width="'+w2+'"/></colgroup><tbody>'+x.rows.map(([l,v])=>'<tr>'+cell(w1,l)+cell(w2,v)+'</tr>').join('')+'</tbody></table>'}).join('')}
+ return'<p style="margin:0 0 4pt 0;font-size:13pt;font-family:Arial,sans-serif"><b><u>'+hx(t)+'</u></b></p>'+G.map(x=>{const det=x.k=='det',info=x.k=='info',bg=det?'background-color:#f3f3f3;color:#434343;font-size:9pt;':'font-size:10pt;',w1=info?173:360,w2=info?287:100,cell=(w,txt,h)=>'<td width="'+w+'" style="'+TD+bg+(h&&w==w2?'background-color:#fff2a8;':'')+'width:'+w+'px;font-weight:'+(w==w1||(h&&w==w2)?'bold':'normal')+'">'+hx(txt)+'</td>';
+  return sp+'<table width="460" border="1" cellspacing="0" cellpadding="0" style="border-collapse:collapse;table-layout:fixed;width:460px"><colgroup><col width="'+w1+'"/><col width="'+w2+'"/></colgroup><tbody>'+x.rows.map(([l,v,h])=>'<tr>'+cell(w1,l)+cell(w2,v,h)+'</tr>').join('')+'</tbody></table>'}).join('')}
 /* Copy: 1) clipboard API  2) hidden textarea + execCommand  3) visible selectable panel. Never fails silently. */
 function copied(){$('#copypanel').style.display='none';st('');toast('Copied to clipboard');return true}
 async function copyText(rs){const tx=rs.map(r=>text(r).join('\n')).join('\n\n');
@@ -154,15 +153,16 @@ function paintRecs(x,rs,draw){const W=900,P=36,IN=26,F='Arial,Helvetica,sans-ser
  rs.forEach((r,ri)=>{const{t,G}=rows(r);if(ri)y+=36;
   if(draw){x.font='bold 46px '+F;x.fillStyle='#111';x.textAlign='left';x.fillText(t,P,y+46);x.fillStyle='#45818e';x.fillRect(P,y+62,Math.ceil(x.measureText(t).width),6)}y+=98;
   G.forEach(g=>{const info=g.k=='info',det=g.k=='det',lw=CW*(info?.40:.66),vw=CW*(info?.58:.32);
-   const L=g.rows.map(([l,v],i)=>{const last=g.k=='tot'&&i==g.rows.length-1,fs=last?32:28;
+   const L=g.rows.map(([l,v,hl],i)=>{const last=g.k=='tot'&&i==g.rows.length-1,fs=last?32:28;
     x.font=(info?'':(det?'':'bold '))+(info?'26':fs)+'px '+F;const a=wrap(l,lw);
-    x.font=(det?'':'bold ')+fs+'px '+F;const b=wrap(v,vw);return{a,b,fs,last,h:Math.max(a.length,b.length)*38+28}});
+    x.font=(det?'':'bold ')+fs+'px '+F;const b=wrap(v,vw);return{a,b,fs,last,hl,h:Math.max(a.length,b.length)*38+28}});
    const H=L.reduce((s,q)=>s+q.h,0);
    if(draw){rr(P,y,W-2*P,H,18);x.fillStyle=det?'#f3f4f6':'#fff';x.fill();x.lineWidth=2;x.strokeStyle='#d5dae0';x.stroke();
     let ry=y;L.forEach((q,i)=>{if(i){x.fillStyle=q.last?'#9aa4ad':'#e3e7ea';x.fillRect(P+IN,ry,W-2*P-2*IN,q.last?3:2)}
      x.fillStyle=info?'#5f6b76':'#111';x.font=(info?'':(det?'':'bold '))+(info?'26':q.fs)+'px '+F;if(det)x.fillStyle='#333';x.textAlign='left';
      q.a.forEach((s,k)=>x.fillText(s,P+IN,ry+14+36+k*38-10));
-     x.fillStyle='#111';x.font=(det?'':'bold ')+q.fs+'px '+F;x.textAlign='right';
+     x.fillStyle='#111';x.font=((det&&!q.hl)?'':'bold ')+q.fs+'px '+F;x.textAlign='right';
+     if(q.hl)q.b.forEach((s,k)=>{const tw=x.measureText(s).width;x.fillStyle='#fff2a8';x.fillRect(W-P-IN-tw-10,ry+14+k*38,tw+20,38);x.fillStyle='#111'});
      q.b.forEach((s,k)=>x.fillText(s,W-P-IN,ry+14+36+k*38-10));ry+=q.h})}
    y+=H+24})});
  return y+P-24}
@@ -309,12 +309,32 @@ function baked(p){const c=document.createElement('canvas');c.width=p.w;c.height=
  x.globalCompositeOperation='source-over';x.fillStyle='#000';p.marks.filter(m=>m.t=='r').forEach(m=>x.fillRect(Math.floor(m.x*p.w),Math.floor(m.y*p.h),Math.ceil(m.w*p.w)+1,Math.ceil(m.h*p.h)+1));return c}
 function rname(){const r=S.rec||{},pur=S.mode=='purchase',d=Parser.pd(pur?r.date:(r.jobDate||r.date)),p=n=>String(n).padStart(2,'0');return(d?d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' ':'')+(pur?'Physical Receipt':'Physical Call Sheet')}
 function iname(){const r=S.rec||{},pur=r.mode=='purchase',d=Parser.pd(pur?r.date:(r.jobDate||r.date)),p=n=>String(n).padStart(2,'0');return(d?d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' ':'')+(pur?'Plain Text Receipt':'Plain Text Call Sheet')}
-function refreshActs(){const on=!!(S.pages&&S.pages.length>0);document.querySelectorAll('.pdfx').forEach(b=>b.style.display=on?'':'none');const c=$('#cpbtn'),m=$('#imgbtn');if(c){c.textContent=cpLabel()}if(m){m.textContent='Save as Plain Text'}}
+function refreshActs(){const on=!!(S.pages&&S.pages.length>0);document.querySelectorAll('.pdfx').forEach(b=>b.style.display=on?'':'none');const c=$('#cpbtn'),m=$('#imgbtn');if(c){c.textContent=cpLabel()}if(m){const fl=S.mode!='purchase';m.textContent=fl?'Save invoice and plain text summary as a single PDF':'Save as Plain Text';m.onclick=fl?saveCombo:saveImg}}
 async function savePdf(){const J=window.jspdf&&window.jspdf.jsPDF;if(!J)return st('The PDF tool did not load. Check your connection and reload.');if(!S.pages.length)return;
  let d=null;S.pages.forEach(p=>{const W=595,H=+(W*p.h/p.w).toFixed(2),o=H>W?'p':'l',u=baked(p).toDataURL('image/jpeg',.92);if(!d)d=new J({unit:'pt',format:[W,H],orientation:o,compress:true});else d.addPage([W,H],o);d.addImage(u,'JPEG',0,0,W,H)});
  const n=rname()+'.pdf',f=new File([d.output('blob')],n,{type:'application/pdf'});
  if(IOS&&navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f],title:n});return}catch(e){if(e&&e.name=='AbortError')return}}
  const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=n;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);toast('Saved '+n)}
+/* freelance: uploaded invoice/call sheet + plain text summary (key details highlighted) in one PDF */
+async function saveCombo(){const J=window.jspdf&&window.jspdf.jsPDF;if(!J)return st('The PDF tool did not load. Check your connection and reload.');
+ try{const r=S.rec,{t,G}=rows(r);let d=null;
+ if(r.doc&&S.img&&S.dim){const W=595,H=+(W*S.dim[1]/S.dim[0]).toFixed(2);d=new J({unit:'pt',format:[W,H],orientation:H>W?'p':'l',compress:true});d.addImage(S.img,'JPEG',0,0,W,H);d.addPage([612,792],'p')}
+ else d=new J({unit:'pt',format:[612,792],orientation:'p',compress:true});
+ const PW=612,PH=792,M=54,R=PW-M,LW=200,VW=R-M-LW-24;let y=M+8;
+ d.setFont('helvetica','bold');d.setFontSize(18);d.setTextColor(17);d.text(t,M,y);d.setDrawColor(69,129,142);d.setLineWidth(2);d.line(M,y+5,M+d.getTextWidth(t),y+5);y+=34;
+ G.forEach(g=>{const det=g.k=='det';
+  g.rows.forEach(([l,v,h],i)=>{const vs=d.setFont('helvetica',h||g.k=='tot'?'bold':'normal').setFontSize(11).splitTextToSize(v,VW),ls=d.setFont('helvetica','bold').setFontSize(10).splitTextToSize(l,LW),n=Math.max(vs.length,ls.length),rh=n*15+10;
+   if(y+rh>PH-M){d.addPage([612,792],'p');y=M}
+   if(det){d.setFillColor(243,244,246);d.rect(M,y,R-M,rh,'F')}
+   if(h){const tw=Math.max(...vs.map(s=>d.setFont('helvetica','bold').setFontSize(11).getTextWidth(s)));d.setFillColor(255,242,168);d.rect(R-tw-10,y+2,tw+16,rh-4,'F')}
+   d.setFont('helvetica','normal').setFontSize(10).setTextColor(95,107,118);ls.forEach((s,k)=>d.text(s,M+6,y+15+k*15-1));
+   d.setFont('helvetica',h||g.k=='tot'?'bold':'normal').setFontSize(11).setTextColor(17);vs.forEach((s,k)=>d.text(s,R-6,y+15+k*15-1,{align:'right'}));
+   d.setDrawColor(210,214,218);d.setLineWidth(.5);d.line(M,y+rh,R,y+rh);y+=rh});
+  y+=18});
+ const p=n=>String(n).padStart(2,'0'),dt=Parser.pd(r.jobDate||r.date),n=(dt?dt.getFullYear()+'-'+p(dt.getMonth()+1)+'-'+p(dt.getDate())+' ':'')+'Call Sheet Invoice and Summary.pdf',f=new File([d.output('blob')],n,{type:'application/pdf'});
+ if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f],title:n});return}catch(e){if(e&&e.name=='AbortError')return}}
+ const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=n;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);toast('Saved '+n)}
+ catch(e){toast('Could not save PDF')}}
 (function(){const s=document.createElement('style');s.textContent=[
  'html,body{overflow-x:clip!important}.src{position:static!important}',
  '.ptool{position:sticky;top:max(8px,env(safe-area-inset-top));z-index:6;background:var(--bg);padding:6px 0 8px}',
