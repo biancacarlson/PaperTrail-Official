@@ -19,7 +19,7 @@ let fails=0;
 function wipe(){S.cleared=null;showRestore();snackHide();S.img=null;S.dim=null;S.records=[];S.words=[];S.sel=[];S.conf=null;S.home=null;['#view','#ocr','#print','#status'].forEach(i=>{const e=$(i);if(e){e.innerHTML='';e.textContent=''}});$('#docwrap').style.display='none';$('#file').value='';$('#copypanel').style.display='none';$('#copyta').value='';setMode(S.mode)}
 var snT;function snackHide(){clearTimeout(snT);const e=$('#snack');if(e)e.style.display='none'}
 function snack(m,fn){let e=$('#snack');if(!e){e=document.createElement('div');e.id='snack';document.body.appendChild(e)}e.innerHTML='<span></span><button></button>';e.firstChild.textContent=m;const b=e.lastChild;b.textContent='Undo';b.style.display=fn?'':'none';if(!fn)e.style.paddingRight='16px';else e.style.paddingRight='';b.onclick=()=>{snackHide();fn&&fn()};e.style.display='flex';clearTimeout(snT);snT=setTimeout(snackHide,10000)}
-function clearAll(){const c={mode:S.mode,rec:S.rec,pages:S.pages,undo:S.undo,redo:S.redo,img:S.img,dim:S.dim,words:S.words,conf:S.conf};wipe();S.cleared=c;showRestore();snack('Record cleared',restoreCleared)}
+function clearAll(){const c={mode:S.mode,rec:S.rec,pages:S.pages,undo:S.undo,redo:S.redo,img:S.img,dim:S.dim,words:S.words,conf:S.conf};const keep=S.records;wipe();S.records=keep;S.cleared=c;showRestore();renderRecs();snack('Record cleared',restoreCleared)}
 function showRestore(){const b=$('#restore');if(b)b.style.display=S.cleared?'flex':'none'}
 function dismissRestore(){S.cleared=null;showRestore()}
 function restoreCleared(){const c=S.cleared;if(!c)return;if(S.rec&&S.rec.loaded&&!confirm('Replace what is on screen with the cleared record?'))return;S.cleared=null;
@@ -27,13 +27,13 @@ function restoreCleared(){const c=S.cleared;if(!c)return;if(S.rec&&S.rec.loaded&
  $('#m1').className=S.mode=='purchase'?'on':'';$('#m2').className=S.mode=='freelance'?'on':'';$('.head h1').textContent=S.mode=='purchase'?'':'New work invoice record';
  if(S.mode!='purchase'&&S.img){showDoc(S.img);if(S.words&&S.words.length&&S.dim)drawWords(S.dim[0],S.dim[1])}
  render();renderPages();showRestore()}
-async function lockNow(){clearTimeout(pt);S.key=null;wipe();try{await idb('del')}catch(e){}$('#lock').style.display='block';showLock()}
+async function lockNow(){clearTimeout(pt);S.key=null;S.loaded=false;S.noStore=false;wipe();$('#lock').style.display='block';showLock()}
 const PW={"s":"62f53ba61516d37ff300ce68df2b2afe","h":"ba82c58f3766e930b59ed2480c7f8db564f999a0e0f1a415a9dedd4cb2b2f32a","e":"7a8c7dd61c94dcf41108ee71ee436129"};
 function showLock(){if(localStorage.getItem('lk'))return lockUI('<h2>Locked</h2><div class="msg">Too many wrong attempts. This app is locked on this device.</div>');lockUI('<h2>Enter passcode</h2><input id="pw" type="password" autocomplete="off"><button class="pri" onclick="unlock()">Log in</button><div id="lm" class="msg"></div>')}
 
 
 async function unlock(){if(localStorage.getItem('lk'))return showLock();const o=PW,s=new Uint8Array(o.s.match(/../g).map(h=>parseInt(h,16)));
- if(await hash($('#pw').value,s)===o.h){localStorage.removeItem('lf');S.key=await dk($('#pw').value,o.e);try{await idb('del')}catch(e){}open_()}else{const f=(+localStorage.getItem('lf')||0)+1;localStorage.setItem('lf',f);if(f>=3){localStorage.setItem('lk','1');showLock()}else $('#lm').textContent='Wrong passcode. '+(3-f)+' attempt'+(3-f==1?'':'s')+' left.'}}
+ if(await hash($('#pw').value,s)===o.h){localStorage.removeItem('lf');S.key=await dk($('#pw').value,o.e);try{const x=await idb('get');if(x&&x.iv){try{S.records=await dec(x)}catch(e){S.noStore=true;S.records=[]}}}catch(e){}S.loaded=true;open_();try{renderRecs();if(S.noStore)st('Saved records could not be opened with this passcode.')}catch(e){}}else{const f=(+localStorage.getItem('lf')||0)+1;localStorage.setItem('lf',f);if(f>=3){localStorage.setItem('lk','1');showLock()}else $('#lm').textContent='Wrong passcode. '+(3-f)+' attempt'+(3-f==1?'':'s')+' left.'}}
 function open_(){try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}$('#lock').style.display='none';$('#app').style.display='block'}
 let t;function bump(){clearTimeout(t);S.last=Date.now();t=setTimeout(lockNow,S.idle*60000)}document.addEventListener('visibilitychange',()=>{if(!document.hidden&&$('#app').style.display!='none'&&Date.now()-S.last>S.idle*60000)lockNow()});['touchstart','click','keydown'].forEach(e=>addEventListener(e,bump));
 function setIdle(){S.idle=Math.max(1,+$('#idle').value||15);bump()}
@@ -86,12 +86,13 @@ function ensureItem(r){if(r.mode=='purchase'&&!r.items.length&&N(r.extSub)>0)r.i
 function render(){const r=S.rec;{const pl=$('#pick');if(pl)pl.textContent=S.mode=='purchase'?'Add receipt screenshots or PDF':'Add invoice or call sheet'}if(!r||!r.loaded){$('#form').innerHTML='';$('#calc').innerHTML='';$('#actions').style.display='none';renderRecs();return}
  const fs=PF[r.mode],sel=$('#addto');sel.innerHTML=fs.map(f=>`<option value="${f[0]}">${f[1]}</option>`).join('')+(r.mode=='purchase'?'<option value="+item">New item</option>':'');
  const lab=(k,l)=>`<label for="f_${k}">${l}${r.edited[k]?' (edited)':''}${miss(k)?' (needs review)':''}${r.low&&r.low[k]&&!r.edited[k]?' - low confidence, check':''}</label>`,
- W=['location','notes','number','client','employer'],
- fld=k=>{const l=(fs.find(f=>f[0]==k)||[])[1];return `<div class="f${W.includes(k)?' w':''}">`+lab(k,l)+(k=='notes'?`<textarea id="f_${k}" class="${String(r[k]??'').trim()?'ext':''}" rows="3" oninput="ed('${k}',this.value)">${esc(r[k])}</textarea>`:(inp=>k=='roundTrip'?`<div class="row" style="margin:0">${inp}<button class="pri" style="flex:0 0 auto" onclick="render()">Recalculate</button></div>`:inp)(`<input autocomplete="off" id="f_${k}" class="${String(r[k]??'').trim()?'ext':''}${miss(k)?' warn':''}" value="${esc(r[k])}" oninput="ed('${k}',this.value)">`))+(k=='roundTrip'?`<div class="srch"><a id="gs" class="btn" target="_blank" rel="noopener noreferrer" href="${esc(gurl(r))}" onclick="return chk()">Search round-trip distance</a></div>`:'')+'</div>'},
- G=r.mode=='purchase'?[['Receipt',['date','merchant','number']],['Amounts',['tax','extSub','extTotal']]]:[['',['employer','client','invoice']],['',['jobDate','endDate','location']],['Mileage',['roundTrip']],['Hours & pay',['hours','overtime','amount']],['',['notes']]];
+ W=['location','notes','number','client','employer','category'],
+ fld=k=>{if(k=='category')return `<div class="f w"><label for="f_category">Category</label><select id="f_category" onchange="ed('category',this.value)"><option value="">Select…</option>${CATS.map(c=>`<option${r.category==c?' selected':''}>${c}</option>`).join('')}</select></div>`;const l=(fs.find(f=>f[0]==k)||[])[1];return `<div class="f${W.includes(k)?' w':''}">`+lab(k,l)+(k=='notes'?`<textarea id="f_${k}" class="${String(r[k]??'').trim()?'ext':''}" rows="3" oninput="ed('${k}',this.value)">${esc(r[k])}</textarea>`:(inp=>k=='roundTrip'?`<div class="row" style="margin:0">${inp}<button class="pri" style="flex:0 0 auto" onclick="render()">Recalculate</button></div>`:inp)(`<input autocomplete="off" id="f_${k}" class="${String(r[k]??'').trim()?'ext':''}${miss(k)?' warn':''}" value="${esc(r[k])}" oninput="ed('${k}',this.value)">`))+(k=='roundTrip'?`<div class="srch"><a id="gs" class="btn" target="_blank" rel="noopener noreferrer" href="${esc(gurl(r))}" onclick="return chk()">Search round-trip distance</a></div>`:'')+'</div>'},
+ G=r.mode=='purchase'?[['Receipt',['date','merchant','number','category']],['Amounts',['tax','extSub','extTotal']]]:[['',['employer','client','invoice']],['',['jobDate','endDate','location']],['Mileage',['roundTrip']],['Hours & pay',['hours','overtime','amount']],['',['notes']]];
  let h=G.map(([t,ks])=>`<section class="grp${t=='Amounts'?' amt':''}">${t?`<h3>${t}</h3>`:''}<div class="fg">${ks.map(fld).join('')}</div></section>`).join('');
  if(r.mode=='purchase')h+=itemsHtml();
  $('#form').className=r.mode;$('#form').innerHTML=h;$('#actions').style.display='block';calc();renderRecs();refreshActs()}
+const CATS=['Supplies','Gear','Meals','Travel','Software','Other'];
 const esc=v=>String(v??'').replace(/"/g,'&quot;').replace(/</g,'&lt;'),miss=k=>{const r=S.rec;return r.doc&&!r[k]&&['date','merchant','client','jobDate','location','amount'].includes(k)};
 function ed(k,v){S.rec[k]=v;if(k=='location'){const g=$('#gs'),c=$('#gc');if(g)g.href=gurl(S.rec);if(c)c.href=gurl(S.rec,1)}S.rec.edited[k]=1;const e=$('#f_'+k);if(e){const f=String(v).trim()!=='';e.classList.toggle('ext',f);e.classList.remove('usr');if(f)e.classList.remove('warn')}calc();if(k=='date')refreshActs()}
 function it(i,k,v){S.rec.items[i][k]=k=='n'?v:N(v)||0;S.rec.items[i].ext=0;S.rec.items[i].guess=0;if(k=='n')S.rec.items[i].inf=0;calc();const e=$('#it_'+i);if(e)e.textContent=M(S.rec.items[i].t)}
@@ -111,9 +112,7 @@ function calc(){const r=S.rec;if(!r)return;const o=compute(r);if(r.mode=='purcha
  if(r.mode=='purchase')h+=row('Items ('+(r.items.length-o.nOff)+')',M(o.sub))+(o.ship?row('Shipping',M(o.ship)):'')+row('Tax',M(N(r.tax)==null?null:o.tax),o.nOff&&N(r.tax)?'adjusted to work items':'')+'<div class="hero tot"><span>'+(o.nOff?'Work-related total':'Total')+'</span><b>'+M(o.total)+'</b></div>'+o.warn.map(w=>'<div class="msg">⚠ '+w+'</div>').join('');
  else{const d=est(r);
   if(d)h+='<div class="hero"><span>Net-30 payout'+(r.endDate?'':' (estimate)')+'</span><b>'+us(d)+'</b><small>'+(r.endDate?'30 days after the event end date':'No event end date found, so counted from the job date')+'</small><button onclick="addCal()">Add to Calendar</button></div>';
-  h+=row('Hours',o.tot==null?'Not entered':o.tot+' total',o.tot==null?'':(N(r.hours)||0)+' regular + '+(N(r.overtime)||0)+' overtime')
-   +row('Round trip',o.rt==null?'Not entered':o.rt.toFixed(1)+' mi')
-   +row('Mileage Deduction',M(o.wear),o.wear!=null?o.rt.toFixed(1)+' mi × $'+o.rate+'/mi<br>IRS standard mileage rate':o.rate==null&&o.rt!=null?'No IRS rate on file for this year':'')}
+  h+=row('Mileage Deduction',M(o.wear),o.wear!=null?'$'+o.rate+'/mi<br>IRS standard mileage rate':o.rate==null&&o.rt!=null?'No IRS rate on file for this year':'')}
  $('#calc').innerHTML=h+'</div>';persist()}
 /* ---------- selection → field ---------- */
 document.addEventListener('selectionchange',updBar);
@@ -123,8 +122,8 @@ const fm=v=>v==null?null:'$'+v.toFixed(2);
 /* Uniform record layout (same for every log): title, info table, detail table (shaded), totals table.
    groups: [{k:'info'|'det'|'tot', rows:[[label,value]]}] */
 const niceMerch=m=>{m=String(m||'').trim();return m.length>=4&&m===m.toUpperCase()&&/[A-Z]/.test(m)?m.toLowerCase().replace(/\b[a-z]/g,c=>c.toUpperCase()):m};
-function rows(r){const o=compute(r),G=[],g=k=>{const x={k,rows:[]};G.push(x);return(l,v,h)=>{if(v!=null&&String(v).trim()!=='')x.rows.push([l,String(v).trim(),!!h])}};
- if(r.mode=='purchase'){const i=g('info');i('Date',r.date);i('Merchant',niceMerch(r.merchant));i('Receipt/Invoice #',r.number);
+function rows(r){if(r.mode=='summary')return sumRows(r);const o=compute(r),G=[],g=k=>{const x={k,rows:[]};G.push(x);return(l,v,h)=>{if(v!=null&&String(v).trim()!=='')x.rows.push([l,String(v).trim(),!!h])}};
+ if(r.mode=='purchase'){const i=g('info');i('Date',r.date);i('Merchant',niceMerch(r.merchant));i('Receipt/Invoice #',r.number);i('Category',r.category);
   const d=g('det');r.items.filter(x=>!x.off).forEach(x=>d((String(x.n||'Item').replace(/\s*(\.{2,}|…)\s*$/,'').trim()),M(x.t)));
   const t=g('tot');t('Subtotal',M(o.sub));if(o.ship)t('Shipping',M(o.ship));if(o.disc)t('Discount','-'+M(o.disc));if(N(r.tax)!=null)t('Tax',M(o.tax));t('Total',M(o.total));
   return{t:'PURCHASE',G:G.filter(x=>x.rows.length)}}
@@ -179,9 +178,22 @@ async function saveImg(){try{const b=await recsBlob([S.rec]),f=new File([b],inam
 function toast(m){$('#status').style.color='#0a0';$('#status').textContent=m;setTimeout(()=>{$('#status').textContent='';$('#status').style.color=''},2500)}
 const noun=()=>S.mode=='purchase'?'Receipt':'Call Sheet';const cpLabel=()=>'Copy '+noun()+' Text';
 let ct;const copyRec=async()=>{if(await copy([S.rec])){const b=$('#cpbtn');clearTimeout(ct);requestAnimationFrame(()=>{b.textContent='Copied'});ct=setTimeout(()=>requestAnimationFrame(()=>{b.textContent=cpLabel()}),2500)}};
-function saveRec(){S.records.push(JSON.parse(JSON.stringify(S.rec)));toast('Saved for this session');renderRecs()}
+function saveRec(){if(!S.rec||!S.rec.loaded)return;const j=JSON.stringify(S.rec);if(S.records.some(x=>JSON.stringify(x)===j))return toast('Already saved');S.records.push(JSON.parse(j));toast('Saved');renderRecs();store()}
 function key(r){const d=Parser.pd(r.date||r.jobDate);return d?+d:Infinity}
-function renderRecs(){persist();$('#recs').innerHTML=S.records.length?`<h3>Saved (${S.records.length}, this session only)</h3><button class="pri" onclick="copy([...S.records].sort((a,b)=>key(a)-key(b)))">Copy All Records</button><button onclick="S.records=[];renderRecs()">Delete all</button>`:''}
+/* expense totals (Expense records only): by month, by year (when more than one), by category */
+function totals(){const m={},y={},c={};let all=0;S.records.filter(r=>r.mode=='purchase').forEach(r=>{const t=compute(r).total||0,d=Parser.pd(r.date),p=n=>String(n).padStart(2,'0'),mk=d?d.getFullYear()+'-'+p(d.getMonth()+1):'0000',yk=d?String(d.getFullYear()):'0000',ck=r.category||'Uncategorized';m[mk]=(m[mk]||0)+t;y[yk]=(y[yk]||0)+t;c[ck]=(c[ck]||0)+t;all+=t});
+ const mn=k=>k=='0000'?'No date':new Date(+k.slice(0,4),+k.slice(5)-1,1).toLocaleString('en-US',{month:'short',year:'numeric'}),ord=k=>CATS.indexOf(k)<0?(k=='Uncategorized'?99:50):CATS.indexOf(k),f=o=>+o.toFixed(2);
+ return{months:Object.keys(m).sort().map(k=>[mn(k),f(m[k])]),years:Object.keys(y).sort().map(k=>[k=='0000'?'No date':k,f(y[k])]),cats:Object.keys(c).sort((a,b)=>ord(a)-ord(b)).map(k=>[k,f(c[k])]),all:f(all),n:Object.keys(m).length}}
+function sumRows(){const T=totals(),G=[],g=(k,a)=>{if(a.length)G.push({k,rows:a.map(([l,v])=>[l,M(v),false])})};g('info',T.months);if(T.years.length>1)g('info',T.years);g('det',T.cats);g('tot',[['Total expenses',T.all]]);return{t:'EXPENSE TOTALS',G}}
+function allRecs(){const a=[...S.records].sort((p,q)=>key(p)-key(q));if(S.records.some(r=>r.mode=='purchase'))a.push({mode:'summary'});return a}
+function delRec(i){if(!confirm('Delete this saved record?'))return;S.records.splice(i,1);renderRecs();store()}
+function delAllRecs(){if(!confirm('Delete all '+S.records.length+' saved records from this phone?'))return;S.records=[];renderRecs();store()}
+function renderRecs(){persist();const el=$('#recs');if(!el)return;if(!S.records.length){el.innerHTML='';return}
+ const T=totals(),row=(l,v)=>`<div class="srow"><span>${l}</span><b>${M(v)}</b></div>`,
+ list=S.records.map((r,i)=>[r,i]).sort((p,q)=>key(p[0])-key(q[0])).map(([r,i])=>{const pur=r.mode=='purchase',d=pur?r.date:r.jobDate,lab=(d?d+' · ':'')+esc((pur?niceMerch(r.merchant):r.client)||(pur?'Receipt':'Work invoice'))+(r.category?' · '+r.category:''),amt=pur?M(compute(r).total):M(N(r.amount));return`<div class="srow"><span>${lab}</span><b>${amt}</b><button class="x" onclick="delRec(${i})" aria-label="Delete saved record">✕</button></div>`}).join('');
+ el.innerHTML=`<h3>Saved (${S.records.length})</h3><div class="sl">${list}</div>`
+ +(T.n?`<div class="sl"><h4>Expense totals</h4>${T.months.map(([l,v])=>row(l,v)).join('')}${T.years.length>1?T.years.map(([l,v])=>row(l+' total',v)).join(''):''}${T.cats.map(([l,v])=>row(l,v)).join('')}${row('Total expenses',T.all)}</div>`:'')
+ +`<button class="pri" onclick="copy(allRecs())">Copy All Records</button><button onclick="delAllRecs()">Delete all</button><div class="hint">Saved on this phone only, encrypted with your passcode. Receipt images are not kept; use Save as PDF for those.</div>`}
 function dl(f){const r=S.rec,o=compute(r);let d,n='record.'+f;if(f=='json')d=JSON.stringify({...r,calculated:o},null,1);else{const rows=r.mode=='purchase'?[['Item','Qty','Unit','Total'],...r.items.filter(i=>!i.off).map(i=>[i.n,i.q,i.p,i.t]),['Subtotal','','',o.sub],...(o.disc?[['Discount','','',-o.disc]]:[]),['Tax','','',N(r.tax)==null?'':o.tax],['Total','','',o.total]]:[['Field','Value'],...text(r).filter(l=>l.includes(': ')).map(l=>l.split(/: (.*)/s).slice(0,2))];d=rows.map(x=>x.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(',')).join('\n')}
  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([d]));a.download=n;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
 function addCal(){const r=S.rec,d=est(r);if(!d)return;const e=d.replace(/-/g,''),n=Parser.net30(d,1).replace(/-/g,''),x=t=>String(t).replace(/[\\;,]/g,'\\$&').replace(/\n/g,' '),
@@ -192,9 +204,11 @@ function doPrint(){$('#print').textContent=text(S.rec).join('\n');print()}
 const idb=(m,v)=>new Promise((ok,no)=>{const q=indexedDB.open('bench',1);q.onupgradeneeded=()=>q.result.createObjectStore('s');q.onerror=()=>no(q.error);q.onsuccess=()=>{const d=q.result,tx=d.transaction('s',m=='get'?'readonly':'readwrite'),o=tx.objectStore('s'),r=m=='get'?o.get('state'):m=='put'?o.put(v,'state'):o.delete('state');tx.oncomplete=()=>{d.close();ok(r.result)};tx.onerror=()=>no(tx.error)}});
 async function dk(p,e){const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(p),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt:new Uint8Array(e.match(/../g).map(h=>parseInt(h,16))),iterations:310000,hash:'SHA-256'},k,{name:'AES-GCM',length:256},false,['encrypt','decrypt'])}
 async function dec(x){return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:x.iv},S.key,x.c)))}
-let pt;function persist(){}/* session-only: nothing is saved */
+let pt;function persist(){}
+/* saved records (text fields only, never the images) are encrypted with the passcode-derived key and kept on this device */
+async function store(){if(!S.key||!S.loaded||S.noStore)return;try{const iv=crypto.getRandomValues(new Uint8Array(12)),c=await crypto.subtle.encrypt({name:'AES-GCM',iv},S.key,new TextEncoder().encode(JSON.stringify(S.records)));await idb('put',{iv,c})}catch(e){}}
 async function flush(){}
-async function nuke(){if(!confirm('Clear the current session and any leftover saved data? Your passcode stays.'))return;try{await idb('del')}catch(e){}wipe();st('Saved data deleted.')}
+async function nuke(){if(!confirm('Delete every saved record from this phone and clear the screen? Your passcode stays.'))return;try{await idb('del')}catch(e){}S.noStore=false;wipe();st('Saved data deleted.')}
 
 setMode('purchase');showLock();bump();
 
@@ -317,29 +331,40 @@ function baked(p){const c=document.createElement('canvas');c.width=p.w;c.height=
  x.globalCompositeOperation='source-over';x.fillStyle='#000';p.marks.filter(m=>m.t=='r').forEach(m=>x.fillRect(Math.floor(m.x*p.w),Math.floor(m.y*p.h),Math.ceil(m.w*p.w)+1,Math.ceil(m.h*p.h)+1));return c}
 function rname(){const r=S.rec||{},pur=S.mode=='purchase',d=Parser.pd(pur?r.date:(r.jobDate||r.date)),p=n=>String(n).padStart(2,'0');return(d?d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' ':'')+(pur?'Physical Receipt':'Physical Call Sheet')}
 function iname(){const r=S.rec||{},pur=r.mode=='purchase',d=Parser.pd(pur?r.date:(r.jobDate||r.date)),p=n=>String(n).padStart(2,'0');return(d?d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' ':'')+(pur?'Plain Text Receipt':'Plain Text Call Sheet')}
-function refreshActs(){const on=!!(S.pages&&S.pages.length>0);document.querySelectorAll('.pdfx').forEach(b=>b.style.display=on?'':'none');const c=$('#cpbtn'),m=$('#imgbtn');if(c){c.textContent=cpLabel()}if(m){m.classList.toggle('sec',on&&S.mode=='purchase')}if(m){const fl=S.mode!='purchase';m.textContent=fl?'Save as PDF':'Save as Plain Text';m.onclick=fl?saveCombo:saveImg}}
+function refreshActs(){const on=!!(S.pages&&S.pages.length>0);document.querySelectorAll('.pdfx').forEach(b=>b.style.display=on?'':'none');const c=$('#cpbtn'),m=$('#imgbtn');if(c){c.textContent=cpLabel()}if(m){m.classList.remove('sec');m.textContent='Save as PDF';m.onclick=saveCombo}}
 async function savePdf(){const J=window.jspdf&&window.jspdf.jsPDF;if(!J)return st('The PDF tool did not load. Check your connection and reload.');if(!S.pages.length)return;
  let d=null;S.pages.forEach(p=>{const W=595,H=+(W*p.h/p.w).toFixed(2),o=H>W?'p':'l',u=baked(p).toDataURL('image/jpeg',.92);if(!d)d=new J({unit:'pt',format:[W,H],orientation:o,compress:true});else d.addPage([W,H],o);d.addImage(u,'JPEG',0,0,W,H)});
  const n=rname()+'.pdf',f=new File([d.output('blob')],n,{type:'application/pdf'});
  if(IOS&&navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f],title:n});return}catch(e){if(e&&e.name=='AbortError')return}}
  const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=n;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);toast('Saved '+n)}
-/* freelance: uploaded invoice/call sheet + plain text summary (key details highlighted) in one PDF */
+/* one PDF: the uploaded invoice / receipt pages + the plain text summary. The summary shares a page with the image whenever it fits. */
 async function saveCombo(){const J=window.jspdf&&window.jspdf.jsPDF;if(!J)return st('The PDF tool did not load. Check your connection and reload.');
- try{const r=S.rec,{t,G}=rows(r);let d=null;
- if(r.doc&&S.img&&S.dim){const W=595,H=+(W*S.dim[1]/S.dim[0]).toFixed(2);d=new J({unit:'pt',format:[W,H],orientation:H>W?'p':'l',compress:true});d.addImage(S.img,'JPEG',0,0,W,H);d.addPage([612,792],'p')}
- else d=new J({unit:'pt',format:[612,792],orientation:'p',compress:true});
- const PW=612,PH=792,M=54,R=PW-M,LW=200,VW=R-M-LW-24;let y=M+8;
- d.setFont('helvetica','bold');d.setFontSize(18);d.setTextColor(17);d.text(t,M,y);d.setDrawColor(69,129,142);d.setLineWidth(2);d.line(M,y+5,M+d.getTextWidth(t),y+5);y+=34;
- G.forEach(g=>{const det=g.k=='det';
-  g.rows.forEach(([l,v,h],i)=>{const vs=d.setFont('helvetica',h||g.k=='tot'?'bold':'normal').setFontSize(11).splitTextToSize(v,VW),ls=d.setFont('helvetica','bold').setFontSize(10).splitTextToSize(l,LW),n=Math.max(vs.length,ls.length),rh=n*15+10;
-   if(y+rh>PH-M){d.addPage([612,792],'p');y=M}
-   if(det){d.setFillColor(243,244,246);d.rect(M,y,R-M,rh,'F')}
-   if(h){const tw=Math.max(...vs.map(s=>d.setFont('helvetica','bold').setFontSize(11).getTextWidth(s)));d.setFillColor(255,242,168);d.rect(R-tw-10,y+2,tw+16,rh-4,'F')}
-   d.setFont('helvetica','normal').setFontSize(10).setTextColor(95,107,118);ls.forEach((s,k)=>d.text(s,M+6,y+15+k*15-1));
-   d.setFont('helvetica',h||g.k=='tot'?'bold':'normal').setFontSize(11).setTextColor(17);vs.forEach((s,k)=>d.text(s,R-6,y+15+k*15-1,{align:'right'}));
-   d.setDrawColor(210,214,218);d.setLineWidth(.5);d.line(M,y+rh,R,y+rh);y+=rh});
-  y+=18});
- const p=n=>String(n).padStart(2,'0'),dt=Parser.pd(r.jobDate||r.date),n=(dt?dt.getFullYear()+'-'+p(dt.getMonth()+1)+'-'+p(dt.getDate())+' ':'')+'Call Sheet Invoice and Summary.pdf',f=new File([d.output('blob')],n,{type:'application/pdf'});
+ try{const r=S.rec,{t,G}=rows(r),pur=S.mode=='purchase',M=36,LW=170;let imgs=[];
+ if(pur)imgs=(S.pages||[]).map(p=>({u:baked(p).toDataURL('image/jpeg',.92),w:p.w,h:p.h}));
+ else if(r.doc&&S.img&&S.dim)imgs=[{u:S.img,w:S.dim[0],h:S.dim[1]}];
+ /* summary block: draws at (x0,y0) with width SW, returns its height; measure-only when draw is false */
+ const sum=(d,x0,y0,SW,draw)=>{const R=x0+SW,VW=SW-LW-24;let y=y0;
+  if(draw){d.setFont('helvetica','bold').setFontSize(16).setTextColor(17);d.text(t,x0,y+14);d.setDrawColor(69,129,142);d.setLineWidth(2);d.line(x0,y+19,x0+d.getTextWidth(t),y+19)}y+=32;
+  G.forEach((g,gi)=>{const det=g.k=='det';
+   g.rows.forEach(([l,v,h])=>{const bold=h||g.k=='tot',vs=d.setFont('helvetica',bold?'bold':'normal').setFontSize(10.5).splitTextToSize(v,VW),ls=d.setFont('helvetica','bold').setFontSize(9.5).splitTextToSize(l,LW),n=Math.max(vs.length,ls.length),rh=n*14+8;
+    if(draw){if(det){d.setFillColor(243,244,246);d.rect(x0,y,SW,rh,'F')}
+     if(h){const tw=Math.max(...vs.map(q=>d.setFont('helvetica','bold').setFontSize(10.5).getTextWidth(q)));d.setFillColor(255,242,168);d.rect(R-tw-10,y+2,tw+16,rh-4,'F')}
+     d.setFont('helvetica','normal').setFontSize(9.5).setTextColor(95,107,118);ls.forEach((q,k)=>d.text(q,x0+6,y+14+k*14-2));
+     d.setFont('helvetica',bold?'bold':'normal').setFontSize(10.5).setTextColor(17);vs.forEach((q,k)=>d.text(q,R-6,y+14+k*14-2,{align:'right'}));
+     d.setDrawColor(210,214,218);d.setLineWidth(.5);d.line(x0,y+rh,R,y+rh)}
+    y+=rh});
+   y+=10});
+  return y-y0};
+ const m=new J({unit:'pt',format:[612,792],compress:true}),sh=sum(m,0,0,0+612-2*M,false);let d=null;
+ const add=(w,h)=>{const o=h>w?'p':'l';if(!d)d=new J({unit:'pt',format:[w,h],orientation:o,compress:true});else d.addPage([w,h],o);return d};
+ if(!imgs.length){add(612,792);sum(d,M,M,612-2*M,true)}
+ else{
+  imgs.forEach((im,i)=>{const last=i==imgs.length-1,W=595,H=+(W*im.h/im.w).toFixed(2),tot=H+14+sh+M;
+   if(last&&tot<=842){add(W,tot);d.addImage(im.u,'JPEG',0,0,W,H);sum(d,M,H+14,W-2*M,true)}/* image + summary on one page */
+   else if(last&&imgs.length==1&&(()=>{const ah=792-M-14-sh-M,sc=Math.min(ah/H,(612-2*M)/W);return sc>=.6})()){/* letter page, image scaled to leave room for the summary */
+    const ah=792-M-14-sh-M,sc=Math.min(ah/H,(612-2*M)/W),iw=W*sc,ih=H*sc;add(612,792);d.addImage(im.u,'JPEG',(612-iw)/2,M,iw,ih);sum(d,M,M+ih+14,612-2*M,true)}
+   else{add(W,H);d.addImage(im.u,'JPEG',0,0,W,H);if(last){add(612,792);sum(d,M,M,612-2*M,true)}}})}
+ const p=n=>String(n).padStart(2,'0'),dt=Parser.pd(pur?r.date:(r.jobDate||r.date)),n=(dt?dt.getFullYear()+'-'+p(dt.getMonth()+1)+'-'+p(dt.getDate())+' ':'')+(pur?'Receipt and Summary.pdf':'Call Sheet Invoice and Summary.pdf'),f=new File([d.output('blob')],n,{type:'application/pdf'});
  if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f],title:n});return}catch(e){if(e&&e.name=='AbortError')return}}
  const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=n;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);toast('Saved '+n)}
  catch(e){toast('Could not save PDF')}}
@@ -513,3 +538,5 @@ function idSkip(a){S.idRes.splice(a,1);render()}
 '.ic .ib textarea.in:focus{border-color:var(--g)!important;box-shadow:0 0 0 3px rgba(74,124,89,.18)!important;outline:0}',
 '.ic.off .ib textarea.in{background-color:var(--card)!important}'
 ].join('');document.head.appendChild(s)})();
+
+(function(){const s=document.createElement('style');s.textContent='.sl{background:var(--card);border:1px solid var(--ln);border-radius:14px;padding:6px 14px;margin:10px 0}.sl h4{margin:10px 0 2px;font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}.srow{display:flex;align-items:center;gap:10px;padding:9px 0;font-size:14px}.srow+.srow{border-top:1px solid var(--ln)}.srow span{flex:1;min-width:0}.srow b{white-space:nowrap}.srow .x{flex:0 0 32px;height:32px;padding:0}#f_category{width:100%}';document.head.appendChild(s)})();

@@ -24,7 +24,7 @@ IRS business rate used for wear and tear:
 - The reading tools (OCR and PDF) load from public servers (cdnjs, jsDelivr).
 - The "Identify unclear items from their photos" feature downloads an image model once (from jsDelivr and Hugging Face) and runs it on your phone. Your receipt images are not sent anywhere.
 - The job address is sent to Google only when you tap a search button.
-- Only the one passcode built into this app is accepted; it can't be set or changed from the site. After 3 wrong attempts the app locks on that device until the browser's site data is cleared. It is a screen lock in the browser, so the site address itself is still public. Nothing is stored on a server.
+- Only the one passcode built into this app is accepted; it can't be set or changed from the site. After 3 wrong attempts the app locks on that device until the browser's site data is cleared. It is a screen lock in the browser, so the site address itself is still public. Nothing is stored on a server. Records you tap Save record on are kept on this phone only, encrypted (AES-GCM, key derived from the passcode) in the browser's IndexedDB. Receipt images are never stored, only the text fields. Settings > Delete all saved records removes them. If the passcode built into the app is ever changed, previously saved records can no longer be opened.
 
 ## Deploy
 1. Upload the project files to your GitHub repo.
