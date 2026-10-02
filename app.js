@@ -127,7 +127,7 @@ function compute(r){const o={};if(r.mode=='purchase'){const A=r.items;A.forEach(
  if(A.some(i=>i.guess))o.warn.push('Only the order subtotal could be read, so it is shown as one combined line. Rename it, or add each item if the order had several.');else if(r.extSub&&Math.abs(N(r.extSub)-o.all)>0.01)o.warn.push('Item prices add up to '+M(o.all)+' but the receipt subtotal is '+M(N(r.extSub))+'. Check for a missed or misread item.');
  if(r.extTotal&&Math.abs(N(r.extTotal)-o.full)>0.01)o.warn.push('Calculated order total '+M(o.full)+' differs from the receipt total '+M(N(r.extTotal))+'.');
  if(r.expected&&A.length!=r.expected)o.warn.push('Receipt lists '+r.expected+' items; '+A.length+' found here.');
- if(r.tax===undefined||r.tax==='')o.warn.push('Tax not entered; total excludes tax.')}
+ if(r.tax===undefined||r.tax==='')o.warn.push('Tax not entered; total excludes tax.');if((r.shots||(S.pages&&S.pages.length))&&(r.number==null||r.number===''))o.warn.push('Receipt number not found. Press and hold it on the receipt, choose Receipt/Invoice # in the Add bar, then tap Add.')}
  else{const rt=N(r.roundTrip),hr=N(r.hours),ot=N(r.overtime);o.rt=rt;o.tot=hr==null&&ot==null?null:+((hr||0)+(ot||0)).toFixed(2);o.rate=Parser.irs(r.jobDate);o.wear=rt!=null&&o.rate!=null?+(rt*o.rate).toFixed(2):null}return o}
 function calc(){const r=S.rec;if(!r)return;const o=compute(r);if(r.mode=='purchase'||S.mode=='purchase'){$('#calc').innerHTML='';persist();return}
  const row=(l,v,sub)=>'<div class="crow"><div class="cl">'+l+'</div><div class="cv">'+v+(sub?'<small>'+sub+'</small>':'')+'</div></div>',
