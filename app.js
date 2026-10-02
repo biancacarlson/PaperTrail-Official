@@ -234,7 +234,7 @@ function handleFiles(fl){const a=[...(fl||[])];if(!a.length)return;dismissRestor
 async function addShots(files){let r=S.rec;if(!r.doc){S.rec=r=newRec();r.loaded=true;r.doc=true;S.sel=[];S.words=[];S.pages=[];S.undo=[];S.redo=[]}r.shots=r.shots||0;let dup=0,bad=0;
  const kf=x=>String(x.n).toLowerCase().replace(/[^a-z0-9]/g,'')+'|'+x.p;
  for(let i=0;i<files.length;i++){st('Reading screenshot '+(i+1)+' of '+files.length+'… (first run downloads language data)');
-  try{const o=await readImg(files[i]),P=Parser.parse(o.text,'purchase'),cur=r.shots++;S.pages.push({id:++PGID,words:o.words,c:o.c,url:o.url,w:o.c.width,h:o.c.height,marks:autoHL(o.words,o.c.width,o.c.height)});locate(S.pages[S.pages.length-1],P.items);
+  try{const o=await readImg(files[i]),P=Parser.parse(o.text,'purchase'),cur=r.shots++;S.pages.push({id:++PGID,words:o.words,c:o.c,url:o.url,w:o.c.width,h:o.c.height,marks:autoHL(o.words,o.c.width,o.c.height,seenHL())});locate(S.pages[S.pages.length-1],P.items);
    if(cur===0){S.img=o.url;S.dim=[o.c.width,o.c.height];S.words=o.words;S.conf=o.conf;showDoc(o.url);drawWords(o.c.width,o.c.height)}
    Object.keys(P.fields).forEach(k=>{if(k=='merchant'?(P.found.mk||!r.merchant):(r[k]==null||r[k]===''))r[k]=P.fields[k]});
    Object.keys(P.found).forEach(k=>r.src[k]=1);if(P.guess&&!r.gname)r.gname=P.guess;
@@ -263,7 +263,11 @@ var PM='s',FW=true,PH={s:'',r:'Drag down over an item to black it out. Tap a box
 function wLines(ws){const a=(ws||[]).filter(w=>w.bbox).map(w=>({t:w.text,x0:w.bbox.x0,x1:w.bbox.x1,y0:w.bbox.y0,y1:w.bbox.y1,cy:(w.bbox.y0+w.bbox.y1)/2,hh:w.bbox.y1-w.bbox.y0})).sort((p,q)=>p.cy-q.cy),L=[];
  a.forEach(w=>{const g=L.find(l=>Math.abs(l.cy-w.cy)<Math.max(l.hh,w.hh)*.5);if(g){g.w.push(w);g.cy=(g.cy*(g.w.length-1)+w.cy)/g.w.length;g.hh=Math.max(g.hh,w.hh)}else L.push({cy:w.cy,hh:w.hh,w:[w]})});
  return L.map(l=>{l.w.sort((p,q)=>p.x0-q.x0);return{t:l.w.map(w=>w.t).join(' '),x0:Math.min(...l.w.map(w=>w.x0)),x1:Math.max(...l.w.map(w=>w.x1)),y0:Math.min(...l.w.map(w=>w.y0)),y1:Math.max(...l.w.map(w=>w.y1))}})}
-function autoHL(ws,W,H){try{return wLines(ws).filter(l=>HLRE.test(l.t)&&/\d/.test(l.t)&&!/item|discount|bonus|saved|savings/i.test(l.t)).map(l=>{const x0=Math.max(0,l.x0-4),y0=Math.max(0,l.y0-3),x1=Math.min(W,l.x1+4),y1=Math.min(H,l.y1+3);return{t:'h',x:x0/W,y:y0/H,w:(x1-x0)/W,h:(y1-y0)/H}})}catch(e){return[]}}
+function hlKey(l){const t=String(l.t||'').toLowerCase();return t.replace(/[^a-z0-9]/g,'')}
+function hlKey2(l){const t=String(l.t||'').toLowerCase();return (t.match(/[a-z]{3}/)||[''])[0]+'|'+t.replace(/[^0-9]/g,'')}
+/* screenshots of one long page overlap: a line already highlighted on an earlier screenshot is not highlighted again */
+function seenHL(){const s=new Set();S.pages.forEach(pg=>{try{wLines(pg.words).filter(l=>HLRE.test(l.t)&&/\d/.test(l.t)&&!/item|discount|bonus|saved|savings/i.test(l.t)).forEach(l=>{s.add(hlKey(l));s.add(hlKey2(l))})}catch(e){}});return s}
+function autoHL(ws,W,H,seen){try{return wLines(ws).filter(l=>HLRE.test(l.t)&&/\d/.test(l.t)&&!/item|discount|bonus|saved|savings/i.test(l.t)&&!(seen&&(seen.has(hlKey(l))||seen.has(hlKey2(l))))).map(l=>{const x0=Math.max(0,l.x0-4),y0=Math.max(0,l.y0-3),x1=Math.min(W,l.x1+4),y1=Math.min(H,l.y1+3);return{t:'h',x:x0/W,y:y0/H,w:(x1-x0)/W,h:(y1-y0)/H}})}catch(e){return[]}}
 function renderPages(){const el=$('#pages');if(!el)return;S.selM=null;
  if(S.mode!='purchase'||!S.pages.length){el.style.display='none';el.innerHTML='';refreshActs();return}
  $('#docwrap').style.display='none';el.style.display='block';

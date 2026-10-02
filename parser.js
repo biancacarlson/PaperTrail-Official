@@ -21,7 +21,9 @@ const cleanName=(n,v)=>{let t=n.replace(/\s{2,}/g,' ').trim().split(' ');
  if(t.length>2&&/^\d+p(?:cs|es)$/i.test(t[0])&&PK.test(t[1])){t[0]=t[0].replace(/pes$/i,'pcs');t.splice(1,1)}
  /* "2/5/10pcs ..." with variant "Blue 2": the number in the variant is the pack actually bought */
  else if(t.length&&PK.test(t[0])&&v){const opts=t[0].match(/\d+/g),m=(v.match(/\b\d+\b/g)||[]).find(x=>opts.includes(x));if(m)t[0]=m+'pcs'}
- return t.join(' ').replace(/\s*[-\u2013\u2014,:;]+\s*$/,'').trim()};
+ let s=t.join(' ').replace(/\s+\S{0,3}\s+(?:sold|shipped)\s*by\b.*$/i,'').replace(/\s*(?:sold|shipped)\s*by\b.*$/i,'');
+ const seen=new Set();s=s.split(' ').filter(w=>{const k=w.toLowerCase().replace(/[^a-z0-9]/g,'');if(k.length<4)return true;if(seen.has(k))return false;seen.add(k);return true}).join(' ');
+ return s.replace(/\s*[-\u2013\u2014,:;]+\s*$/,'').trim()};
 
 /* Short, readable product name from a cleaned marketplace title + variant line. Rules only; never invents a product. */
 const WORDS=['Set','Kit','Protector','Protectors','Protective','Combination','Mirror','Stickers','Sticker','Holder','Band','Brace','Bag','Case','Cover','Cutters','Screwdriver','Organizer','Charger','Cable','Adapter','Lights','Light','Clips','Clip','Pads','Pad','Storage','Handle','Strap','Gloves','Wrench','Pliers','Tape','Brush','Cleaner','Insoles','Lock'];
@@ -81,6 +83,7 @@ function guessMerchant(text,L){
  const l=L.slice(0,12).map(x=>x.replace(/^[^A-Za-z0-9]*[Qq]\s+(?=[A-Z])/,'').trim()).find(l=>/[A-Za-z]{3}/.test(l)&&l.length<=40&&!DATE.test(l)&&!PRICE.test(l)&&!UIJUNK.test(l)&&!/\d{3}[-. ]\d{4}|^\W*(tel|phone|www|http)/i.test(l)&&/^[A-Z0-9]/.test(l));
  return l?{n:l,sure:0}:null}
 /* Item block for marketplace-style pages: a (wrapped) product title above a price that sits alone on its own line. */
+const SELLER=/\b(?:sold|shipped|fulfilled|ships)\s*(?:by|from)\b|\bsold\s*by\s*:/i;
 const NOTTITLE=/^\W*(?:sold\b|shipped\b|fulfilled\b|return|replace|buy it|track|get product|write a|view\b|leave\b|deliver|arriv|order|qty|quantity|package|invoice|ship(?:ping)?\b|payment|billing|subtotal|item\(s\)|total|tax\b|grand|promotion|search|ask a|see\b|show\b|download|print|share|help|back\b|menu|cart|account|prime\b|your\b|more\b|archive|details|summary|status|q\s+search)/i;
 /* Marketplace titles are keyword-stuffed: keep the part before the first comma / dash / pipe when that is still a real name. */
 const crisp=n=>{const m=n.match(/^(.{18,}?)\s*(?:,|\s[-\u2013\u2014|]\s)/);return m?m[1]:n};
@@ -95,7 +98,7 @@ function blockItems(L){
  for(const end of [si>0?si:L.length,L.length]){if(out.length)break;
  for(let i=0;i<end;i++){const l=fix(L[i]);if(!ONLYP.test(l))continue;const v=num(l);if(v==null||v<=0)continue;
   const t=[];let seen=false;
-  for(let j=i-1;j>=0&&i-j<=7;j--){const x=L[j];if(ONLYP.test(fix(x)))break;const ok=readable(x)&&x.length>3&&!NOTTITLE.test(x)&&!DATE.test(x);if(ok){t.unshift(x);seen=true}else if(seen)break}
+  for(let j=i-1;j>=0&&i-j<=7;j--){const x=L[j];if(ONLYP.test(fix(x)))break;const ok=readable(x)&&x.length>3&&!NOTTITLE.test(x)&&!SELLER.test(x)&&!DATE.test(x);if(ok){t.unshift(x);seen=true}else if(seen)break}
   if(!t.length)continue;
   let q=1;for(let j=Math.max(0,i-7);j<Math.min(L.length,i+3);j++){const m=L[j].match(/^\W*(?:qty|quantity)\s*:?\s*(\d{1,3})\b/i);if(m){q=+m[1];break}}
   const title=t.join(' '),cut=/\S(\.{2,}|\u2026)\s*$/.test(title),cn=cleanName(title);if(!readable(cn))continue;
@@ -103,7 +106,7 @@ function blockItems(L){
  return out}
 /* Best guess at a product title when the page shows no per-item price (used only as a name for a single-item fallback). */
 function titleGuess(L){const si=L.findIndex(l=>/order summary|item\(s\)\s*subtotal|sub\s?-?total|total before tax/i.test(l)),end=si>0?si:L.length;
- const c=L.slice(0,end).filter(x=>x.length>=12&&readable(x)&&!NOTTITLE.test(x)&&!DATE.test(x)&&!UIJUNK.test(x)&&!ONLYP.test(x));
+ const c=L.slice(0,end).filter(x=>x.length>=12&&readable(x)&&!NOTTITLE.test(x)&&!SELLER.test(x)&&!DATE.test(x)&&!UIJUNK.test(x)&&!ONLYP.test(x));
  return c.length?crisp(cleanName(c.sort((a,b)=>b.length-a.length)[0])):null}
 function parse(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(text))),F={},items=[],found={};const set=(k,v)=>{if(v!=null&&v!==''){F[k]=v;found[k]=1}};
  const inv=invNo(L,mode==='purchase');
