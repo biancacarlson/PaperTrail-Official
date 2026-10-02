@@ -88,7 +88,7 @@ input[type=file]{border:0;background:transparent;padding:0;width:100%;max-width:
 <div class="work">
 <div class="src">
 <div id="restore"><span>Record cleared.</span><button class="pri" onclick="restoreCleared()">Undo clear</button><button onclick="dismissRestore()" aria-label="Dismiss">✕</button></div>
-<div class="drop"><input type="file" id="file" accept="image/*,.pdf,application/pdf" multiple onchange="handleFiles(this.files)"><br><button onclick="manual()">Enter manually instead</button></div>
+<div class="drop"><input type="file" id="file" accept="image/*,.pdf,application/pdf" multiple onchange="handleFiles(this.files)"><p class="dsub">You can select several screenshots at once.</p><button class="lnk" onclick="manual()">Enter manually instead</button></div>
 <div id="docwrap" style="display:none"><div id="view"></div><div id="addbar"><div class="row"><select id="addto"></select><button class="pri s" onclick="addSel()">Add</button><button class="s" onclick="clearSel()">Clear</button></div><div id="selt" style="font-size:12px;margin-top:4px"></div></div><div id="ocr"></div></div>
 <div id="pages"></div>
 </div>

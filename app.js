@@ -79,9 +79,11 @@ function showDoc(u){showOcr();const v=$('#view');v.innerHTML='<div id="layer" st
  const P=new Map();let d0=0;v.onpointerdown=e=>{v.setPointerCapture(e.pointerId);P.set(e.pointerId,e);d0=0;if(P.size==1){sx=e.clientX;sy=e.clientY;mv=0}else mv=1};let sx=0,sy=0,mv=0;v.onpointerup=e=>{const one=P.size==1&&!mv;P.delete(e.pointerId);if(one)tapWord(document.elementFromPoint(e.clientX,e.clientY))};v.onpointercancel=e=>P.delete(e.pointerId);
  v.onpointermove=e=>{const o=P.get(e.pointerId);if(!o)return;if(Math.hypot(e.clientX-sx,e.clientY-sy)>8)mv=1;if(P.size==2){const a=[...P.values()],d=Math.hypot(a[0].clientX-a[1].clientX,a[0].clientY-a[1].clientY);if(d0)S.z=Math.min(6,Math.max(1,S.z*d/d0));d0=d}else{S.x+=e.clientX-o.clientX;S.y+=e.clientY-o.clientY}P.set(e.pointerId,e);ap()}}
 /* ---------- parsing (deterministic) ---------- */
-function parse(t){const r=S.rec,o=Parser.parse(t,r.mode);Object.assign(r,o.fields);r.src=Object.assign(r.src,o.found);if(r.mode=='purchase')r.items=o.items}
+function parse(t){const r=S.rec,o=Parser.parse(t,r.mode);Object.assign(r,o.fields);r.src=Object.assign(r.src,o.found);if(r.mode=='purchase'){r.items=o.items;if(o.guess)r.gname=o.guess;ensureItem(r)}}
+/* Only a subtotal was readable (no per-item lines): keep the totals reconcilable with one clearly-flagged combined line. */
+function ensureItem(r){if(r.mode=='purchase'&&!r.items.length&&N(r.extSub)>0)r.items.push({n:r.gname||'',q:1,p:N(r.extSub),guess:1,ext:1})}
 /* ---------- form ---------- */
-function render(){const r=S.rec;if(!r||!r.loaded){$('#form').innerHTML='';$('#calc').innerHTML='';$('#actions').style.display='none';renderRecs();return}
+function render(){const r=S.rec;{const pl=$('#pick');if(pl)pl.textContent=S.mode=='purchase'?'Add receipt screenshots or PDF':'Add invoice or call sheet'}if(!r||!r.loaded){$('#form').innerHTML='';$('#calc').innerHTML='';$('#actions').style.display='none';renderRecs();return}
  const fs=PF[r.mode],sel=$('#addto');sel.innerHTML=fs.map(f=>`<option value="${f[0]}">${f[1]}</option>`).join('')+(r.mode=='purchase'?'<option value="+item">New item</option>':'');
  const lab=(k,l)=>`<label for="f_${k}">${l}${r.edited[k]?' (edited)':''}${miss(k)?' (needs review)':''}${r.low&&r.low[k]&&!r.edited[k]?' - low confidence, check':''}</label>`,
  W=['location','notes','number','client','employer'],
@@ -92,11 +94,12 @@ function render(){const r=S.rec;if(!r||!r.loaded){$('#form').innerHTML='';$('#ca
  $('#form').className=r.mode;$('#form').innerHTML=h;$('#actions').style.display='block';calc();renderRecs();refreshActs()}
 const esc=v=>String(v??'').replace(/"/g,'&quot;').replace(/</g,'&lt;'),miss=k=>{const r=S.rec;return r.doc&&!r[k]&&['date','merchant','client','jobDate','location','amount'].includes(k)};
 function ed(k,v){S.rec[k]=v;if(k=='location'){const g=$('#gs'),c=$('#gc');if(g)g.href=gurl(S.rec);if(c)c.href=gurl(S.rec,1)}S.rec.edited[k]=1;const e=$('#f_'+k);if(e){const f=String(v).trim()!=='';e.classList.toggle('ext',f);e.classList.remove('usr');if(f)e.classList.remove('warn')}calc();if(k=='date')refreshActs()}
-function it(i,k,v){S.rec.items[i][k]=k=='n'?v:N(v)||0;S.rec.items[i].ext=0;calc();const e=$('#it_'+i);if(e)e.textContent=M(S.rec.items[i].t)}
+function it(i,k,v){S.rec.items[i][k]=k=='n'?v:N(v)||0;S.rec.items[i].ext=0;S.rec.items[i].guess=0;if(k=='n')S.rec.items[i].inf=0;calc();const e=$('#it_'+i);if(e)e.textContent=M(S.rec.items[i].t)}
 function r_del(i){S.rec.items.splice(i,1);render()}
 /* ---------- calculation ---------- */
 function compute(r){const o={};if(r.mode=='purchase'){const A=r.items;A.forEach(i=>i.t=+((i.q||0)*(i.p||0)).toFixed(2));const sm=a=>+a.reduce((s,i)=>s+i.t,0).toFixed(2);o.all=sm(A);o.sub=sm(A.filter(i=>!i.off));o.removed=+(o.all-o.sub).toFixed(2);o.nOff=A.filter(i=>i.off).length;const tx=N(r.tax)||0,sh=N(r.shipping)||0,k=o.all>0?o.sub/o.all:1;o.ship=+(sh*k).toFixed(2);o.tax=+(tx*k).toFixed(2);o.total=+(o.sub+o.ship+o.tax).toFixed(2);o.full=+(o.all+sh+tx).toFixed(2);o.warn=[];
- if(r.extSub&&Math.abs(N(r.extSub)-o.all)>0.01)o.warn.push('Item prices add up to '+M(o.all)+' but the receipt subtotal is '+M(N(r.extSub))+'. Check for a missed or misread item.');
+ {const d=N(r.discount)||0,xt=N(r.extTotal);o.disc=0;if(d>0&&xt!=null&&Math.abs(o.all+sh+tx-d-xt)<=0.01&&Math.abs(o.all+sh+tx-xt)>0.01){o.disc=+(d*k).toFixed(2);o.total=+(o.total-o.disc).toFixed(2);o.full=+(o.full-d).toFixed(2)}}
+ if(A.some(i=>i.guess))o.warn.push('Only the order subtotal could be read, so it is shown as one combined line. Rename it, or add each item if the order had several.');else if(r.extSub&&Math.abs(N(r.extSub)-o.all)>0.01)o.warn.push('Item prices add up to '+M(o.all)+' but the receipt subtotal is '+M(N(r.extSub))+'. Check for a missed or misread item.');
  if(r.extTotal&&Math.abs(N(r.extTotal)-o.full)>0.01)o.warn.push('Calculated order total '+M(o.full)+' differs from the receipt total '+M(N(r.extTotal))+'.');
  if(r.expected&&A.length!=r.expected)o.warn.push('Receipt lists '+r.expected+' items; '+A.length+' found here.');
  if(r.tax===undefined||r.tax==='')o.warn.push('Tax not entered; total excludes tax.')}
@@ -105,7 +108,7 @@ function calc(){const r=S.rec;if(!r)return;const o=compute(r);
  const row=(l,v,sub)=>'<div class="crow"><div class="cl">'+l+'</div><div class="cv">'+v+(sub?'<small>'+sub+'</small>':'')+'</div></div>',
   us=d=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d||''));return m?m[2]+'/'+m[3]+'/'+m[1]:d};
  let h='<div class="cal2"><h3>Calculated</h3>';
- if(r.mode=='purchase')h+='<div class="hero"><span>'+(o.nOff?'Work-related total':'Total')+'</span><b>'+M(o.total)+'</b>'+''+'</div>'+row('Items ('+(r.items.length-o.nOff)+')',M(o.sub))+(o.ship?row('Shipping',M(o.ship)):'')+row('Tax',M(N(r.tax)==null?null:o.tax),o.nOff&&N(r.tax)?'adjusted to work items':'')+o.warn.map(w=>'<div class="msg">⚠ '+w+'</div>').join('');
+ if(r.mode=='purchase')h+='<div class="hero"><span>'+(o.nOff?'Work-related total':'Total')+'</span><b>'+M(o.total)+'</b>'+''+'</div>'+row('Items ('+(r.items.length-o.nOff)+')',M(o.sub))+(o.ship?row('Shipping',M(o.ship)):'')+(o.disc?row('Discount','−'+M(o.disc),'receipt discount'):'')+row('Tax',M(N(r.tax)==null?null:o.tax),o.nOff&&N(r.tax)?'adjusted to work items':'')+o.warn.map(w=>'<div class="msg">⚠ '+w+'</div>').join('');
  else{const d=est(r);
   if(d)h+='<div class="hero"><span>Net-30 payout'+(r.endDate?'':' (estimate)')+'</span><b>'+us(d)+'</b><small>'+(r.endDate?'30 days after the event end date':'No event end date found, so counted from the job date')+'</small><button onclick="addCal()">Add to Calendar</button></div>';
   h+=row('Hours',o.tot==null?'Not entered':o.tot+' total',o.tot==null?'':(N(r.hours)||0)+' regular + '+(N(r.overtime)||0)+' overtime')
@@ -123,7 +126,7 @@ const niceMerch=m=>{m=String(m||'').trim();return m.length>=4&&m===m.toUpperCase
 function rows(r){const o=compute(r),G=[],g=k=>{const x={k,rows:[]};G.push(x);return(l,v,h)=>{if(v!=null&&String(v).trim()!=='')x.rows.push([l,String(v).trim(),!!h])}};
  if(r.mode=='purchase'){const i=g('info');i('Date',r.date);i('Merchant',niceMerch(r.merchant));i('Receipt/Invoice #',r.number);
   const d=g('det');r.items.filter(x=>!x.off).forEach(x=>d((String(x.n||'Item').replace(/\s*(\.{2,}|…)\s*$/,'').trim()),M(x.t)));
-  const t=g('tot');t('Subtotal',M(o.sub));if(o.ship)t('Shipping',M(o.ship));if(N(r.tax)!=null)t('Tax',M(o.tax));t('Total',M(o.total));
+  const t=g('tot');t('Subtotal',M(o.sub));if(o.ship)t('Shipping',M(o.ship));if(o.disc)t('Discount','-'+M(o.disc));if(N(r.tax)!=null)t('Tax',M(o.tax));t('Total',M(o.total));
   return{t:'PURCHASE',G:G.filter(x=>x.rows.length)}}
  const i=g('info');i('Date',r.jobDate,1);i('Employer',r.employer);i('Client',r.client,1);i('Location',r.location);i('Invoice #',r.invoice,1);
  const d=g('det');d('Round-Trip Distance',o.rt!=null?o.rt.toFixed(1)+' mi':null);d('IRS Rate',o.rate!=null&&o.rt!=null?'$'+o.rate+'/mi':null);
@@ -180,7 +183,7 @@ let ct;const copyRec=async()=>{if(await copy([S.rec])){const b=$('#cpbtn');clear
 function saveRec(){S.records.push(JSON.parse(JSON.stringify(S.rec)));toast('Saved for this session');renderRecs()}
 function key(r){const d=Parser.pd(r.date||r.jobDate);return d?+d:Infinity}
 function renderRecs(){persist();$('#recs').innerHTML=S.records.length?`<h3>Saved (${S.records.length}, this session only)</h3><button class="pri" onclick="copy([...S.records].sort((a,b)=>key(a)-key(b)))">Copy All Records</button><button onclick="S.records=[];renderRecs()">Delete all</button>`:''}
-function dl(f){const r=S.rec,o=compute(r);let d,n='record.'+f;if(f=='json')d=JSON.stringify({...r,calculated:o},null,1);else{const rows=r.mode=='purchase'?[['Item','Qty','Unit','Total'],...r.items.filter(i=>!i.off).map(i=>[i.n,i.q,i.p,i.t]),['Subtotal','','',o.sub],['Tax','','',N(r.tax)==null?'':o.tax],['Total','','',o.total]]:[['Field','Value'],...text(r).filter(l=>l.includes(': ')).map(l=>l.split(/: (.*)/s).slice(0,2))];d=rows.map(x=>x.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(',')).join('\n')}
+function dl(f){const r=S.rec,o=compute(r);let d,n='record.'+f;if(f=='json')d=JSON.stringify({...r,calculated:o},null,1);else{const rows=r.mode=='purchase'?[['Item','Qty','Unit','Total'],...r.items.filter(i=>!i.off).map(i=>[i.n,i.q,i.p,i.t]),['Subtotal','','',o.sub],...(o.disc?[['Discount','','',-o.disc]]:[]),['Tax','','',N(r.tax)==null?'':o.tax],['Total','','',o.total]]:[['Field','Value'],...text(r).filter(l=>l.includes(': ')).map(l=>l.split(/: (.*)/s).slice(0,2))];d=rows.map(x=>x.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(',')).join('\n')}
  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([d]));a.download=n;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
 function addCal(){const r=S.rec,d=est(r);if(!d)return;const e=d.replace(/-/g,''),n=Parser.net30(d,1).replace(/-/g,''),x=t=>String(t).replace(/[\\;,]/g,'\\$&').replace(/\n/g,' '),
  ics=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//PaperTrail//EN','BEGIN:VEVENT','UID:'+e+'-'+Date.now()+'@papertrail','DTSTAMP:'+new Date().toISOString().replace(/[-:]|\.\d+/g,''),'DTSTART;VALUE=DATE:'+e,'DTEND;VALUE=DATE:'+n,'SUMMARY:'+x('Net-30 payout'+(r.client?' - '+r.client:'')),'DESCRIPTION:'+x('Expected payment (net 30)'+(r.amount?'. Amount: '+M(N(r.amount)):'')),'BEGIN:VALARM','TRIGGER:-PT15H','ACTION:DISPLAY','DESCRIPTION:Payout due today','END:VALARM','END:VEVENT','END:VCALENDAR'].join('\r\n'),
@@ -220,7 +223,7 @@ addEventListener('afterprint',()=>{$('#print').textContent=''});
 ].join('');document.head.appendChild(st);
  
  /* replace the native iOS file control (it adds a grey thumbnail square and can widen the page) with a plain button */
- const f=document.getElementById('file');if(f&&!document.getElementById('pick')){f.style.cssText='position:absolute;width:1px;height:1px;opacity:0;pointer-events:none';const k=document.createElement('button');k.id='pick';k.type='button';k.textContent='Choose Files';k.style.cssText='background:var(--g);color:#fff;border-color:var(--g)';k.onclick=()=>f.click();f.parentNode.insertBefore(k,f)}})();
+ const f=document.getElementById('file');if(f&&!document.getElementById('pick')){f.style.cssText='position:absolute;width:1px;height:1px;opacity:0;pointer-events:none';const k=document.createElement('button');k.id='pick';k.type='button';k.textContent='Add receipt screenshots or PDF';k.style.cssText='background:var(--g);color:#fff;border-color:var(--g)';k.onclick=()=>f.click();f.parentNode.insertBefore(k,f)}})();
 
 /* ---------- build 28: multi-screenshot purchases ---------- */
 async function readImg(f){const b=await createImageBitmap(f),sc=Math.min(1,1600/Math.max(b.width,b.height)),c=document.createElement('canvas');c.width=b.width*sc;c.height=b.height*sc;c.getContext('2d').drawImage(b,0,0,c.width,c.height);
@@ -234,10 +237,10 @@ async function addShots(files){let r=S.rec;if(!r.doc){S.rec=r=newRec();r.loaded=
   try{const o=await readImg(files[i]),P=Parser.parse(o.text,'purchase'),cur=r.shots++;S.pages.push({id:++PGID,words:o.words,c:o.c,url:o.url,w:o.c.width,h:o.c.height,marks:autoHL(o.words,o.c.width,o.c.height)});locate(S.pages[S.pages.length-1],P.items);
    if(cur===0){S.img=o.url;S.dim=[o.c.width,o.c.height];S.words=o.words;S.conf=o.conf;showDoc(o.url);drawWords(o.c.width,o.c.height)}
    Object.keys(P.fields).forEach(k=>{if(k=='merchant'?(P.found.mk||!r.merchant):(r[k]==null||r[k]===''))r[k]=P.fields[k]});
-   Object.keys(P.found).forEach(k=>r.src[k]=1);
+   Object.keys(P.found).forEach(k=>r.src[k]=1);if(P.guess&&!r.gname)r.gname=P.guess;
    P.items.forEach(x=>{const ex=r.items.find(y=>y.s!==cur&&kf(y)===kf(x));if(ex){dup++;if(x.pos)(ex.alts=ex.alts||[]).push(x.pos)}else r.items.push({...x,s:cur})})}
   catch(e){bad++}}
- $('#file').value='';S.undo=[];S.redo=[];render();renderPages();
+ $('#file').value='';S.undo=[];S.redo=[];ensureItem(r);render();renderPages();try{if(localStorage.getItem('ppClip')&&r.items.some(phVague))setTimeout(()=>idPhotos().catch(()=>{}),400)}catch(e){}
  const n=r.items.length;
  if(bad||dup)st((bad?bad+' screenshot'+(bad>1?'s':'')+' could not be read. ':'')+(dup?'Skipped '+dup+' repeated line'+(dup>1?'s':'')+' from overlapping screenshots.':''));else toast(n+' item'+(n==1?'':'s')+' from '+r.shots+' screenshot'+(r.shots>1?'s':''))}
 const FLUFF=/\b(?:Resettable|Portable|Compact|Thickened|Texture|Universal|Sports|Durable|Premium|Upgraded|Professional|Multifunctional)\b/gi;
@@ -246,8 +249,10 @@ function tidyName(n){let t=String(n||'').replace(/\bCombination\b/gi,'Combo').re
  const m=t.match(/^(\d+pc )(.+) Set$/i);if(m)t=m[1]+'Set of '+m[2];
  return t}
 function itemsHtml(){const r=S.rec,on=r.items.filter(i=>!i.off).length;r.items.forEach(it=>{it.n=tidyName(it.n)});
- return '<section class="grp"><div class="ih"><h3>Items</h3><span class="chip">'+on+' of '+r.items.length+' work-related</span></div><div class="irh"><span class="a"></span><span class="b">Tap ✓ to exclude personal items</span><span class="c">Qty</span><span class="d">Price</span><span class="e"></span></div>'
- +r.items.map((it,i)=>`<div class="ir${it.off?' off':''}"><button class="ck" onclick="tog(${i})" aria-label="Include or exclude item">${it.off?'':'✓'}</button><input type="text" class="in" oninput="it(${i},'n',this.value)" value="${esc(it.n).replace(/"/g,'&quot;')}"><input class="q" type="number" inputmode="numeric" value="${it.q}" oninput="it(${i},'q',this.value)"><input class="p" type="number" inputmode="decimal" step="0.01" value="${it.p}" oninput="it(${i},'p',this.value)"><button class="x" onclick="r_del(${i})" aria-label="Delete item">✕</button></div>`).join('')
+ const card=(it,i)=>`<div class="ic${it.off?' off':''}"><button class="ck" onclick="tog(${i})" aria-label="Include or exclude item">${it.off?'':'✓'}</button><div class="ib"><textarea class="in" rows="2" placeholder="Item name" oninput="it(${i},'n',this.value)">${esc(it.n)}</textarea>${it.inf?'<div class="inf">The store cut this title off. Completed as gloves from the words that were there. Edit if that is wrong.</div>':''}<div class="il"><div class="mf"><label>Qty</label><input class="q" type="number" inputmode="numeric" value="${it.q}" oninput="it(${i},'q',this.value)"></div><span class="mx">×</span><div class="mf"><label>Price</label><input class="p" type="number" inputmode="decimal" step="0.01" value="${it.p}" oninput="it(${i},'p',this.value)"></div><div class="tt"><label>Total</label><b id="it_${i}">${M(+((it.q||0)*(it.p||0)).toFixed(2))}</b></div></div></div><button class="x" onclick="r_del(${i})" aria-label="Delete item">✕</button></div>`;
+ return '<section class="grp"><div class="ih"><h3>Items</h3>'+(r.items.length?'<span class="chip">'+on+' of '+r.items.length+' work-related</span>':'')+'</div>'
+ +(r.items.length?'<p class="ihint">Tap the check to leave out personal items.</p>':'<div class="empty">No items could be read from this receipt. Add them below, or use Identify unclear items.</div>')
+ +r.items.map(card).join('')
  +'<button class="addi" onclick="S.rec.items.push({n:\'\',q:1,p:0});render()">+ Add item</button><button class="lnk idb" onclick="idPhotos()">Identify unclear items from their photos</button><div id="idst" class="hint"></div>'+idHtml()+'</section>'}
 function tog(i){const it=S.rec.items[i];pushU();it.off=!it.off;const r=autoRedact(it);render();if(r!=null)if(r=='none')snack('Could not find this item on the receipt. Redact it by hand.')}
 (function(){const s=document.createElement('style');s.textContent='.irow{display:flex;gap:8px;align-items:center;margin-bottom:8px}.irow>*{min-width:0}.irow input:not(.q):not(.p){flex:1}.irow .q{flex:0 0 52px;padding-inline:6px;text-align:center}.irow .p{flex:0 0 78px;padding-inline:8px}.irow .x{flex:0 0 40px;padding-inline:0}.irow .ck{flex:0 0 40px;height:40px;padding:0;background:var(--g);color:#fff;border-color:var(--g);font-size:18px}.irow.off .ck{background:#fff;border-color:var(--ln)}.irow.off input{text-decoration:line-through;color:var(--mut);background:var(--card)}';document.head.appendChild(s);const f=document.getElementById('file');if(f){f.multiple=true;f.setAttribute('onchange','handleFiles(this.files)')}})();
@@ -309,7 +314,7 @@ function baked(p){const c=document.createElement('canvas');c.width=p.w;c.height=
  x.globalCompositeOperation='source-over';x.fillStyle='#000';p.marks.filter(m=>m.t=='r').forEach(m=>x.fillRect(Math.floor(m.x*p.w),Math.floor(m.y*p.h),Math.ceil(m.w*p.w)+1,Math.ceil(m.h*p.h)+1));return c}
 function rname(){const r=S.rec||{},pur=S.mode=='purchase',d=Parser.pd(pur?r.date:(r.jobDate||r.date)),p=n=>String(n).padStart(2,'0');return(d?d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' ':'')+(pur?'Physical Receipt':'Physical Call Sheet')}
 function iname(){const r=S.rec||{},pur=r.mode=='purchase',d=Parser.pd(pur?r.date:(r.jobDate||r.date)),p=n=>String(n).padStart(2,'0');return(d?d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' ':'')+(pur?'Plain Text Receipt':'Plain Text Call Sheet')}
-function refreshActs(){const on=!!(S.pages&&S.pages.length>0);document.querySelectorAll('.pdfx').forEach(b=>b.style.display=on?'':'none');const c=$('#cpbtn'),m=$('#imgbtn');if(c){c.textContent=cpLabel()}if(m){const fl=S.mode!='purchase';m.textContent=fl?'Save invoice and plain text summary as a single PDF':'Save as Plain Text';m.onclick=fl?saveCombo:saveImg}}
+function refreshActs(){const on=!!(S.pages&&S.pages.length>0);document.querySelectorAll('.pdfx').forEach(b=>b.style.display=on?'':'none');const c=$('#cpbtn'),m=$('#imgbtn');if(c){c.textContent=cpLabel()}if(m){m.classList.toggle('sec',on&&S.mode=='purchase')}if(m){const fl=S.mode!='purchase';m.textContent=fl?'Save invoice and plain text summary as a single PDF':'Save as Plain Text';m.onclick=fl?saveCombo:saveImg}}
 async function savePdf(){const J=window.jspdf&&window.jspdf.jsPDF;if(!J)return st('The PDF tool did not load. Check your connection and reload.');if(!S.pages.length)return;
  let d=null;S.pages.forEach(p=>{const W=595,H=+(W*p.h/p.w).toFixed(2),o=H>W?'p':'l',u=baked(p).toDataURL('image/jpeg',.92);if(!d)d=new J({unit:'pt',format:[W,H],orientation:o,compress:true});else d.addPage([W,H],o);d.addImage(u,'JPEG',0,0,W,H)});
  const n=rname()+'.pdf',f=new File([d.output('blob')],n,{type:'application/pdf'});
@@ -434,9 +439,9 @@ const PHOTO_NOUNS=['wire cutters','pliers','screwdriver set','electric screwdriv
 const PH_KNOWN=new Set(['set','kit','cutters','pliers','belt','band','cover','lock','protector','guard','stickers','sticker','brace','sleeves','gloves','glasses']);
 PHOTO_NOUNS.forEach(l=>{const w=l.split(' ');PH_KNOWN.add(w[w.length-1]);PH_KNOWN.add(w[w.length-1].replace(/s$/,''))});
 const phTitle=l=>l.replace(/\b[a-z]/g,c=>c.toUpperCase());
-function phVague(it){const w=String(it.n||'').toLowerCase().match(/[a-z]{3,}/g)||[];return !w.some(x=>PH_KNOWN.has(x)||PH_KNOWN.has(x.replace(/s$/,'')))}
+function phVague(it){if(it.cut&&!it.inf)return true;const w=String(it.n||'').toLowerCase().match(/[a-z]{3,}/g)||[];return !w.some(x=>PH_KNOWN.has(x)||PH_KNOWN.has(x.replace(/s$/,'')))}
 let CLIPP=null;
-function loadClip(){if(!CLIPP)CLIPP=import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2').then(m=>{m.env.allowLocalModels=false;return m.pipeline('zero-shot-image-classification','Xenova/clip-vit-base-patch32',{progress_callback:p=>{const e=$('#idst');if(e&&p&&p.status=='progress'&&/onnx/.test(p.file||''))e.textContent='Downloading the on-device model (one time, stays on this phone) '+Math.round(p.progress||0)+'%'}})}).catch(e=>{CLIPP=null;throw e});return CLIPP}
+function loadClip(){if(!CLIPP)CLIPP=import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2').then(m=>{m.env.allowLocalModels=false;return m.pipeline('zero-shot-image-classification','Xenova/clip-vit-base-patch32',{progress_callback:p=>{const e=$('#idst');if(e&&p&&p.status=='progress'&&/onnx/.test(p.file||''))e.textContent='Downloading the on-device model (one time, stays on this phone) '+Math.round(p.progress||0)+'%'}})}).then(c=>{try{localStorage.setItem('ppClip','1')}catch(e){}return c}).catch(e=>{CLIPP=null;throw e});return CLIPP}
 function itemThumb(it){const b=bandsFor(it)[0];if(!b)return null;const pg=S.pages.find(p=>p.id==b.pid);if(!pg||!pg.c)return null;
  const sy=Math.max(0,Math.round(b.y*pg.h)),side=Math.max(16,Math.min(Math.round(b.h*pg.h),Math.round(pg.w*.5),pg.h-sy)),c=document.createElement('canvas');c.width=c.height=224;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,224,224);x.drawImage(pg.c,0,sy,side,side,0,0,224,224);return c}
 function phApply(it,label){const m=String(it.n||'').match(/^(\d+pc\s+)/i),pre=m?m[1]:'',rest=String(it.n||'').replace(/^\d+pc\s*/i,'').replace(/^Set of\s+/i,'').trim(),ws=rest.split(/\s+/).filter(Boolean);return pre+(ws.length&&ws.length<=2?rest+' ':'')+phTitle(label)}
@@ -456,3 +461,39 @@ function idHtml(){const L=(S.idRes||[]).filter(r=>S.rec.items.includes(r.it));if
 function idPick(a,b){const r=S.idRes[a];if(!r)return;pushU();r.it.n=phApply(r.it,r.opts[b]);S.idRes.splice(a,1);render()}
 function idSkip(a){S.idRes.splice(a,1);render()}
 (function(){const s=document.createElement('style');s.textContent='.idb{display:block;margin:10px auto 0}.idr{display:flex;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--ln)}.idr img{width:56px;height:56px;border-radius:8px;object-fit:cover;border:1px solid var(--ln);flex:0 0 56px}.idm{flex:1;min-width:0}.idn{font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--mut);margin-bottom:6px}.idc{display:flex;flex-wrap:wrap;gap:6px}.idc button{font-size:12.5px;padding:5px 10px;border-radius:999px}.idc .skp{background:transparent;border:0;color:var(--mut);text-decoration:underline}';document.head.appendChild(s)})();
+
+/* ---------- build 30: visual pass ---------- */
+(function(){const s=document.createElement('style');s.textContent=[
+'.drop{padding:18px 16px!important;display:flex;flex-direction:column;align-items:center;gap:8px}',
+'.drop #pick{display:block;width:100%;margin:0!important;background:var(--g)!important;color:#fff!important;border:0!important;border-radius:12px;padding:14px 16px;font-weight:700;font-size:16px;text-align:center}',
+'.drop #pick:active{opacity:.85}.drop .dsub{color:var(--mut);font-size:12.5px;margin:0}',
+'.drop button.lnk{margin:0!important;color:var(--gd);font-size:13.5px;padding:8px 10px;text-decoration:underline}',
+'.grp h3,.cal2 h3{font:600 11px var(--mono)!important;letter-spacing:.12em;text-transform:uppercase;color:var(--mut)}',
+'.grp,.cal2{padding:16px!important;border-radius:16px!important}',
+'.ih{margin-bottom:6px!important}.ihint{color:var(--mut);font-size:12.5px;margin:0 0 10px}',
+'.empty{border:1.5px dashed #e0b9b2;background:var(--warn);color:#8a2d25;border-radius:12px;padding:12px 14px;font-size:13.5px;margin:0 0 10px}',
+'.ic{display:flex;gap:10px;align-items:flex-start;padding:12px;border:1px solid var(--ln);border-radius:14px;background:#fff;margin-bottom:10px}',
+'.ic.off{background:var(--card);border-style:dashed}',
+'.ic .ck{flex:0 0 28px;width:28px;height:28px;padding:0;border-radius:50%;background:var(--ext);border:1.5px solid #b9d2c4;color:var(--gd);font-size:14px;line-height:1;margin-top:1px}',
+'.ic.off .ck{background:#fff;border-color:#c9c7bd}',
+'.ic .ib{flex:1;min-width:0}',
+'.ic .in{display:block;width:100%;border:0!important;background:transparent!important;padding:0!important;resize:none;font-family:inherit;font-weight:600;font-size:15px;line-height:1.35;color:var(--fg);min-height:0;height:auto;box-shadow:none}',
+'.ic .in:focus{outline:0;box-shadow:0 1px 0 var(--g)}',
+'.ic.off .in,.ic.off .tt b{text-decoration:line-through;color:var(--mut)}',
+'.ic .il{display:flex;align-items:flex-end;gap:8px;margin-top:10px}',
+'.ic .il label{display:block;font:600 10px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mut);margin:0 0 4px}',
+'.ic .q{width:52px;padding:9px 4px;text-align:center;font-size:16px}.ic .p{width:80px;padding:9px 8px;font-size:16px}',
+'.ic .mx{padding-bottom:11px;color:var(--mut)}',
+'.ic .tt{margin-left:auto;text-align:right;flex:1 1 auto;min-width:64px}.ic .tt b{display:block;font-size:17px;padding-bottom:8px;white-space:nowrap}',
+'.ic .x{flex:0 0 24px;width:24px;height:24px;padding:0;background:transparent;border:0;color:var(--mut);font-size:14px}',
+'.addi{width:100%;margin-top:2px;padding:12px;font-size:14px;border-radius:12px}',
+'.cal2 .hero{padding:16px 18px!important;border-radius:14px!important}.cal2 .hero b{font-size:34px!important}',
+'.cal2 .crow{padding:12px 0!important}.cal2 .cv{font-size:17px!important}.cal2 .cl{font-size:11px!important}',
+'.cal2 .msg{font-size:13px!important;padding:10px 12px!important;border-radius:12px}',
+'#actions .acts{gap:10px}',
+'#imgbtn.sec{background:#fff!important;color:var(--gd)!important;border:1.5px solid var(--g)!important}',
+'#actions .pri{border-radius:14px;min-height:50px;font-size:16px;font-weight:700}',
+'#form.purchase>.grp:first-child .fg{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)!important}#form.purchase>.grp:first-child .fg .f.w{grid-column:1/-1}',
+'input.ext,input.warn{text-overflow:ellipsis}'
+].join('');document.head.appendChild(s)})();
+(function(){const s=document.createElement('style');s.textContent='.ic .inf{font-size:12px;color:#8a5a12;background:var(--usr);border-radius:8px;padding:6px 8px;margin-top:6px;line-height:1.35}';document.head.appendChild(s)})();
