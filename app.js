@@ -128,10 +128,10 @@ function rows(r){const o=compute(r),G=[],g=k=>{const x={k,rows:[]};G.push(x);ret
   const d=g('det');r.items.filter(x=>!x.off).forEach(x=>d((String(x.n||'Item').replace(/\s*(\.{2,}|…)\s*$/,'').trim()),M(x.t)));
   const t=g('tot');t('Subtotal',M(o.sub));if(o.ship)t('Shipping',M(o.ship));if(o.disc)t('Discount','-'+M(o.disc));if(N(r.tax)!=null)t('Tax',M(o.tax));t('Total',M(o.total));
   return{t:'PURCHASE',G:G.filter(x=>x.rows.length)}}
- const i=g('info');i('Date',r.jobDate,1);i('Employer',r.employer);i('Client',r.client,1);i('Location',r.location);i('Invoice #',r.invoice,1);
+ const i=g('info');i('Date',r.jobDate);i('Employer',r.employer);i('Client',r.client);i('Location',r.location);i('Invoice #',r.invoice);
  const d=g('det');d('Round-Trip Distance',o.rt!=null?o.rt.toFixed(1)+' mi':null);d('IRS Rate',o.rate!=null&&o.rt!=null?'$'+o.rate+'/mi':null);
- const t=g('tot');t('Amount Paid',fm(N(r.amount)),1);t('Mileage Deduction',fm(o.wear),1);
- return{t:'CALL SHEET',G:G.filter(x=>x.rows.length)}}
+ const t=g('tot');t('Amount Paid',fm(N(r.amount)));t('Mileage Deduction',fm(o.wear));
+ return{t:'INVOICE SUMMARY',G:G.filter(x=>x.rows.length)}}
 /* plain text (print + fallback) */
 function text(r){const{t,G}=rows(r),out=['~ '+t+' ~'];G.forEach(x=>{out.push('');x.rows.forEach(([l,v])=>out.push(l+': '+v))});return out}
 /* rich version for pasting into Google Docs / Word: three simple full-width tables */
@@ -150,26 +150,25 @@ const rh='<div style="font-family:Arial,sans-serif">'+rs.map(html).join('<p styl
  try{const a=document.createElement('textarea');a.value=tx;a.setAttribute('readonly','');a.style.cssText='position:fixed;top:0;left:0;opacity:0;font-size:16px';document.body.appendChild(a);a.focus();a.select();a.setSelectionRange(0,tx.length);const k=document.execCommand('copy');a.remove();if(k)return copied()}catch(e){}
  const ta=$('#copyta');ta.value=tx;$('#copypanel').style.display='block';$('#copymsg').textContent='Select and copy the text below';st('');ta.focus();ta.select();try{ta.setSelectionRange(0,tx.length)}catch(e){}$('#copypanel').scrollIntoView({block:'center'});return false}
 /* Image copy: draws each record as one clean phone-sized card image (no tables), copies it as a PNG */
-function paintRecs(x,rs,draw){const W=900,P=36,IN=26,F='Arial,Helvetica,sans-serif',CW=W-2*P-2*IN;let y=P;
+function paintRecs(x,rs,draw){const W=600,P=24,IN=18,F='Arial,Helvetica,sans-serif',CW=W-2*P-2*IN;let y=P;
  const wrap=(t,w)=>{const o=[];let l='';String(t).split(' ').forEach(wd=>{const n=l?l+' '+wd:wd;if(x.measureText(n).width>w&&l){o.push(l);l=wd}else l=n});if(l)o.push(l);return o};
  const rr=(a,b,w,h,r)=>{x.beginPath();x.moveTo(a+r,b);x.arcTo(a+w,b,a+w,b+h,r);x.arcTo(a+w,b+h,a,b+h,r);x.arcTo(a,b+h,a,b,r);x.arcTo(a,b,a+w,b,r);x.closePath()};
- rs.forEach((r,ri)=>{const{t,G}=rows(r);if(ri)y+=36;
-  if(draw){x.font='bold 46px '+F;x.fillStyle='#111';x.textAlign='left';x.fillText(t,P,y+46);x.fillStyle='#45818e';x.fillRect(P,y+62,Math.ceil(x.measureText(t).width),6)}y+=98;
+ rs.forEach((r,ri)=>{const{t,G}=rows(r);if(ri)y+=24;
+  if(draw){x.font='bold 30px '+F;x.fillStyle='#111';x.textAlign='left';x.fillText(t,P,y+30);x.fillStyle='#45818e';x.fillRect(P,y+41,Math.ceil(x.measureText(t).width),4)}y+=64;
   G.forEach(g=>{const info=g.k=='info',det=g.k=='det',lw=CW*(info?.40:.66),vw=CW*(info?.58:.32);
-   const L=g.rows.map(([l,v,hl],i)=>{const last=g.k=='tot'&&i==g.rows.length-1,fs=last?32:28;
-    x.font=(info?'':(det?'':'bold '))+(info?'26':fs)+'px '+F;const a=wrap(l,lw);
-    x.font=(det?'':'bold ')+fs+'px '+F;const b=wrap(v,vw);return{a,b,fs,last,hl,h:Math.max(a.length,b.length)*38+28}});
+   const L=g.rows.map(([l,v,hl],i)=>{const last=g.k=='tot'&&i==g.rows.length-1,fs=last?21:19;
+    x.font=(info?'':(det?'':'bold '))+(info?'17':fs)+'px '+F;const a=wrap(l,lw);
+    x.font=(det?'':'bold ')+fs+'px '+F;const b=wrap(v,vw);return{a,b,fs,last,hl,h:Math.max(a.length,b.length)*26+18}});
    const H=L.reduce((s,q)=>s+q.h,0);
-   if(draw){rr(P,y,W-2*P,H,18);x.fillStyle=det?'#f3f4f6':'#fff';x.fill();x.lineWidth=2;x.strokeStyle='#d5dae0';x.stroke();
-    let ry=y;L.forEach((q,i)=>{if(i){x.fillStyle=q.last?'#9aa4ad':'#e3e7ea';x.fillRect(P+IN,ry,W-2*P-2*IN,q.last?3:2)}
-     x.fillStyle=info?'#5f6b76':'#111';x.font=(info?'':(det?'':'bold '))+(info?'26':q.fs)+'px '+F;if(det)x.fillStyle='#333';x.textAlign='left';
-     q.a.forEach((s,k)=>x.fillText(s,P+IN,ry+14+36+k*38-10));
+   if(draw){rr(P,y,W-2*P,H,12);x.fillStyle=det?'#f3f4f6':'#fff';x.fill();x.lineWidth=1.5;x.strokeStyle='#d5dae0';x.stroke();
+    let ry=y;L.forEach((q,i)=>{if(i){x.fillStyle=q.last?'#9aa4ad':'#e3e7ea';x.fillRect(P+IN,ry,W-2*P-2*IN,q.last?2:1)}
+     x.fillStyle=info?'#5f6b76':'#111';x.font=(info?'':(det?'':'bold '))+(info?'17':q.fs)+'px '+F;if(det)x.fillStyle='#333';x.textAlign='left';
+     q.a.forEach((s,k)=>x.fillText(s,P+IN,ry+9+24+k*26-7));
      x.fillStyle='#111';x.font=((det&&!q.hl)?'':'bold ')+q.fs+'px '+F;x.textAlign='right';
-     if(q.hl)q.b.forEach((s,k)=>{const tw=x.measureText(s).width;x.fillStyle='#fff2a8';x.fillRect(W-P-IN-tw-10,ry+14+k*38,tw+20,38);x.fillStyle='#111'});
-     q.b.forEach((s,k)=>x.fillText(s,W-P-IN,ry+14+36+k*38-10));ry+=q.h})}
-   y+=H+24})});
- return y+P-24}
-function recsBlob(rs){return new Promise((res,rej)=>{const c=document.createElement('canvas'),x=c.getContext('2d'),h=paintRecs(x,rs,false),K=Math.max(1,Math.min(4,Math.sqrt(15000000/(900*h))));c.width=Math.round(900*K);c.height=Math.round(h*K);x.scale(c.width/900,c.height/h);x.imageSmoothingEnabled=true;x.imageSmoothingQuality='high';x.fillStyle='#fff';x.fillRect(0,0,900,h);paintRecs(x,rs,true);c.toBlob(b=>b?res(b):rej(new Error('img')),'image/png')})}
+     q.b.forEach((s,k)=>x.fillText(s,W-P-IN,ry+9+24+k*26-7));ry+=q.h})}
+   y+=H+16})});
+ return y+P-16}
+function recsBlob(rs){return new Promise((res,rej)=>{const c=document.createElement('canvas'),x=c.getContext('2d'),h=paintRecs(x,rs,false),K=Math.max(1,Math.min(3,Math.sqrt(15000000/(600*h))));c.width=Math.round(600*K);c.height=Math.round(h*K);x.scale(c.width/600,c.height/h);x.imageSmoothingEnabled=true;x.imageSmoothingQuality='high';x.fillStyle='#fff';x.fillRect(0,0,600,h);paintRecs(x,rs,true);c.toBlob(b=>b?res(b):rej(new Error('img')),'image/png')})}
 async function copy(rs){
  try{if(navigator.clipboard&&navigator.clipboard.write&&window.ClipboardItem){await navigator.clipboard.write([new ClipboardItem({'image/png':recsBlob(rs)})]);return copied()}}catch(e){}
  try{const b=await recsBlob(rs),f=new File([b],'record.png',{type:'image/png'});if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f]});return true}}catch(e){}
