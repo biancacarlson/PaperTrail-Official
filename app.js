@@ -307,9 +307,9 @@ function rmPage(i){if(!confirm('Remove page '+(i+1)+' from the PDF?'))return;pus
 function baked(p){const c=document.createElement('canvas');c.width=p.w;c.height=p.h;const x=c.getContext('2d');x.drawImage(p.c,0,0,p.w,p.h);
  x.globalCompositeOperation='multiply';x.fillStyle='#ffe600';p.marks.filter(m=>m.t=='h').forEach(m=>x.fillRect(m.x*p.w,m.y*p.h,m.w*p.w,m.h*p.h));
  x.globalCompositeOperation='source-over';x.fillStyle='#000';p.marks.filter(m=>m.t=='r').forEach(m=>x.fillRect(Math.floor(m.x*p.w),Math.floor(m.y*p.h),Math.ceil(m.w*p.w)+1,Math.ceil(m.h*p.h)+1));return c}
-function rname(){const d=Parser.pd(S.rec&&S.rec.date),p=n=>String(n).padStart(2,'0');return(d?d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' ':'')+'Receipt'}
+function rname(){const r=S.rec||{},pur=S.mode=='purchase',d=Parser.pd(pur?r.date:(r.jobDate||r.date)),p=n=>String(n).padStart(2,'0');return(d?d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' ':'')+(pur?'Physical Receipt':'Physical Call Sheet')}
 function iname(){const r=S.rec||{},pur=r.mode=='purchase',d=Parser.pd(pur?r.date:(r.jobDate||r.date)),p=n=>String(n).padStart(2,'0');return(d?d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' ':'')+(pur?'Plain Text Receipt':'Plain Text Call Sheet')}
-function refreshActs(){const on=S.mode=='purchase'&&S.pages&&S.pages.length>0;document.querySelectorAll('.pdfx').forEach(b=>b.style.display=on?'':'none');const c=$('#cpbtn'),m=$('#imgbtn');if(c){c.textContent=cpLabel()}if(m){m.textContent='Save as Plain Text'}}
+function refreshActs(){const on=!!(S.pages&&S.pages.length>0);document.querySelectorAll('.pdfx').forEach(b=>b.style.display=on?'':'none');const c=$('#cpbtn'),m=$('#imgbtn');if(c){c.textContent=cpLabel()}if(m){m.textContent='Save as Plain Text'}}
 async function savePdf(){const J=window.jspdf&&window.jspdf.jsPDF;if(!J)return st('The PDF tool did not load. Check your connection and reload.');if(!S.pages.length)return;
  let d=null;S.pages.forEach(p=>{const W=595,H=+(W*p.h/p.w).toFixed(2),o=H>W?'p':'l',u=baked(p).toDataURL('image/jpeg',.92);if(!d)d=new J({unit:'pt',format:[W,H],orientation:o,compress:true});else d.addPage([W,H],o);d.addImage(u,'JPEG',0,0,W,H)});
  const n=rname()+'.pdf',f=new File([d.output('blob')],n,{type:'application/pdf'});
