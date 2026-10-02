@@ -75,7 +75,7 @@ function drawWords(cw,ch){const L=$('#layer');if(!L)return;L.insertAdjacentHTML(
 const selText=()=>[...S.sel].sort((a,b)=>a-b).map(i=>S.words[i].text).join(' ');
 function tapWord(el){if(!el||!el.dataset||el.dataset.i==null)return;const i=+el.dataset.i,k=S.sel.indexOf(i);k<0?S.sel.push(i):S.sel.splice(k,1);el.classList.toggle('sel');updBar()}
 function clearSel(){S.sel=[];document.querySelectorAll('.wb.sel').forEach(e=>e.classList.remove('sel'));updBar()}
-function updBar(){const s=getSelection(),ok=s&&!s.isCollapsed&&$('#ocr').contains(s.anchorNode);$('#addbar').style.display=(ok||S.sel.length)?'block':'none';$('#selt').textContent=S.sel.length?selText():''}
+function updBar(){const s=getSelection(),ok=s&&!s.isCollapsed&&($('#ocr').contains(s.anchorNode)||$('#pages').contains(s.anchorNode));$('#addbar').style.display=(ok||S.sel.length)?'block':'none';$('#selt').textContent=S.sel.length?selText():''}
 function showOcr(){$('#docwrap').style.display='block'}
 function showDoc(u){showOcr();const v=$('#view');v.innerHTML='<div id="layer" style="position:absolute;top:0;left:0;width:100%;transform-origin:0 0"><img src="'+u+'" style="position:static;width:100%;display:block"></div>';const im=v.firstChild;S.z=1;S.x=S.y=0;const ap=()=>im.style.transform=`translate(${S.x}px,${S.y}px) scale(${S.z})`;im.style.width='100%';ap();
  const P=new Map();let d0=0;v.onpointerdown=e=>{v.setPointerCapture(e.pointerId);P.set(e.pointerId,e);d0=0;if(P.size==1){sx=e.clientX;sy=e.clientY;mv=0}else mv=1};let sx=0,sy=0,mv=0;v.onpointerup=e=>{const one=P.size==1&&!mv;P.delete(e.pointerId);if(one)tapWord(document.elementFromPoint(e.clientX,e.clientY))};v.onpointercancel=e=>P.delete(e.pointerId);
@@ -122,7 +122,7 @@ function ed(k,v){S.rec[k]=v;if(k=='location'){const g=$('#gs'),c=$('#gc');if(g)g
 function it(i,k,v){S.rec.items[i][k]=k=='n'?v:N(v)||0;S.rec.items[i].ext=0;S.rec.items[i].guess=0;if(k=='n')S.rec.items[i].inf=0;calc();const e=$('#it_'+i);if(e)e.textContent=M(S.rec.items[i].t);if(k=='n')autoCat()}
 function r_del(i){S.rec.items.splice(i,1);render()}
 /* ---------- calculation ---------- */
-function compute(r){const o={};if(r.mode=='purchase'){const A=r.items;A.forEach(i=>i.t=+((i.q||0)*(i.p||0)).toFixed(2));const sm=a=>+a.reduce((s,i)=>s+i.t,0).toFixed(2);o.all=sm(A);o.sub=sm(A.filter(i=>!i.off));o.removed=+(o.all-o.sub).toFixed(2);o.nOff=A.filter(i=>i.off).length;const tx=N(r.tax)||0,sh=N(r.shipping)||0,k=o.all>0?o.sub/o.all:1;o.ship=+(sh*k).toFixed(2);o.tax=+(tx*k).toFixed(2);o.total=+(o.sub+o.ship+o.tax).toFixed(2);o.full=+(o.all+sh+tx).toFixed(2);o.warn=[];
+function compute(r){const o={};if(r.mode=='purchase'){const A=r.items;A.forEach(i=>i.t=+((i.q||0)*(i.p||0)).toFixed(2));const sm=a=>+a.reduce((s,i)=>s+i.t,0).toFixed(2);o.all=sm(A);o.sub=sm(A.filter(i=>!i.off));o.removed=+(o.all-o.sub).toFixed(2);o.nOff=A.filter(i=>i.off).length;const tx=N(r.tax)||0,sh=N(r.shipping)||0,k=o.all>0?o.sub/o.all:1,fl=A.some(i=>i.tx===0||i.tx===1),ta=fl?sm(A.filter(i=>i.tx!==0)):0,ts=fl?sm(A.filter(i=>i.tx!==0&&!i.off)):0,kt=fl&&ta>0?ts/ta:k;o.ship=+(sh*k).toFixed(2);o.tax=+(tx*kt).toFixed(2);o.total=+(o.sub+o.ship+o.tax).toFixed(2);o.full=+(o.all+sh+tx).toFixed(2);o.warn=[];
  {const d=N(r.discount)||0,xt=N(r.extTotal);o.disc=0;if(d>0&&xt!=null&&Math.abs(o.all+sh+tx-d-xt)<=0.01&&Math.abs(o.all+sh+tx-xt)>0.01){o.disc=+(d*k).toFixed(2);o.total=+(o.total-o.disc).toFixed(2);o.full=+(o.full-d).toFixed(2)}}
  if(A.some(i=>i.guess))o.warn.push('Only the order subtotal could be read, so it is shown as one combined line. Rename it, or add each item if the order had several.');else if(r.extSub&&Math.abs(N(r.extSub)-o.all)>0.01)o.warn.push('Item prices add up to '+M(o.all)+' but the receipt subtotal is '+M(N(r.extSub))+'. Check for a missed or misread item.');
  if(r.extTotal&&Math.abs(N(r.extTotal)-o.full)>0.01)o.warn.push('Calculated order total '+M(o.full)+' differs from the receipt total '+M(N(r.extTotal))+'.');
@@ -140,7 +140,7 @@ function calc(){const r=S.rec;if(!r)return;const o=compute(r);if(r.mode=='purcha
  $('#calc').innerHTML=h+'</div>';persist()}
 /* ---------- selection → field ---------- */
 document.addEventListener('selectionchange',updBar);
-function addSel(){const v=(S.sel.length?selText():getSelection().toString().trim()),k=$('#addto').value,r=S.rec;if(k=='+item'){const m=v.match(/(\d+[.,]\d{2})\s*$/);r.items.push({n:v.replace(/\$?\s?\d+[.,]\d{2}\s*$/,'').trim(),q:1,p:m?N(m[1].replace(',','.')):0});render()}else{r[k]=v.replace(/^\$/,'');r.edited[k]=1;render()}getSelection().removeAllRanges();clearSel()}
+function addSel(){const v=(S.sel.length?selText():getSelection().toString().replace(/\s+/g,' ').trim()),k=$('#addto').value,r=S.rec;if(k=='+item'){const m=v.match(/(\d+[.,]\d{2})\s*$/);r.items.push({n:v.replace(/\$?\s?\d+[.,]\d{2}\s*$/,'').trim(),q:1,p:m?N(m[1].replace(',','.')):0});render()}else{r[k]=v.replace(/^\$/,'');r.edited[k]=1;render()}getSelection().removeAllRanges();clearSel()}
 /* ---------- output ---------- */
 const fm=v=>v==null?null:M(v);
 /* Uniform record layout (same for every log): title, info table, detail table (shaded), totals table.
@@ -320,11 +320,11 @@ function itemsHtml(){const r=S.rec,on=r.items.filter(i=>!i.off).length;r.items.f
  +(r.items.length?'<p class="ihint">Remove personal items by tapping on the checkmark beside it.</p>':'<div class="empty">No items could be read from this receipt. Add them below, or use Identify unclear items.</div>')
  +r.items.map(card).join('')
  +'<button class="addi" onclick="S.rec.items.push({n:\'\',q:1,p:0});render()">+ Add item</button><button class="lnk idb" onclick="idPhotos()">Identify unclear items from their photos</button><div id="idst" class="hint"></div>'+idHtml()+'</section>'}
-function tog(i){const it=S.rec.items[i];pushU();it.off=!it.off;const r=autoRedact(it);render();if(r!=null)if(r=='none')snack('Could not find this item on the receipt. Redact it by hand.')}
+function tog(i){const it=S.rec.items[i];pushU();it.off=!it.off;delete it.offBy;const r=autoRedact(it);if(it.off&&r=='off')it.offBy='mark';render();if(r!=null)if(r=='none')snack('Could not find this item on the receipt. Redact it by hand.')}
 (function(){const s=document.createElement('style');s.textContent='.irow{display:flex;gap:8px;align-items:center;margin-bottom:8px}.irow>*{min-width:0}.irow input:not(.q):not(.p){flex:1}.irow .q{flex:0 0 52px;padding-inline:6px;text-align:center}.irow .p{flex:0 0 78px;padding-inline:8px}.irow .x{flex:0 0 40px;padding-inline:0}.irow .ck{flex:0 0 40px;height:40px;padding:0;background:var(--g);color:#fff;border-color:var(--g);font-size:18px}.irow.off .ck{background:#fff;border-color:var(--ln)}.irow.off input{text-decoration:line-through;color:var(--mut);background:var(--card)}';document.head.appendChild(s);const f=document.getElementById('file');if(f){f.multiple=true;f.setAttribute('onchange','handleFiles(this.files)')}})();
 
 /* ---------- build 29: receipt pages, redact / highlight, PDF ---------- */
-var PM='s',FW=true,PH={s:'',r:'Drag down over an item to black it out. Tap a box to adjust it. Use Scroll to move around.',h:'Drag over text to highlight it. Tap a highlight to adjust it. Use Scroll to move around.'},
+var PM='s',FW=true,PH={s:'Press and hold text on the receipt to select it, then pick a field and tap Add.',r:'Drag down over an item to black it out. Tap a box to adjust it. Use Scroll to move around.',h:'Drag over text to highlight it. Tap a highlight to adjust it. Use Scroll to move around.'},
  HLRE=/^\W*(order\s*(date|total|placed)|(grand\s*)?total|amount\s*(due|paid)|(purchase|invoice|receipt|transaction)?\s*date\b)/i,HLNO=/item|discount|bonus|saved|savings|before|tax|shipping/i;
 function wLines(ws){const a=(ws||[]).filter(w=>w.bbox).map(w=>({t:w.text,x0:w.bbox.x0,x1:w.bbox.x1,y0:w.bbox.y0,y1:w.bbox.y1,cy:(w.bbox.y0+w.bbox.y1)/2,hh:w.bbox.y1-w.bbox.y0})).sort((p,q)=>p.cy-q.cy),L=[];
  a.forEach(w=>{const g=L.find(l=>Math.abs(l.cy-w.cy)<Math.max(l.hh,w.hh)*.5);if(g){g.w.push(w);g.cy=(g.cy*(g.w.length-1)+w.cy)/g.w.length;g.hh=Math.max(g.hh,w.hh)}else L.push({cy:w.cy,hh:w.hh,w:[w]})});
@@ -335,12 +335,12 @@ function hlKey2(l){const t=String(l.t||'').toLowerCase();return (t.match(/[a-z]{
 function seenHL(){const s=new Set();S.pages.forEach(pg=>{try{wLines(pg.words).filter(l=>HLRE.test(l.t)&&/\d/.test(l.t)&&!HLNO.test(l.t)).forEach(l=>{s.add(hlKey(l));s.add(hlKey2(l))})}catch(e){}});return s}
 function autoHL(ws,W,H,seen){try{return wLines(ws).filter(l=>HLRE.test(l.t)&&/\d/.test(l.t)&&!HLNO.test(l.t)&&!(seen&&(seen.has(hlKey(l))||seen.has(hlKey2(l))))).map(l=>{const x0=Math.max(0,l.x0-4),y0=Math.max(0,l.y0-3),x1=Math.min(W,l.x1+4),y1=Math.min(H,l.y1+3);return{t:'h',x:x0/W,y:y0/H,w:(x1-x0)/W,h:(y1-y0)/H}})}catch(e){return[]}}
 function renderPages(){const el=$('#pages');if(!el)return;S.selM=null;
- if(S.mode!='purchase'||!S.pages.length){el.style.display='none';el.innerHTML='';refreshActs();return}
- $('#docwrap').style.display='none';el.style.display='block';
+ if(S.mode!='purchase'||!S.pages.length){el.style.display='none';el.innerHTML='';{const ab=$('#addbar'),v=$('#view');if(ab){ab.classList.remove('fl');if(v&&v.nextElementSibling!==ab)v.after(ab)}}refreshActs();return}
+ $('#docwrap').style.display='none';el.style.display='block';{const ab=$('#addbar');if(ab){ab.classList.add('fl');if(ab.nextElementSibling!==el)el.parentNode.insertBefore(ab,el)}}
  el.innerHTML='<div class="ptool"><div class="seg">'+[['s','Scroll'],['r','Redact'],['h','Highlight']].map(([m,l])=>`<button class="pmb" data-m="${m}" onclick="setPM('${m}')">${l}</button>`).join('')+'</div><div class="prow"><button id="pun" onclick="undoMark()">↶ Undo</button><button id="pre" onclick="redoMark()">↷ Redo</button><button id="pslot" onclick="slotClick()"></button></div></div><div class="pinfo"><div id="phint" class="hint"></div><button class="lnk" onclick="clearMarks()">Clear all marks</button></div>'
- +S.pages.map((p,i)=>`<div class="pg"><div class="pgh"><span>Page ${i+1} of ${S.pages.length}</span><button onclick="rmPage(${i})">Remove</button></div><div class="pgi"><img src="${p.url}" alt="" draggable="false"><div class="ov" data-i="${i}"></div></div></div>`).join('')
+ +S.pages.map((p,i)=>`<div class="pg"><div class="pgh"><span>Page ${i+1} of ${S.pages.length}</span><button onclick="rmPage(${i})">Remove</button></div><div class="pgi"><img src="${p.url}" alt="" draggable="false"><div class="wl" data-i="${i}"></div><div class="ov" data-i="${i}"></div></div></div>`).join('')
  ;
- S.pages.forEach((_,i)=>drawMarks(i));bindOv();setPM(PM);refreshActs()}
+ S.pages.forEach((_,i)=>drawMarks(i));bindOv();setPM(PM);refreshActs();refreshWords()}
 function togFW(){FW=!FW;updTb()}
 function slotClick(){S.selM?delSel():togFW()}
 function updTb(){const u=$('#pun'),r=$('#pre'),sl=$('#pslot'),h=$('#phint');if(!u)return;u.disabled=!S.undo.length;r.disabled=!S.redo.length;const sel=!!S.selM;
@@ -348,8 +348,17 @@ function updTb(){const u=$('#pun'),r=$('#pre'),sl=$('#pslot'),h=$('#phint');if(!
  h.textContent=sel?'Box selected: drag a white dot to resize, drag inside to move, or tap Delete.':PH[PM]}
 function setPM(m){PM=m;const p=$('#pages');if(!p)return;if(S.selM){const i=S.selM.i;S.selM=null;drawMarks(i)}p.className='m-'+m;p.querySelectorAll('.pmb').forEach(b=>b.classList.toggle('on',b.dataset.m==m));updTb()}
 function selectMark(i,m){const o=S.selM;S.selM=m?{i,m}:null;if(o&&o.i!==i)drawMarks(o.i);drawMarks(i);updTb()}
-function delSel(){const o=S.selM;if(!o)return;pushU();const pg=S.pages[o.i],k=pg.marks.indexOf(o.m);if(k>=0)pg.marks.splice(k,1);S.selM=null;drawMarks(o.i);updTb()}
-function drawMarks(i){const o=document.querySelector('.ov[data-i="'+i+'"]');if(!o||!S.pages[i])return;const sm=S.selM;
+function delSel(){const o=S.selM;if(!o)return;pushU();const pg=S.pages[o.i],k=pg.marks.indexOf(o.m);if(k>=0)pg.marks.splice(k,1);S.selM=null;drawMarks(o.i);updTb();syncRedactions()}
+/* build 53: invisible, selectable text over each receipt image (press and hold to select, then Add). Words under a black bar are left out so redacted text cannot be copied. */
+var WT=0;
+function refreshWords(){document.querySelectorAll('.wl').forEach(el=>{const pg=S.pages[+el.dataset.i];if(!pg||!pg.words||!pg.w||!pg.h){el.innerHTML='';return}
+ const bars=(pg.marks||[]).filter(m=>m.t=='r'),esc=t=>String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+ el.innerHTML=pg.words.filter(w=>{if(!w.bbox||!String(w.text).trim())return false;const cx=(w.bbox.x0+w.bbox.x1)/2/pg.w,cy=(w.bbox.y0+w.bbox.y1)/2/pg.h;return !bars.some(m=>cx>=m.x&&cx<=m.x+m.w&&cy>=m.y&&cy<=m.y+m.h)})
+  .map(w=>`<span data-w="${(w.bbox.x1-w.bbox.x0)/pg.w}" style="left:${w.bbox.x0/pg.w*100}%;top:${w.bbox.y0/pg.h*100}%;height:${(w.bbox.y1-w.bbox.y0)/pg.h*100}%">${esc(w.text)}</span>`).join('');
+ const W=el.clientWidth,H=el.clientHeight,sp=[...el.children];if(!W)return;
+ sp.forEach(x=>{x.style.fontSize=Math.max(8,parseFloat(x.style.height)/100*H*.82)+'px'});
+ const nat=sp.map(x=>x.scrollWidth);sp.forEach((x,k)=>{const t=+x.dataset.w*W;if(nat[k]>0&&t>0)x.style.transform='scaleX('+Math.min(3,Math.max(.3,t/nat[k])).toFixed(3)+')'})})}
+function drawMarks(i){clearTimeout(WT);WT=setTimeout(refreshWords,250);const o=document.querySelector('.ov[data-i="'+i+'"]');if(!o||!S.pages[i])return;const sm=S.selM;
  o.innerHTML=S.pages[i].marks.map((m,j)=>{const sel=sm&&sm.m===m;return `<div class="mk ${m.t}${sel?' sel':''}" data-j="${j}" style="left:${m.x*100}%;top:${m.y*100}%;width:${m.w*100}%;height:${m.h*100}%">${sel?'<i class="hd" data-k="t"></i><i class="hd" data-k="b"></i><i class="hd" data-k="l"></i><i class="hd" data-k="r"></i>':''}</div>`}).join('')}
 function bindOv(){document.querySelectorAll('.ov').forEach(ov=>{const i=+ov.dataset.i,cl=v=>Math.min(1,Math.max(0,v)),pt=(e,b)=>[cl((e.clientX-b.left)/b.width),cl((e.clientY-b.top)/b.height)];
  ov.onpointerdown=e=>{if(PM=='s')return;ov.setPointerCapture(e.pointerId);const b=ov.getBoundingClientRect(),[x,y]=pt(e,b),hd=e.target.closest&&e.target.closest('.hd'),mk=e.target.closest&&e.target.closest('.mk'),pg=S.pages[i],d={x,y,b,mv:0,mode:'new'};
@@ -364,9 +373,9 @@ function bindOv(){document.querySelectorAll('.ov').forEach(ov=>{const i=+ov.data
   else{if(!d.u){pushU();d.u=1}const o=d.o,m=d.m,mw=12/d.b.width,mh=12/d.b.height;let l=o.x,t=o.y,r=o.x+o.w,b=o.y+o.h;
    if(d.k=='l')l=Math.min(r-mw,Math.max(0,o.x+dx));if(d.k=='r')r=Math.max(l+mw,Math.min(1,r+dx));if(d.k=='t')t=Math.min(b-mh,Math.max(0,o.y+dy));if(d.k=='b')b=Math.max(t+mh,Math.min(1,b+dy));
    m.x=l;m.y=t;m.w=r-l;m.h=b-t;drawMarks(i)}};
- ov.onpointerup=e=>{const d=ov._d;ov._d=null;if(!d)return;
+ ov.onpointerup=e=>{const d=ov._d;ov._d=null;if(!d)return;if(d.u&&d.mode!='new')syncRedactions();
   if(d.mode=='new'&&d.mv){const[x,y]=pt(e,d.b),fw=PM=='r'&&FW,m={t:PM=='r'?'r':'h',x:fw?0:Math.min(x,d.x),y:Math.min(y,d.y),w:fw?1:Math.abs(x-d.x),h:Math.abs(y-d.y)};
-   if(m.w*d.b.width>10&&m.h*d.b.height>10){pushU();S.pages[i].marks.push(m);selectMark(i,m);return}}
+   if(m.w*d.b.width>10&&m.h*d.b.height>10){pushU();S.pages[i].marks.push(m);selectMark(i,m);syncRedactions();return}}
   drawMarks(i)};
  ov.onpointercancel=()=>{ov._d=null;drawMarks(i)}})}
 function snap(){const a=S.pages.map(p=>({p,m:JSON.parse(JSON.stringify(p.marks))}));a.off=(S.rec&&S.rec.items?S.rec.items:[]).map(i=>!!i.off);return a}
@@ -376,7 +385,7 @@ function applySnap(sn){const its=S.rec&&S.rec.items||[];if(sn.off&&sn.off.length
  if(same){S.pages.forEach((_,i)=>drawMarks(i));updTb()}else{const y=window.scrollY;renderPages();window.scrollTo(0,y)}}
 function undoMark(){snackHide();if(!S.undo.length)return;S.redo.push(snap());applySnap(S.undo.pop());updTb()}
 function redoMark(){if(!S.redo.length)return;S.undo.push(snap());applySnap(S.redo.pop());updTb()}
-function clearMarks(){if(!S.pages.some(p=>p.marks.length))return;pushU();S.pages.forEach(p=>p.marks=[]);S.selM=null;S.pages.forEach((_,i)=>drawMarks(i));updTb();snack('Marks cleared',undoMark)}
+function clearMarks(){if(!S.pages.some(p=>p.marks.length))return;pushU();S.pages.forEach(p=>p.marks=[]);S.selM=null;S.pages.forEach((_,i)=>drawMarks(i));updTb();syncRedactions(true);snack('Marks cleared',undoMark)}
 function rmPage(i){if(!confirm('Remove page '+(i+1)+' from the PDF?'))return;pushU();S.pages.splice(i,1);renderPages()}
 /* marks are burned into the pixels, so redacted areas cannot be recovered from the PDF or image */
 function baked(p){const c=document.createElement('canvas');c.width=p.w;c.height=p.h;const x=c.getContext('2d');x.drawImage(p.c,0,0,p.w,p.h);
@@ -427,7 +436,7 @@ async function saveCombo(){const J=window.jspdf&&window.jspdf.jsPDF;if(!J)return
  '.pg{margin-bottom:16px}.pgh{display:flex;justify-content:space-between;align-items:center;font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mut);margin-bottom:6px}.pgh button{background:transparent;border:0;color:var(--mut);text-decoration:underline;padding:4px 8px;font-weight:500;font-size:12px}',
  '.pgi{position:relative;border:1px solid var(--ln);border-radius:12px;overflow:hidden;background:#fff;line-height:0}.pgi img{width:100%;display:block;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}',
  '.ov{position:absolute;inset:0;pointer-events:none}.m-r .ov,.m-h .ov{pointer-events:auto;touch-action:none;cursor:crosshair}',
- '.mk{position:absolute}.mk.r{background:#000}.mk.h{background:rgba(255,230,0,.45);outline:1px solid rgba(200,160,0,.55)}.mk.tmp.r{background:rgba(0,0,0,.7)}',
+ '.wl{position:absolute;inset:0;overflow:hidden;line-height:1;-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}.m-r .wl,.m-h .wl{pointer-events:none}.wl span{position:absolute;color:transparent;white-space:pre;transform-origin:0 0;-webkit-user-select:text;user-select:text}.wl ::selection{background:rgba(217,154,78,.45)}#addbar.fl{position:fixed;left:10px;right:10px;top:auto;bottom:12px;z-index:40;margin:0;box-shadow:0 4px 18px rgba(0,0,0,.25)}.mk{position:absolute}.mk.r{background:#000}.mk.h{background:rgba(255,230,0,.45);outline:1px solid rgba(200,160,0,.55)}.mk.tmp.r{background:rgba(0,0,0,.7)}',
  '.ih{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}.ih h3{margin:0}.chip{font:600 11px var(--mono);color:var(--gd);background:var(--ext);border:1px solid #c9ddd1;border-radius:999px;padding:5px 10px;white-space:nowrap}',
  '.ic{display:flex;gap:10px;align-items:flex-start;padding:12px;border:1px solid var(--ln);border-radius:14px;background:#fff;margin-bottom:10px}.ic.off{background:var(--card);border-style:dashed}',
  '.ic .ck{flex:0 0 30px;width:30px;height:30px;padding:0;border-radius:50%;background:var(--g);color:#fff;border-color:var(--g);font-size:16px;line-height:1;margin-top:2px}.ic.off .ck{background:#fff;border-color:#c9c7bd}',
@@ -493,13 +502,27 @@ function nz(t){return String(t||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').tri
 function locate(pg,items){try{const L=wLines(pg.words).map(l=>({...l,n:nz(l.t),u:0}));
  (items||[]).forEach(it=>{const tk=nz(it.n0||it.n).split(' ').filter(t=>t.length>=3);if(!tk.length)return;const pr=((it.q||1)*(it.p||0)).toFixed(2);let best=null,bs=0;
   L.forEach(l=>{if(l.u)return;const f=tk.filter(t=>l.n.includes(t)).length/tk.length,sc=f+(l.t.replace(/[,\s]/g,'').includes(pr)?.15:0);if(f>=.6&&sc>bs){bs=sc;best=l}});
-  if(best){best.u=1;it.id=it.id||++UID;it.pos={pid:pg.id,y0:best.y0/pg.h,y1:best.y1/pg.h};
+  if(best){best.u=1;it.id=it.id||++UID;it.pos={pid:pg.id,y0:best.y0/pg.h,y1:best.y1/pg.h,x0:best.x0/pg.w,x1:best.x1/pg.w};
   /* highlight the item description only (not the price) */
   const dw=(pg.words||[]).filter(w=>w.bbox&&Math.abs((w.bbox.y0+w.bbox.y1)/2-(best.y0+best.y1)/2)<(best.y1-best.y0)*.5&&tk.some(t=>nz(w.text).includes(t)));
   const hx0=Math.max(0,(dw.length?Math.min(...dw.map(w=>w.bbox.x0)):best.x0)-4),hx1=Math.min(pg.w,(dw.length?Math.max(...dw.map(w=>w.bbox.x1)):best.x1)+4),hy0=Math.max(0,best.y0-3),hy1=Math.min(pg.h,best.y1+3);
   pg.marks=(pg.marks||[]).filter(m=>m.hid!==it.id);pg.marks.push({t:'h',x:hx0/pg.w,y:hy0/pg.h,w:(hx1-hx0)/pg.w,h:(hy1-hy0)/pg.h,hid:it.id})}})}catch(e){}}
 function totalsTop(pg,y1){const l=wLines(pg.words).filter(l=>l.y0/pg.h>y1+.01&&/^\W*(sub\s?-?total|item\(s\)|items?\s*total|shipping|sales\s*tax|order\s*total|total|payment|amount)/i.test(l.t)).sort((a,b)=>a.y0-b.y0)[0];return l?l.y0/pg.h-.004:1}
 /* returns [{pid,y,h}] row bands (full width) for every place this item appears */
+/* build 53: a black bar over an item's row on the receipt leaves that item out of the total; removing the bar puts it back */
+function barCovers(it,reds){const tk=nz(it.n0||it.n).split(' ').filter(t=>t.length>=3),ps=[it.pos,...(it.alts||[])].filter(Boolean);
+ for(const {p,m} of reds){
+  if(ps.length){for(const q of ps){if(q.pid!=p.id)continue;const h=q.y1-q.y0,ov=Math.min(m.y+m.h,q.y1)-Math.max(m.y,q.y0);if(h<=0||ov<h*.6)continue;
+   if(m.w>=.35||q.x0==null)return true;const hx=Math.min(m.x+m.w,q.x1)-Math.max(m.x,q.x0);if(hx>=(q.x1-q.x0)*.3)return true}}
+  else if(tk.length&&p.words){const W=p.words.filter(w=>w.bbox&&(w.bbox.x0+w.bbox.x1)/2/p.w>=m.x&&(w.bbox.x0+w.bbox.x1)/2/p.w<=m.x+m.w&&(w.bbox.y0+w.bbox.y1)/2/p.h>=m.y&&(w.bbox.y0+w.bbox.y1)/2/p.h<=m.y+m.h),t=nz(W.map(w=>w.text).join(' '));
+   if(t&&tk.filter(x=>t.includes(x)).length/tk.length>=.6)return true}}
+ return false}
+function syncRedactions(quiet){const r=S.rec;if(!r||r.mode!='purchase'||!r.items||!S.pages.length)return;
+ const reds=[];S.pages.forEach(p=>(p.marks||[]).forEach(m=>{if(m.t=='r')reds.push({p,m})}));const a=[],b=[];
+ r.items.forEach(it=>{const c=barCovers(it,reds);
+  if(c&&!it.off){it.off=true;it.offBy='mark';a.push(it.n||'item')}
+  else if(!c&&it.off&&it.offBy=='mark'){it.off=false;delete it.offBy;b.push(it.n||'item')}});
+ if(a.length||b.length){render();if(!quiet)snack(a.length?'Left out of the total: '+a.join(', '):'Back in the total: '+b.join(', '))}}
 function bandsFor(it){const O=[];S.rec.items.forEach(x=>[x.pos,...(x.alts||[])].filter(Boolean).forEach(p=>O.push({x,p})));const out=[],pad=.011;
  O.filter(o=>o.x===it).forEach(o=>{const pi=S.pages.findIndex(p=>p.id==o.p.pid),pg=S.pages[pi];if(!pg)return;
   const same=O.filter(q=>q.p.pid==o.p.pid).sort((a,b)=>a.p.y0-b.p.y0),k=same.indexOf(o),top=Math.max(0,o.p.y0-pad),last=k==same.length-1;let bot;
