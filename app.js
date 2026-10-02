@@ -129,7 +129,10 @@ function compute(r){const o={};if(r.mode=='purchase'){const A=r.items;A.forEach(
  if(r.expected&&A.length!=r.expected)o.warn.push('Receipt lists '+r.expected+' items; '+A.length+' found here.');
  if(r.tax===undefined||r.tax==='')o.warn.push('Tax not entered; total excludes tax.');if((r.shots||(S.pages&&S.pages.length))&&(r.number==null||r.number===''))o.warn.push('Receipt number not found. Tap it on the receipt, choose Receipt/Invoice # in the bar at the bottom, then tap Add.')}
  else{const rt=N(r.roundTrip),hr=N(r.hours),ot=N(r.overtime);o.rt=rt;o.tot=hr==null&&ot==null?null:+((hr||0)+(ot||0)).toFixed(2);o.rate=Parser.irs(r.jobDate);o.wear=rt!=null&&o.rate!=null?+(rt*o.rate).toFixed(2):null}return o}
-function calc(){const r=S.rec;if(!r)return;const o=compute(r);if(r.mode=='purchase'||S.mode=='purchase'){$('#calc').innerHTML='';persist();return}
+/* v57: once any item is left out (unchecked, or covered by a black bar), show the same Subtotal / Tax / Total the saved PDF summary shows. Nothing is shown while every item counts. */
+function purTot(r,o){if(r.mode!='purchase'||!o.nOff)return '';const row=(l,v,sub)=>'<div class="crow"><div class="cl">'+l+'</div><div class="cv">'+v+(sub?'<small>'+sub+'</small>':'')+'</div></div>';
+ return '<div class="cal2"><h3>After removed items</h3>'+row('Subtotal',M(o.sub))+(o.ship?row('Shipping',M(o.ship)):'')+(o.disc?row('Discount','-'+M(o.disc)):'')+(N(r.tax)!=null?row('Tax',M(o.tax),N(r.tax)?'adjusted to work items':''):'')+row('Total',M(o.total))+'</div>'}
+function calc(){const r=S.rec;if(!r)return;const o=compute(r);if(r.mode=='purchase'||S.mode=='purchase'){$('#calc').innerHTML=purTot(r,o);persist();return}
  const row=(l,v,sub)=>'<div class="crow"><div class="cl">'+l+'</div><div class="cv">'+v+(sub?'<small>'+sub+'</small>':'')+'</div></div>',
   us=d=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d||''));return m?m[2]+'/'+m[3]+'/'+m[1]:d};
  let h='<div class="cal2"><h3>Calculated</h3>';
