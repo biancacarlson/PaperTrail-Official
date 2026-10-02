@@ -104,7 +104,7 @@ function compute(r){const o={};if(r.mode=='purchase'){const A=r.items;A.forEach(
  if(r.expected&&A.length!=r.expected)o.warn.push('Receipt lists '+r.expected+' items; '+A.length+' found here.');
  if(r.tax===undefined||r.tax==='')o.warn.push('Tax not entered; total excludes tax.')}
  else{const rt=N(r.roundTrip),hr=N(r.hours),ot=N(r.overtime);o.rt=rt;o.tot=hr==null&&ot==null?null:+((hr||0)+(ot||0)).toFixed(2);o.rate=Parser.irs(r.jobDate);o.wear=rt!=null&&o.rate!=null?+(rt*o.rate).toFixed(2):null}return o}
-function calc(){const r=S.rec;if(!r)return;const o=compute(r);
+function calc(){const r=S.rec;if(!r)return;const o=compute(r);if(r.mode=='purchase'){$('#calc').innerHTML='';persist();return}
  const row=(l,v,sub)=>'<div class="crow"><div class="cl">'+l+'</div><div class="cv">'+v+(sub?'<small>'+sub+'</small>':'')+'</div></div>',
   us=d=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d||''));return m?m[2]+'/'+m[3]+'/'+m[1]:d};
  let h='<div class="cal2"><h3>Calculated</h3>';
@@ -258,15 +258,15 @@ function tog(i){const it=S.rec.items[i];pushU();it.off=!it.off;const r=autoRedac
 
 /* ---------- build 29: receipt pages, redact / highlight, PDF ---------- */
 var PM='s',FW=true,PH={s:'',r:'Drag down over an item to black it out. Tap a box to adjust it. Use Scroll to move around.',h:'Drag over text to highlight it. Tap a highlight to adjust it. Use Scroll to move around.'},
- HLRE=/^\W*(order\s*(id|no\.?|number|#|time|date|total)|sub\s?-?total|sales\s*tax|tax\b|(grand\s*)?total|amount\s*(due|paid)|date\b|invoice\s*(no|#|number|date)|receipt\s*(no|#|number))/i;
+ HLRE=/^\W*(order\s*(date|total|placed)|(grand\s*)?total|amount\s*(due|paid)|(purchase|invoice|receipt|transaction)?\s*date\b)/i,HLNO=/item|discount|bonus|saved|savings|before|tax|shipping/i;
 function wLines(ws){const a=(ws||[]).filter(w=>w.bbox).map(w=>({t:w.text,x0:w.bbox.x0,x1:w.bbox.x1,y0:w.bbox.y0,y1:w.bbox.y1,cy:(w.bbox.y0+w.bbox.y1)/2,hh:w.bbox.y1-w.bbox.y0})).sort((p,q)=>p.cy-q.cy),L=[];
  a.forEach(w=>{const g=L.find(l=>Math.abs(l.cy-w.cy)<Math.max(l.hh,w.hh)*.5);if(g){g.w.push(w);g.cy=(g.cy*(g.w.length-1)+w.cy)/g.w.length;g.hh=Math.max(g.hh,w.hh)}else L.push({cy:w.cy,hh:w.hh,w:[w]})});
  return L.map(l=>{l.w.sort((p,q)=>p.x0-q.x0);return{t:l.w.map(w=>w.t).join(' '),x0:Math.min(...l.w.map(w=>w.x0)),x1:Math.max(...l.w.map(w=>w.x1)),y0:Math.min(...l.w.map(w=>w.y0)),y1:Math.max(...l.w.map(w=>w.y1))}})}
 function hlKey(l){const t=String(l.t||'').toLowerCase();return t.replace(/[^a-z0-9]/g,'')}
 function hlKey2(l){const t=String(l.t||'').toLowerCase();return (t.match(/[a-z]{3}/)||[''])[0]+'|'+t.replace(/[^0-9]/g,'')}
 /* screenshots of one long page overlap: a line already highlighted on an earlier screenshot is not highlighted again */
-function seenHL(){const s=new Set();S.pages.forEach(pg=>{try{wLines(pg.words).filter(l=>HLRE.test(l.t)&&/\d/.test(l.t)&&!/item|discount|bonus|saved|savings/i.test(l.t)).forEach(l=>{s.add(hlKey(l));s.add(hlKey2(l))})}catch(e){}});return s}
-function autoHL(ws,W,H,seen){try{return wLines(ws).filter(l=>HLRE.test(l.t)&&/\d/.test(l.t)&&!/item|discount|bonus|saved|savings/i.test(l.t)&&!(seen&&(seen.has(hlKey(l))||seen.has(hlKey2(l))))).map(l=>{const x0=Math.max(0,l.x0-4),y0=Math.max(0,l.y0-3),x1=Math.min(W,l.x1+4),y1=Math.min(H,l.y1+3);return{t:'h',x:x0/W,y:y0/H,w:(x1-x0)/W,h:(y1-y0)/H}})}catch(e){return[]}}
+function seenHL(){const s=new Set();S.pages.forEach(pg=>{try{wLines(pg.words).filter(l=>HLRE.test(l.t)&&/\d/.test(l.t)&&!HLNO.test(l.t)).forEach(l=>{s.add(hlKey(l));s.add(hlKey2(l))})}catch(e){}});return s}
+function autoHL(ws,W,H,seen){try{return wLines(ws).filter(l=>HLRE.test(l.t)&&/\d/.test(l.t)&&!HLNO.test(l.t)&&!(seen&&(seen.has(hlKey(l))||seen.has(hlKey2(l))))).map(l=>{const x0=Math.max(0,l.x0-4),y0=Math.max(0,l.y0-3),x1=Math.min(W,l.x1+4),y1=Math.min(H,l.y1+3);return{t:'h',x:x0/W,y:y0/H,w:(x1-x0)/W,h:(y1-y0)/H}})}catch(e){return[]}}
 function renderPages(){const el=$('#pages');if(!el)return;S.selM=null;
  if(S.mode!='purchase'||!S.pages.length){el.style.display='none';el.innerHTML='';refreshActs();return}
  $('#docwrap').style.display='none';el.style.display='block';
@@ -417,7 +417,11 @@ function nz(t){return String(t||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').tri
 function locate(pg,items){try{const L=wLines(pg.words).map(l=>({...l,n:nz(l.t),u:0}));
  (items||[]).forEach(it=>{const tk=nz(it.n0||it.n).split(' ').filter(t=>t.length>=3);if(!tk.length)return;const pr=((it.q||1)*(it.p||0)).toFixed(2);let best=null,bs=0;
   L.forEach(l=>{if(l.u)return;const f=tk.filter(t=>l.n.includes(t)).length/tk.length,sc=f+(l.t.replace(/[,\s]/g,'').includes(pr)?.15:0);if(f>=.6&&sc>bs){bs=sc;best=l}});
-  if(best){best.u=1;it.id=it.id||++UID;it.pos={pid:pg.id,y0:best.y0/pg.h,y1:best.y1/pg.h}}})}catch(e){}}
+  if(best){best.u=1;it.id=it.id||++UID;it.pos={pid:pg.id,y0:best.y0/pg.h,y1:best.y1/pg.h};
+  /* highlight the item description only (not the price) */
+  const dw=(pg.words||[]).filter(w=>w.bbox&&Math.abs((w.bbox.y0+w.bbox.y1)/2-(best.y0+best.y1)/2)<(best.y1-best.y0)*.5&&tk.some(t=>nz(w.text).includes(t)));
+  const hx0=Math.max(0,(dw.length?Math.min(...dw.map(w=>w.bbox.x0)):best.x0)-4),hx1=Math.min(pg.w,(dw.length?Math.max(...dw.map(w=>w.bbox.x1)):best.x1)+4),hy0=Math.max(0,best.y0-3),hy1=Math.min(pg.h,best.y1+3);
+  pg.marks=(pg.marks||[]).filter(m=>m.hid!==it.id);pg.marks.push({t:'h',x:hx0/pg.w,y:hy0/pg.h,w:(hx1-hx0)/pg.w,h:(hy1-hy0)/pg.h,hid:it.id})}})}catch(e){}}
 function totalsTop(pg,y1){const l=wLines(pg.words).filter(l=>l.y0/pg.h>y1+.01&&/^\W*(sub\s?-?total|item\(s\)|items?\s*total|shipping|sales\s*tax|order\s*total|total|payment|amount)/i.test(l.t)).sort((a,b)=>a.y0-b.y0)[0];return l?l.y0/pg.h-.004:1}
 /* returns [{pid,y,h}] row bands (full width) for every place this item appears */
 function bandsFor(it){const O=[];S.rec.items.forEach(x=>[x.pos,...(x.alts||[])].filter(Boolean).forEach(p=>O.push({x,p})));const out=[],pad=.011;
