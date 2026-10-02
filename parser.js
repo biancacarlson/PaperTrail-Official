@@ -73,6 +73,20 @@ function dateNear(L,re){for(const l of L)if(re.test(l)){const m=l.match(DATE);if
 function invNo(L,tr){const re=new RegExp('\\b(?:invoice|inv|receipt|order|ticket'+(tr?'|trans(?:action)?':'')+')\\s*(?:no\\.?|number|num|#|id)\\s*[:#.]?\\s*([A-Z0-9][A-Z0-9\\-]*\\d[A-Z0-9\\-]*)','i'),re2=/\b(?:invoice|receipt)\s+#?\s*([A-Z]{0,4}-?\d{3,}[A-Z0-9\-]*)/i;
  for(const l of L)for(const r of [re,re2]){const m=l.match(r);if(!m)continue;const d=l.slice(m.index+m[0].length-m[1].length).match(DATE);if(d&&d.index===0)continue;return [0,m[1]]}return null}
 
+
+/* ---------- city & state ---------- */
+const ST='AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY';
+const HASST=new RegExp(',\\s*(?:'+ST+')\\b');
+const STREETW=/^(?:st|street|ave|avenue|blvd|boulevard|rd|road|dr|drive|ln|lane|way|hwy|highway|pkwy|parkway|ct|court|pl|place|sq|suite|ste|unit|fl|floor|plaza|center|centre|mall|bldg|building)\.?$/i;
+/* First "City, ST 12345" (or "City ST 12345", or "City, ST") found in the given lines; a zip code is preferred. Returns "City, ST" or null. Never guesses a city. */
+const NOTCITY=/^(?:thanks?|thank|hello|hi|dear|sorry|please|yes|no|sir|welcome|regards|cheers|total|paid|subtotal|balance)$/i;
+function cityState(L){const rx=[new RegExp(',\\s*('+ST+')\\b\\s+\\d{5}(?:-\\d{4})?','g'),new RegExp('\\s('+ST+')\\s+\\d{5}(?:-\\d{4})?\\b','g'),new RegExp(',\\s*('+ST+')\\b','g')];
+ for(const re of rx)for(const line of L){re.lastIndex=0;let m;while((m=re.exec(line))){
+  const toks=line.slice(0,m.index).trim().split(/\s+/),city=[];
+  for(let i=toks.length-1;i>=0&&city.length<3;i--){if(/[:|,]$/.test(toks[i]))break;const w=toks[i].replace(/^[^A-Za-z]+|[^A-Za-z.'\-]+$/g,'');if(!/^[A-Z][A-Za-z.'\-]*$/.test(w)||STREETW.test(w)||NOTCITY.test(w)||/\d/.test(toks[i]))break;city.unshift(w)}
+  if(city.length){const c=city.join(' ');return (c===c.toUpperCase()&&c.length>3?tcase(c.toLowerCase()):c)+', '+m[1]}}}
+ return null}
+
 /* ---------- merchant + item-block helpers (layout-agnostic: Amazon app/web, Temu, receipts without a logo line) ---------- */
 const KNOWN=/\b(temu|amazon|walmart|target|costco|home depot|lowe's|lowes|best buy|harbor freight|staples|aliexpress|shein|ebay|etsy|walgreens|cvs|ikea|wayfair|newegg|adorama|sweetwater|guitar center|autozone|o'reilly|michaels|ace hardware|office depot|trader joe's|whole foods|safeway|kroger|7-eleven|starbucks|uber|lyft|doordash|apple|b&h)\b/i;
 const tcase=s=>s.replace(/(^|[\s'-])[a-z]/g,c=>c.toUpperCase());
@@ -85,6 +99,7 @@ function guessMerchant(text,L){
  const l=L.slice(0,12).map(x=>x.replace(/^[^A-Za-z0-9]*[Qq]\s+(?=[A-Z])/,'').trim()).find(l=>/[A-Za-z]{3}/.test(l)&&l.length<=40&&!DATE.test(l)&&!PRICE.test(l)&&!UIJUNK.test(l)&&!/\d{3}[-. ]\d{4}|^\W*(tel|phone|www|http)/i.test(l)&&/^[A-Z0-9]/.test(l));
  return l?{n:l,sure:0}:null}
 /* Item block for marketplace-style pages: a (wrapped) product title above a price that sits alone on its own line. */
+const ONLINE=/\b\d{3}-\d{7}-\d{7}\b|item\(s\)\s*subtotal|\b(?:amazon|temu|aliexpress|shein|ebay|etsy|wayfair|newegg)\b/i;
 const SELLER=/\b(?:sold|shipped|fulfilled|ships)\s*(?:by|from)\b|\bsold\s*by\s*:/i;
 const NOTTITLE=/^\W*(?:sold\b|shipped\b|fulfilled\b|return|replace|buy it|track|get product|write a|view\b|leave\b|deliver|arriv|order|qty|quantity|package|invoice|ship(?:ping)?\b|payment|billing|subtotal|item\(s\)|total|tax\b|grand|promotion|search|ask a|see\b|show\b|download|print|share|help|back\b|menu|cart|account|prime\b|your\b|more\b|archive|details|summary|status|q\s+search)/i;
 /* Marketplace titles are keyword-stuffed: keep the part before the first comma / dash / pipe when that is still a real name. */
@@ -114,6 +129,7 @@ function parse(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(t
  const inv=invNo(L,mode==='purchase');
  if(mode==='purchase'){
   {const gm=guessMerchant(text,L);if(gm){set('merchant',gm.n);if(gm.sure)found.mk=1}}
+  if(!ONLINE.test(text)){const cs=cityState(L.slice(0,25));if(cs)set('location',cs)}
   set('date',dateNear(L,/ordered on|order placed|order date|purchase date|date of purchase|date placed|invoice date|\bdate\b/i)||(text.match(DATE)||[])[1]);{const ic=text.match(/item details\s*\(\s*(\d+)\s*\)/i);if(ic)set('expected',+ic[1])}set('number',(text.match(/\b(\d{3}-\d{7}-\d{7})\b/)||[])[1]||(inv&&inv[1]));
   for(const raw of L){const l=fix(raw),pm=l.match(PRICE);if(!pm){const qm=l.match(/(?:^|\s)[x×]\s?(\d+)\s*$/i),li=items[items.length-1];if(qm&&li&&+qm[1]>1&&li.q==1&&!li.qs){li.q=+qm[1];li.qs=1}if(qm&&li&&!li.v){li.v=l.replace(/\s*[x×]\s?\d+\s*$/i,'').trim();li.n=shortName(li.full||li.n,li.v,li.cut)}continue}const v=num(pm[1]);if(v==null)continue;const head=l.slice(0,pm.index).trim();
    if(/[il1]tems?\s*\)?\s*\(?s?\)?\s*(total|discount)|extra bonus/i.test(head))continue;
@@ -155,6 +171,7 @@ function parse(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(t
    if(!sd||!ed){const l=L.find(l=>/\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\s+\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\s*$/.test(l));if(l){const d=l.match(/(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})\s+(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})\s*$/);if(!sd)set('jobDate',d[1]);if(!ed)set('endDate',d[2])}}
    for(const l of L){const m=l.match(/(?<!\w\s)\bDate\s+(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})/);if(m){set('closeDate',m[1]);break}}if(!F.closeDate){const d=dateNear(L,/invoice\s*date|date\s*issued|issued/i);if(d)set('closeDate',d)}
    const loc=label(L,/^(?:event\s*location|job\s*location|service\s*location|work\s*location|job\s*site|site|venue|location|address)\s*[:\-]?\s*(.*)$/i);if(loc&&!/^\$?[\d,.]+$/.test(loc))set('location',loc.split(/\s{3,}/)[0]);
+   if(F.location&&!HASST.test(F.location)){const k=L.findIndex(l=>/^(?:event\s*location|job\s*location|service\s*location|work\s*location|job\s*site|site|venue|location|address)\b/i.test(l)),cs=k>=0?cityState(L.slice(k,k+4)):null;if(cs)F.location=F.location+', '+cs}
    const nv=re=>{for(const raw of L){const m=fix(raw).match(re);if(m)return m}return null};
    {const m=nv(/^(?:(round[\s-]*trip|one[\s-]*way)(?:\s*(?:miles?|mileage|distance))?|mileage|miles|distance)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(?:mi\b|miles?\b)?(.*)$/i);if(m){let v=+m[2];if(/one/i.test(m[1]||'')||/one[\s-]*way/i.test(m[3]||''))v=v*2;set('roundTrip',String(+v.toFixed(2)))}}
    if(drow.length){const r=drow.map(l=>l.match(tri)),h=r.reduce((a,m)=>a+ +m[1],0),amt=r.reduce((a,m)=>a+ +m[3].replace(/,/g,''),0),low=Math.min(...r.map(m=>+m[2].replace(/,/g,'')));
@@ -165,7 +182,10 @@ function parse(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(t
      if(sub.length>1){const pr=sub.map(m=>m[1]+' hrs × '+money(m[2])+' = '+money(m[3]));const lo=Math.min(...sub.map(m=>+m[2].replace(/,/g,''))),hi=Math.max(...sub.map(m=>+m[2].replace(/,/g,'')));
       set('notes','Regular: '+pr[0]+'. Overtime: '+pr[pr.length-1]+(Math.abs(hi/lo-1.5)<.01?' (1.5× regular rate)':'')+'.')}}}}
  return {fields:F,items,found,guess}}
-function pd(s){s=String(s||'').trim();let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);if(m)return new Date(+m[1],m[2]-1,+m[3]);const d=new Date(s);return isNaN(d)?null:new Date(d.getFullYear(),d.getMonth(),d.getDate())}
+function pd(s){s=String(s||'').trim();let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);if(m)return new Date(+m[1],m[2]-1,+m[3]);
+ m=s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2}|\d{4})$/);if(m&&+m[1]>=1&&+m[1]<=12&&+m[2]>=1&&+m[2]<=31){let y=+m[3];if(y<100)y+=2000;return new Date(y,m[1]-1,+m[2])}
+ const d=new Date(s);return isNaN(d)?null:new Date(d.getFullYear(),d.getMonth(),d.getDate())}
 function net30(s,days){const d=pd(s);if(!d)return null;d.setDate(d.getDate()+(days||30));const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())}
 function irs(s){const d=pd(s);if(!d)return null;const y=d.getFullYear();if(y==2025)return 0.70;if(y==2026)return d>=new Date(2026,6,1)?0.76:0.725;return null}
-const api={parse,pd,net30,irs};if(typeof module!=='undefined')module.exports=api;root.Parser=api})(typeof globalThis!=='undefined'?globalThis:this);
+const dateIn=s=>{const m=String(s||'').match(DATE);return m?m[1]:null};
+const api={parse,pd,net30,irs,dateIn,cityState};if(typeof module!=='undefined')module.exports=api;root.Parser=api})(typeof globalThis!=='undefined'?globalThis:this);

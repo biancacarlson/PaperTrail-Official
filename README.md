@@ -5,9 +5,10 @@ PaperTrail runs in your browser. Upload a receipt, invoice, screenshot or photo,
 
 ## What it does
 - Reads uploaded receipts and invoices and fills in key fields: date, business or client, location, hours, and amount
-- Purchases: upload several screenshots at once, tap the circle on any personal item to exclude it, and the subtotal, tax and total update automatically
-- Purchase PDF: redact anything personal by dragging down over it (full-width bars by default, with dots to resize), highlight what matters (date, order number, subtotal, tax and total are highlighted automatically), then tap **Save PDF**. The file is named `[purchase date] Receipt`. Undo, Redo and Clear all marks are available while marking up (Clear all on the record can also be undone). Redactions are burned into the image, so they can't be undone from the saved file. **Copy Receipt Image** puts the marked-up receipt on the clipboard to paste into a doc.
+- Purchases: the date is taken from the top right of the receipt when one is printed there, the store's city and state are filled in when the receipt shows them, and the category is guessed from the items (gloves, tools and safety items are Gear; consumables are Supplies). Upload several screenshots at once, tap the circle on any personal item to exclude it, and the subtotal, tax and total update automatically
+- Purchase PDF: redact anything personal by dragging down over it (full-width bars by default, with dots to resize), highlight what matters (date, order number, subtotal, tax and total are highlighted automatically), then tap **Save as PDF**. One file is saved: the receipt pages with the summary under the last page. It is named `[purchase date] Receipt and Summary`. Undo, Redo and Clear all marks are available while marking up (Clear all on the record can also be undone). Redactions are burned into the image, so they can't be undone from the saved file. **Copy Receipt Image** puts the marked-up receipt on the clipboard to paste into a doc.
 - Lets you review and edit every field before copying
+- **Save record** files the record in the **Saved** tab: Expenses in one list, Work invoices in the other. Expenses can be filtered by category (Gear only, Meals only, ...) and sorted by date (default, newest first) or by cost, high to low or low to high
 - Totals regular and overtime hours
 - Calculates wear and tear from the IRS business mileage rate for the job date
 - Calculates the Net 30 payout date from the event end date

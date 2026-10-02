@@ -1,14 +1,14 @@
 'use strict';
 const LS=(k,d)=>{try{return localStorage.getItem(k)||d}catch(e){return d}};
-const $=s=>document.querySelector(s),S={start:'North Park, San Diego, CA 92104',mode:'purchase',rec:null,records:[],sel:[],words:[],idle:15,img:null,z:1,x:0,y:0};
+const $=s=>document.querySelector(s),S={start:'North Park, San Diego, CA 92104',mode:'purchase',rec:null,records:[],sel:[],words:[],idle:15,img:null,z:1,x:0,y:0,tab:'new',sv:{sec:'x',cat:'All',sort:'dnew'}};
 const est=r=>Parser.net30(r.endDate||r.jobDate);
 const chk=()=>S.rec.location?true:(st('Enter the job location first.'),false);
 const IOS=/iPhone|iPad|iPod/.test(navigator.userAgent);
 const gurl=(r,c)=>(c?'googlechromes://':'https://')+'www.google.com/search?q='+encodeURIComponent('round trip driving distance from '+S.start+' to '+(r.location||''));
 const N=v=>{const n=parseFloat(String(v).replace(/[$,]/g,''));return isNaN(n)?null:n},M=v=>v==null?'Not entered':'$'+v.toFixed(2);
-const PF={purchase:[['date','Date'],['merchant','Merchant'],['number','Receipt/Invoice #'],['tax','Tax'],['extSub','Subtotal $'],['extTotal','Total $']],
+const PF={purchase:[['date','Date'],['merchant','Merchant'],['location','Location (city, state)'],['number','Receipt/Invoice #'],['tax','Tax'],['extSub','Subtotal $'],['extTotal','Total $']],
 freelance:[['employer','Employer'],['client','Client'],['jobDate','Job date'],['endDate','Event end date'],['location','Job location'],['roundTrip','Round-trip miles'],['hours','Total regular'],['overtime','Total overtime'],['amount','Amount $'],['invoice','Invoice #'],['notes','Notes']]};
-function setMode(m){S.mode=m;S.rec=newRec();S.pages=[];S.undo=[];S.redo=[];{const dw=$('#docwrap');if(dw)dw.style.display='none'}$('.head h1').textContent=m=='purchase'?'':'New work invoice record';$('#m1').className=m=='purchase'?'on':'';$('#m2').className=m=='freelance'?'on':'';render();renderPages()}
+function setMode(m){showWork();S.mode=m;S.rec=newRec();S.pages=[];S.undo=[];S.redo=[];{const dw=$('#docwrap');if(dw)dw.style.display='none'}$('.head h1').textContent=m=='purchase'?'':'New work invoice record';$('#m1').className=m=='purchase'?'on':'';$('#m2').className=m=='freelance'?'on':'';render();renderPages()}
 const newRec=()=>({mode:S.mode,items:[],src:{},edited:{},loaded:false,doc:false,employer:S.mode=='freelance'?'AVLancer':''});
 function manual(){dismissRestore();S.rec.loaded=true;render()}
 /* ---------- lock (passcode hash via PBKDF2; screen lock only) ---------- */
@@ -22,7 +22,7 @@ function snack(m,fn){let e=$('#snack');if(!e){e=document.createElement('div');e.
 function clearAll(){const c={mode:S.mode,rec:S.rec,pages:S.pages,undo:S.undo,redo:S.redo,img:S.img,dim:S.dim,words:S.words,conf:S.conf};const keep=S.records;wipe();S.records=keep;S.cleared=c;showRestore();renderRecs();snack('Record cleared',restoreCleared)}
 function showRestore(){const b=$('#restore');if(b)b.style.display=S.cleared?'flex':'none'}
 function dismissRestore(){S.cleared=null;showRestore()}
-function restoreCleared(){const c=S.cleared;if(!c)return;if(S.rec&&S.rec.loaded&&!confirm('Replace what is on screen with the cleared record?'))return;S.cleared=null;
+function restoreCleared(){const c=S.cleared;if(!c)return;if(S.rec&&S.rec.loaded&&!confirm('Replace what is on screen with the cleared record?'))return;S.cleared=null;showWork();
  Object.assign(S,{mode:c.mode,rec:c.rec,pages:c.pages,undo:c.undo,redo:c.redo,img:c.img,dim:c.dim,words:c.words,conf:c.conf,selM:null});
  $('#m1').className=S.mode=='purchase'?'on':'';$('#m2').className=S.mode=='freelance'?'on':'';$('.head h1').textContent=S.mode=='purchase'?'':'New work invoice record';
  if(S.mode!='purchase'&&S.img){showDoc(S.img);if(S.words&&S.words.length&&S.dim)drawWords(S.dim[0],S.dim[1])}
@@ -66,8 +66,10 @@ async function handle(f){if(!f)return;S.rec=newRec();S.pages=[];S.undo=[];S.redo
   let best=text?{t:text,w:S.words,c:null,n:cnt(text)}:null;
   for(const pre of [0,1]){if(best&&best.n>=need)break;st('Running OCR on this device (first run downloads language data)…');try{const o=await ocr(pre?prep(canvas):canvas),n=cnt(o.t);if(!best||n>best.n)best={t:o.t,w:o.w,c:o.c,n}}catch(e){}}
   if(best&&best.t!==text){document.querySelectorAll('.wb').forEach(e=>e.remove());text=best.t;S.words=best.w;S.conf=best.c;drawWords(canvas.width,canvas.height)}}
- $('#ocr').textContent=text;parse(text);lowConf();if(S.rec.mode=='purchase'&&canvas){S.pages=[{id:++PGID,words:S.words,c:canvas,url:S.img,w:canvas.width,h:canvas.height,marks:autoHL(S.words,canvas.width,canvas.height)}];locate(S.pages[0],S.rec.items)}const q=[];if(S.conf!=null&&S.conf<70)q.push('Low scan quality ('+Math.round(S.conf)+'% confidence). Retake in good light if fields look wrong.');if(canvas&&Math.min(canvas.width,canvas.height)<500)q.push('Low-resolution image.');if(S.rec.mode=='purchase'&&/\bhours\b/i.test(text)&&/\brate\b/i.test(text)&&/position|event|crew|technician|labor/i.test(text))q.push('This looks like a work invoice. Tap Work Invoice above and upload again.');st(text.trim()?q.join(' ')||(Object.keys(S.rec.src).length?'':'Text was read but no fields matched. Enter values manually.'):'No text found. Enter values manually.');render();renderPages()
+ $('#ocr').textContent=text;parse(text);if(S.rec.mode=='purchase'&&canvas){const td=topRightDate(S.words,canvas.width,canvas.height);if(td){S.rec.date=td;S.rec.src.date=1}}lowConf();if(S.rec.mode=='purchase'&&canvas){S.pages=[{id:++PGID,words:S.words,c:canvas,url:S.img,w:canvas.width,h:canvas.height,marks:autoHL(S.words,canvas.width,canvas.height)}];locate(S.pages[0],S.rec.items)}const q=[];if(S.conf!=null&&S.conf<70)q.push('Low scan quality ('+Math.round(S.conf)+'% confidence). Retake in good light if fields look wrong.');if(canvas&&Math.min(canvas.width,canvas.height)<500)q.push('Low-resolution image.');if(S.rec.mode=='purchase'&&/\bhours\b/i.test(text)&&/\brate\b/i.test(text)&&/position|event|crew|technician|labor/i.test(text))q.push('This looks like a work invoice. Tap Work Invoice above and upload again.');st(text.trim()?q.join(' ')||(Object.keys(S.rec.src).length?'':'Text was read but no fields matched. Enter values manually.'):'No text found. Enter values manually.');render();renderPages()
 }catch(e){st('Extraction failed ('+((e&&e.message)||e||'unknown')+'). Enter values manually or try a clearer file.');showOcr();render()}}
+/* The receipt's own date is printed at the top right. When a date is read there it beats any other date on the page (order, delivery, etc.). */
+function topRightDate(ws,W,H){try{const a=(ws||[]).filter(w=>w.bbox&&(w.bbox.x0+w.bbox.x1)/2>W*.5&&w.bbox.y1<H*.2);for(const l of wLines(a).sort((p,q)=>p.y0-q.y0)){const d=Parser.dateIn(l.t);if(d)return d}}catch(e){}return null}
 function lowConf(){const r=S.rec;r.low={};(S.words||[]).length&&Object.keys(r.src).forEach(k=>{if(!r.src[k]||r[k]==null||typeof r[k]=='object')return;const t=String(r[k]).toLowerCase().split(/\s+/).filter(x=>x.length>1);if(t.some(x=>S.words.some(w=>w.confidence<60&&w.text.toLowerCase().includes(x))))r.low[k]=1})}
 function drawWords(cw,ch){const L=$('#layer');if(!L)return;L.insertAdjacentHTML('beforeend',S.words.map((w,i)=>{const b=w.bbox;return `<div class="wb${w.confidence<60?' lowc':''}" data-i="${i}" style="left:${b.x0/cw*100}%;top:${b.y0/ch*100}%;width:${(b.x1-b.x0)/cw*100}%;height:${(b.y1-b.y0)/ch*100}%"></div>`}).join(''))}
 const selText=()=>[...S.sel].sort((a,b)=>a-b).map(i=>S.words[i].text).join(' ');
@@ -88,21 +90,34 @@ function render(){const r=S.rec;{const pl=$('#pick');if(pl)pl.textContent=S.mode
  const lab=(k,l)=>`<label for="f_${k}">${l}${r.edited[k]?' (edited)':''}${miss(k)?' (needs review)':''}${r.low&&r.low[k]&&!r.edited[k]?' - low confidence, check':''}</label>`,
  W=['location','notes','number','client','employer','category'],
  fld=k=>{if(k=='category')return `<div class="f w"><label for="f_category">Category${r.edited.category?' (edited)':''}</label><select id="f_category" onchange="setCat(this.value);render()"><option value="">Select…</option>${CATS.map(c=>`<option${r.category==c?' selected':''}>${c}</option>`).join('')}</select></div>`;const l=(fs.find(f=>f[0]==k)||[])[1];return `<div class="f${W.includes(k)?' w':''}">`+lab(k,l)+(k=='notes'?`<textarea id="f_${k}" class="${String(r[k]??'').trim()?'ext':''}" rows="3" oninput="ed('${k}',this.value)">${esc(r[k])}</textarea>`:(inp=>k=='roundTrip'?`<div class="row" style="margin:0">${inp}<button class="pri" style="flex:0 0 auto" onclick="render()">Recalculate</button></div>`:inp)(`<input autocomplete="off" id="f_${k}" class="${String(r[k]??'').trim()?'ext':''}${miss(k)?' warn':''}" value="${esc(r[k])}" oninput="ed('${k}',this.value)">`))+(k=='roundTrip'?`<div class="srch"><a id="gs" class="btn" target="_blank" rel="noopener noreferrer" href="${esc(gurl(r))}" onclick="return chk()">Search round-trip distance</a></div>`:'')+'</div>'},
- G=r.mode=='purchase'?[['Receipt',['date','merchant','number','category']],['Amounts',['tax','extSub','extTotal']]]:[['',['employer','client','invoice']],['',['jobDate','endDate','location']],['Mileage',['roundTrip']],['Hours & pay',['hours','overtime','amount']],['',['notes']]];
+ G=r.mode=='purchase'?[['Receipt',['date','merchant','location','number','category']],['Amounts',['tax','extSub','extTotal']]]:[['',['employer','client','invoice']],['',['jobDate','endDate','location']],['Mileage',['roundTrip']],['Hours & pay',['hours','overtime','amount']],['',['notes']]];
  let h=G.map(([t,ks])=>`<section class="grp${t=='Amounts'?' amt':''}">${t?`<h3>${t}</h3>`:''}<div class="fg">${ks.map(fld).join('')}</div></section>`).join('');
  if(r.mode=='purchase')h+=itemsHtml();
  $('#form').className=r.mode;$('#form').innerHTML=h;$('#actions').style.display='block';calc();renderRecs();refreshActs()}
 const CATS=['Supplies','Gear','Meals','Travel','Software','Other'];
-const CATK={Meals:/restaurant|cafe|caf\u00e9|coffee|starbucks|mcdonald|taco|pizza|burger|grill|kitchen|diner|bakery|deli\b|sandwich|subway|chipotle|doordash|uber ?eats|grubhub|sushi|ramen|bbq|thai|wok|food|bistro|cantina|tavern|brew|donut|boba|tea house|catering|meal|lunch|dinner|breakfast|smoothie|juice/,
+/* Category rules. Items decide first (weighted by their cost); the merchant only breaks ties or decides when no item is recognised.
+   Gear = what you wear or use to do the job (gloves, tools, safety items, electronics). Supplies = consumables and everything else. */
+const CATK={
+ Meals:/restaurant|cafe|caf\u00e9|coffee|starbucks|mcdonald|taco|pizza|burger|grill|kitchen|diner|bakery|deli\b|sandwich|subway|chipotle|doordash|uber ?eats|grubhub|sushi|ramen|bbq|thai|wok\b|food|bistro|cantina|tavern|brew|donut|boba|tea house|catering|meal|lunch|dinner|breakfast|smoothie|juice/,
  Travel:/\buber\b|lyft|airline|airlines|delta|southwest|united air|alaska air|jetblue|hotel|\binn\b|motel|marriott|hilton|hyatt|airbnb|parking|toll|shell|chevron|arco|exxon|mobil|\b76\b|fuel|gasoline|rental car|hertz|enterprise rent|avis|amtrak|flight|baggage|lodging/,
- Software:/software|subscription|adobe|icloud|apple\.com\/bill|google (one|storage|workspace)|microsoft|office 365|dropbox|zoom|canva|openai|anthropic|github|saas|app store|license|licence|hosting|domain|godaddy|squarespace|plugin|cloud storage|membership/,
- Gear:/camera|lens|tripod|microphone|\bmic\b|headphone|earbud|speaker|cable|battery pack|charger|laptop|tablet|monitor|keyboard|mouse|drone|lighting|\blight\b|gimbal|sd card|memory card|hard drive|\bssd\b|\busb\b|bluetooth|wireless|hdmi|adapter|router|best buy|b&h|bhphoto|adorama|guitar center|sweetwater|backpack|case\b|stand\b|mount\b|power bank|extension cord|walkie|radio|headset|projector|screen|drill|tool|harbor freight|electronics/,
- Supplies:/office|paper|\bink\b|toner|\bpens?\b|marker|tape|staples|supplies|glove|cleaning|wipes|zip ?tie|label|folder|envelope|notebook|binder|sharpie|walmart|target|costco|home depot|lowe|dollar|cvs|walgreens|trash bag|bottled water|water bottle|snack/};
-function guessCat(r){const m=String(r.merchant||'').toLowerCase(),t=(r.items||[]).map(i=>String(i.n||'')).join(' ').toLowerCase();let best='',bs=0;
- ['Gear','Software','Travel','Meals','Supplies'].forEach(c=>{const re=CATK[c];let sc=0;if(re.test(m))sc+=2;const a=t.match(new RegExp(re.source,'g'));if(a)sc+=Math.min(a.length,3);if(sc>bs){bs=sc;best=c}});return best||'Other'}
+ Software:/software|subscription|adobe|icloud|apple\.com\/bill|google (one|storage|workspace)|microsoft|office 365|dropbox|zoom|canva|openai|anthropic|github|saas|app store|licen[sc]e|hosting|domain|godaddy|squarespace|plugin|cloud storage|membership/,
+ Gear:/best buy|b&h|bhphoto|adorama|guitar center|sweetwater|harbor freight|electronics/,
+ Supplies:/staples|office depot|walmart|target|costco|home depot|lowe|dollar|cvs|walgreens|michaels|ace hardware/};
+const ITEMK={
+ Software:/software|subscription|licen[sc]e|membership|\bapp\b|hosting|domain|plugin|cloud storage/,
+ Travel:/parking|\btoll\b|\bfuel\b|gasoline|baggage|\bflight\b|lodging|rental car|\bfare\b/,
+ Meals:/\b(?:meals?|lunch|dinner|breakfast|burgers?|pizza|tacos?|burritos?|sandwich(?:es)?|salad|fries|coffee|latte|smoothie|juice|boba|sushi|ramen|bbq|wings|entree|appetizer|dessert|soda)\b/,
+ Gear:/gloves?\b|goggles|safety glasses|\bglasses\b|\bboots?\b|\bshoes?\b|\bvest\b|hi-?vis|helmet|hard hat|ear ?plugs?|ear ?muffs?|hearing protect|knee ?(?:pads?|brace|band)|\bbrace\b|\bsleeves?\b|\bapron\b|\bbelt\b|harness|lanyard|carabiner|flashlight|headlamp|\btorch\b|multimeter|\btester\b|pliers|cutters?|strippers?|crimp|wrench|screwdriver|hammer|\bsocket|\bdrill\b|bit set|tape measure|utility knife|\bknife\b|multi-?tool|\blevel\b|\btools?\b|ladder|dolly|hand truck|camera|\blens\b|tripod|\bmic\b|microphone|headphone|earbud|headset|speaker|\bcable\b(?!\s*(?:ties?|clips?|organizers?))|charger|power bank|battery pack|laptop|tablet|monitor|keyboard|\bmouse\b|drone|\blights?\b(?!\s*bulbs?)|gimbal|sd card|memory card|hard drive|\bssd\b|\busb\b|bluetooth|wireless|hdmi|adapter|router|backpack|tool bag|duffel|pouch|\bcase\b|\bstand\b|\bmount\b|extension cord|power strip|walkie|\bradio\b|projector|phone holder|screen protector|work light/,
+ Supplies:/office|paper|\bink\b|toner|\bpens?\b|markers?|\btape\b|staples|supplies|label|folder|envelope|notebook|binder|sharpie|clips?\b|zip ?ties?|cable ties|velcro|cleaning|wipes?|spray|sponge|trash bags?|bottled water|\bwater\b|snack|batter(?:y|ies)|bulbs?|glue|sandpaper|stickers?|first aid|sunscreen|lip balm|hand warmer|tissues?|paper towels?|soap|sanitizer/};
+const itemCat=n=>{const t=String(n||'').toLowerCase();for(const c of ['Software','Travel','Meals','Gear','Supplies'])if(ITEMK[c].test(t))return c;return null};
+function guessCat(r){const m=String(r.merchant||'').toLowerCase(),sc={};let tot=0;
+ (r.items||[]).filter(i=>!i.off).forEach(i=>{const c=itemCat(i.n),w=(i.t!=null?i.t:(i.q||1)*(i.p||0))||1;tot+=w;if(c)sc[c]=(sc[c]||0)+w});
+ ['Meals','Travel','Software','Gear'].forEach(c=>{if(CATK[c].test(m))sc[c]=(sc[c]||0)+Math.max(1,tot*.5)});
+ let best='',bs=0;['Gear','Software','Travel','Meals','Supplies'].forEach(c=>{if((sc[c]||0)>bs){bs=sc[c];best=c}});
+ if(!best&&CATK.Supplies.test(m))best='Supplies';return best||'Other'}
 function autoCat(){const r=S.rec;if(!r||r.mode!='purchase'||!r.loaded||(r.edited&&r.edited.category))return;const c=guessCat(r);if(c!==r.category){r.category=c;const e=$('#f_category');if(e)e.value=c}}
 function setCat(v){const r=S.rec;r.category=v;r.edited.category=v?1:0;if(!v)autoCat()}
-const esc=v=>String(v??'').replace(/"/g,'&quot;').replace(/</g,'&lt;'),miss=k=>{const r=S.rec;return r.doc&&!r[k]&&['date','merchant','client','jobDate','location','amount'].includes(k)};
+const esc=v=>String(v??'').replace(/"/g,'&quot;').replace(/</g,'&lt;'),miss=k=>{const r=S.rec;return r.doc&&!r[k]&&['date','merchant','client','jobDate','location','amount'].includes(k)&&!(k=='location'&&r.mode=='purchase')};
 function ed(k,v){S.rec[k]=v;if(k=='location'){const g=$('#gs'),c=$('#gc');if(g)g.href=gurl(S.rec);if(c)c.href=gurl(S.rec,1)}S.rec.edited[k]=1;const e=$('#f_'+k);if(e){const f=String(v).trim()!=='';e.classList.toggle('ext',f);e.classList.remove('usr');if(f)e.classList.remove('warn')}calc();if(k=='date')refreshActs();if(k=='merchant')autoCat()}
 function it(i,k,v){S.rec.items[i][k]=k=='n'?v:N(v)||0;S.rec.items[i].ext=0;S.rec.items[i].guess=0;if(k=='n')S.rec.items[i].inf=0;calc();const e=$('#it_'+i);if(e)e.textContent=M(S.rec.items[i].t);if(k=='n')autoCat()}
 function r_del(i){S.rec.items.splice(i,1);render()}
@@ -132,7 +147,7 @@ const fm=v=>v==null?null:'$'+v.toFixed(2);
    groups: [{k:'info'|'det'|'tot', rows:[[label,value]]}] */
 const niceMerch=m=>{m=String(m||'').trim();return m.length>=4&&m===m.toUpperCase()&&/[A-Z]/.test(m)?m.toLowerCase().replace(/\b[a-z]/g,c=>c.toUpperCase()):m};
 function rows(r){if(r.mode=='summary')return sumRows(r);const o=compute(r),G=[],g=k=>{const x={k,rows:[]};G.push(x);return(l,v,h)=>{if(v!=null&&String(v).trim()!=='')x.rows.push([l,String(v).trim(),!!h])}};
- if(r.mode=='purchase'){const i=g('info');i('Date',r.date);i('Merchant',niceMerch(r.merchant));i('Receipt/Invoice #',r.number);i('Category',r.category);
+ if(r.mode=='purchase'){const i=g('info');i('Date',r.date);i('Merchant',niceMerch(r.merchant));i('Location',r.location);i('Receipt/Invoice #',r.number);i('Category',r.category);
   const d=g('det');r.items.filter(x=>!x.off).forEach(x=>d((String(x.n||'Item').replace(/\s*(\.{2,}|…)\s*$/,'').trim()),M(x.t)));
   const t=g('tot');t('Subtotal',M(o.sub));if(o.ship)t('Shipping',M(o.ship));if(o.disc)t('Discount','-'+M(o.disc));if(N(r.tax)!=null)t('Tax',M(o.tax));t('Total',M(o.total));
   return{t:'EXPENSE SUMMARY',G:G.filter(x=>x.rows.length)}}
@@ -187,7 +202,7 @@ async function saveImg(){try{const b=await recsBlob([S.rec]),f=new File([b],inam
 function toast(m){$('#status').style.color='#0a0';$('#status').textContent=m;setTimeout(()=>{$('#status').textContent='';$('#status').style.color=''},2500)}
 const noun=()=>S.mode=='purchase'?'Receipt':'Call Sheet';const cpLabel=()=>'Copy '+noun()+' Text';
 let ct;const copyRec=async()=>{if(await copy([S.rec])){const b=$('#cpbtn');clearTimeout(ct);requestAnimationFrame(()=>{b.textContent='Copied'});ct=setTimeout(()=>requestAnimationFrame(()=>{b.textContent=cpLabel()}),2500)}};
-function saveRec(){if(!S.rec||!S.rec.loaded)return;const j=JSON.stringify(S.rec);if(S.records.some(x=>JSON.stringify(x)===j))return toast('Already saved');S.records.push(JSON.parse(j));toast('Saved');renderRecs();store()}
+function saveRec(){if(!S.rec||!S.rec.loaded)return;const j=JSON.stringify(S.rec);if(S.records.some(x=>JSON.stringify(x)===j))return toast('Already saved');S.records.push(JSON.parse(j));S.sv.sec=S.rec.mode=='purchase'?'x':'w';S.sv.cat='All';store();showSaved();toast('Added to Saved')}
 function key(r){const d=Parser.pd(r.date||r.jobDate);return d?+d:Infinity}
 /* expense totals (Expense records only): by month, by year (when more than one), by category */
 function totals(){const m={},y={},c={};let all=0;S.records.filter(r=>r.mode=='purchase').forEach(r=>{const t=compute(r).total||0,d=Parser.pd(r.date),p=n=>String(n).padStart(2,'0'),mk=d?d.getFullYear()+'-'+p(d.getMonth()+1):'0000',yk=d?String(d.getFullYear()):'0000',ck=r.category||'Uncategorized';m[mk]=(m[mk]||0)+t;y[yk]=(y[yk]||0)+t;c[ck]=(c[ck]||0)+t;all+=t});
@@ -195,14 +210,42 @@ function totals(){const m={},y={},c={};let all=0;S.records.filter(r=>r.mode=='pu
  return{months:Object.keys(m).sort().map(k=>[mn(k),f(m[k])]),years:Object.keys(y).sort().map(k=>[k=='0000'?'No date':k,f(y[k])]),cats:Object.keys(c).sort((a,b)=>ord(a)-ord(b)).map(k=>[k,f(c[k])]),all:f(all),n:Object.keys(m).length}}
 function sumRows(){const T=totals(),G=[],g=(k,a)=>{if(a.length)G.push({k,rows:a.map(([l,v])=>[l,M(v),false])})};g('info',T.months);if(T.years.length>1)g('info',T.years);g('det',T.cats);g('tot',[['Total expenses',T.all]]);return{t:'EXPENSE TOTALS',G}}
 function allRecs(){const a=[...S.records].sort((p,q)=>key(p)-key(q));if(S.records.some(r=>r.mode=='purchase'))a.push({mode:'summary'});return a}
+/* ---------- Saved tab: Expenses and Work invoices, with category filter and sorting ---------- */
+function showWork(){S.tab='new';const w=$('#workview'),v=$('#savedview'),b=$('#m3');if(w)w.style.display='';if(v)v.style.display='none';if(b)b.className=''}
+function showSaved(){S.tab='saved';$('#workview').style.display='none';$('#savedview').style.display='block';$('#m1').className='';$('#m2').className='';$('#m3').className='on';$('.head h1').textContent='Saved';renderRecs();window.scrollTo(0,0)}
+function goMode(m){if(S.tab=='saved'&&S.mode==m){showWork();$('#m1').className=m=='purchase'?'on':'';$('#m2').className=m=='freelance'?'on':'';$('.head h1').textContent=m=='purchase'?'':'New work invoice record';render();renderPages()}else setMode(m)}
+const SORTS=[['dnew','Date (newest first)'],['dold','Date (oldest first)'],['chi','Cost (high to low)'],['clo','Cost (low to high)']];
+const recAmt=r=>r.mode=='purchase'?compute(r).total:N(r.amount);
+const recDate=r=>{const d=Parser.pd(r.mode=='purchase'?r.date:r.jobDate);return d?+d:null};
+const recCat=r=>r.category||'Uncategorized';
+/* records with no date / no amount always go to the bottom; ties keep the order they were saved in */
+function sortRecs(a,how){const f=how=='chi'||how=='clo'?recAmt:recDate,desc=how=='dnew'||how=='chi';
+ return a.slice().sort((p,q)=>{const x=f(p[0]),y=f(q[0]);if(x==null||y==null){if(x==null&&y==null)return desc?q[1]-p[1]:p[1]-q[1];return x==null?1:-1}if(x!==y)return desc?y-x:x-y;return desc?q[1]-p[1]:p[1]-q[1]})}
+function svList(){const x=S.sv.sec=='x',all=S.records.map((r,i)=>[r,i]).filter(([r])=>(r.mode=='purchase')==x);
+ return sortRecs(x&&S.sv.cat!='All'?all.filter(([r])=>recCat(r)==S.sv.cat):all,S.sv.sort)}
+function svSec(v){S.sv.sec=v;S.sv.cat='All';renderRecs()}
+function svCat(v){S.sv.cat=v;renderRecs()}
+function svSort(v){S.sv.sort=v;renderRecs()}
+function svCopy(){const l=svList().map(x=>x[0]).sort((p,q)=>key(p)-key(q));if(!l.length)return;if(S.sv.sec=='x'&&S.sv.cat=='All')l.push({mode:'summary'});copy(l)}
 function delRec(i){if(!confirm('Delete this saved record?'))return;S.records.splice(i,1);renderRecs();store()}
 function delAllRecs(){if(!confirm('Delete all '+S.records.length+' saved records from this phone?'))return;S.records=[];renderRecs();store()}
-function renderRecs(){persist();const el=$('#recs');if(!el)return;if(!S.records.length){el.innerHTML='';return}
- const T=totals(),row=(l,v)=>`<div class="srow"><span>${l}</span><b>${M(v)}</b></div>`,
- list=S.records.map((r,i)=>[r,i]).sort((p,q)=>key(p[0])-key(q[0])).map(([r,i])=>{const pur=r.mode=='purchase',d=pur?r.date:r.jobDate,lab=(d?d+' · ':'')+esc((pur?niceMerch(r.merchant):r.client)||(pur?'Receipt':'Work invoice'))+(r.category?' · '+r.category:''),amt=pur?M(compute(r).total):M(N(r.amount));return`<div class="srow"><span>${lab}</span><b>${amt}</b><button class="x" onclick="delRec(${i})" aria-label="Delete saved record">✕</button></div>`}).join('');
- el.innerHTML=`<h3>Saved (${S.records.length})</h3><div class="sl">${list}</div>`
- +(T.n?`<div class="sl"><h4>Expense totals</h4>${T.months.map(([l,v])=>row(l,v)).join('')}${T.years.length>1?T.years.map(([l,v])=>row(l+' total',v)).join(''):''}${T.cats.map(([l,v])=>row(l,v)).join('')}${row('Total expenses',T.all)}</div>`:'')
- +`<button class="pri" onclick="copy(allRecs())">Copy All Records</button><button onclick="delAllRecs()">Delete all</button><div class="hint">Saved on this phone only, encrypted with your passcode. Receipt images are not kept; use Save as PDF for those.</div>`}
+function renderRecs(){persist();const nb=$('#m3');if(nb)nb.textContent='Saved'+(S.records.length?' ('+S.records.length+')':'');const el=$('#savedview');if(!el||S.tab!='saved')return;
+ const nx=S.records.filter(r=>r.mode=='purchase').length,nw=S.records.length-nx;
+ if(!S.records.length){el.innerHTML='<div class="sv"><div class="empty2">Nothing saved yet.<br>Fill in a record and tap Save record. It will show up here.</div></div>';return}
+ const x=S.sv.sec=='x',cnt={};S.records.filter(r=>r.mode=='purchase').forEach(r=>{const c=recCat(r);cnt[c]=(cnt[c]||0)+1});
+ const cats=[...CATS.filter(c=>cnt[c]),...Object.keys(cnt).filter(c=>!CATS.includes(c)&&c!='Uncategorized'),...(cnt.Uncategorized?['Uncategorized']:[])];
+ if(S.sv.cat!='All'&&!cnt[S.sv.cat])S.sv.cat='All';
+ const list=svList(),tot=+list.reduce((s,[r])=>s+(recAmt(r)||0),0).toFixed(2),T=totals(),trow=(l,v)=>`<div class="srow"><div class="sm">${l}</div><b>${M(v)}</b></div>`,
+ row=([r,i])=>{const pur=r.mode=='purchase',nm=esc((pur?niceMerch(r.merchant):r.client)||(pur?'Receipt':'Work invoice')),sub=[pur?r.date:r.jobDate,pur?r.category:null,r.location].filter(Boolean).map(esc).join(' · ');
+  return `<div class="srow"><div class="sm"><div class="s1">${nm}</div>${sub?`<div class="s2">${sub}</div>`:''}</div><b>${M(recAmt(r))}</b><button class="x" onclick="delRec(${i})" aria-label="Delete saved record">✕</button></div>`};
+ el.innerHTML='<div class="sv"><div class="seg"><button class="'+(x?'on':'')+'" onclick="svSec(\'x\')">Expenses ('+nx+')</button><button class="'+(x?'':'on')+'" onclick="svSec(\'w\')">Work invoices ('+nw+')</button></div>'
+ +(x&&cats.length>1?'<div class="chips"><button class="'+(S.sv.cat=='All'?'on':'')+'" onclick="svCat(\'All\')">All '+nx+'</button>'+cats.map(c=>'<button class="'+(S.sv.cat==c?'on':'')+'" onclick="svCat(\''+c+'\')">'+c+' '+cnt[c]+'</button>').join('')+'</div>':'')
+ +'<div class="srt"><label for="svsort">Sort</label><select id="svsort" onchange="svSort(this.value)">'+SORTS.map(([v,l])=>'<option value="'+v+'"'+(S.sv.sort==v?' selected':'')+'>'+l+'</option>').join('')+'</select></div>'
+ +(list.length?'<div class="svsum"><span>'+(x&&S.sv.cat!='All'?list.length+' in '+S.sv.cat:list.length+' '+(x?'expense':'work invoice')+(list.length==1?'':'s'))+'</span><b>'+M(tot)+'</b></div><div class="sl">'+list.map(row).join('')+'</div>':'<div class="empty2">'+(x?'No expenses saved yet.':'No work invoices saved yet.')+'</div>')
+ +(x&&T.n&&S.sv.cat=='All'?`<div class="sl"><h4>Expense totals</h4>${T.months.map(([l,v])=>trow(l,v)).join('')}${T.years.length>1?T.years.map(([l,v])=>trow(l+' total',v)).join(''):''}${T.cats.map(([l,v])=>trow(l,v)).join('')}${trow('Total expenses',T.all)}</div>`:'')
+ +(list.length?'<button class="pri" onclick="svCopy()">Copy '+(list.length==1?'this record':'these '+list.length+' records')+'</button>':'')
+ +'<button onclick="delAllRecs()">Delete all saved records</button><div class="hint">Saved on this phone only, encrypted with your passcode. Receipt images are not kept; use Save as PDF for those.</div></div>'}
+
 function dl(f){const r=S.rec,o=compute(r);let d,n='record.'+f;if(f=='json')d=JSON.stringify({...r,calculated:o},null,1);else{const rows=r.mode=='purchase'?[['Item','Qty','Unit','Total'],...r.items.filter(i=>!i.off).map(i=>[i.n,i.q,i.p,i.t]),['Subtotal','','',o.sub],...(o.disc?[['Discount','','',-o.disc]]:[]),['Tax','','',N(r.tax)==null?'':o.tax],['Total','','',o.total]]:[['Field','Value'],...text(r).filter(l=>l.includes(': ')).map(l=>l.split(/: (.*)/s).slice(0,2))];d=rows.map(x=>x.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(',')).join('\n')}
  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([d]));a.download=n;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
 function addCal(){const r=S.rec,d=est(r);if(!d)return;const e=d.replace(/-/g,''),n=Parser.net30(d,1).replace(/-/g,''),x=t=>String(t).replace(/[\\;,]/g,'\\$&').replace(/\n/g,' '),
@@ -260,6 +303,7 @@ async function addShots(files){let r=S.rec;if(!r.doc){S.rec=r=newRec();r.loaded=
    if(cur===0){S.img=o.url;S.dim=[o.c.width,o.c.height];S.words=o.words;S.conf=o.conf;showDoc(o.url);drawWords(o.c.width,o.c.height)}
    Object.keys(P.fields).forEach(k=>{if(k=='merchant'?(P.found.mk||!r.merchant):(r[k]==null||r[k]===''))r[k]=P.fields[k]});
    Object.keys(P.found).forEach(k=>r.src[k]=1);if(P.guess&&!r.gname)r.gname=P.guess;
+   if(cur===0){const td=topRightDate(o.words,o.c.width,o.c.height);if(td){r.date=td;r.src.date=1}}
    P.items.forEach(x=>{const ex=r.items.find(y=>y.s!==cur&&kf(y)===kf(x));if(ex){dup++;if(x.pos)(ex.alts=ex.alts||[]).push(x.pos)}else r.items.push({...x,s:cur})})}
   catch(e){bad++}}
  $('#file').value='';S.undo=[];S.redo=[];ensureItem(r);render();renderPages();try{if(localStorage.getItem('ppClip')&&r.items.some(phVague))setTimeout(()=>idPhotos().catch(()=>{}),400)}catch(e){}
@@ -344,7 +388,7 @@ function refreshActs(){const on=!!(S.pages&&S.pages.length>0);document.querySele
 async function savePdf(){const J=window.jspdf&&window.jspdf.jsPDF;if(!J)return st('The PDF tool did not load. Check your connection and reload.');if(!S.pages.length)return;
  let d=null;S.pages.forEach(p=>{const W=595,H=+(W*p.h/p.w).toFixed(2),o=H>W?'p':'l',u=baked(p).toDataURL('image/jpeg',.92);if(!d)d=new J({unit:'pt',format:[W,H],orientation:o,compress:true});else d.addPage([W,H],o);d.addImage(u,'JPEG',0,0,W,H)});
  const n=rname()+'.pdf',f=new File([d.output('blob')],n,{type:'application/pdf'});
- if(IOS&&navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f],title:n});return}catch(e){if(e&&e.name=='AbortError')return}}
+ if(IOS&&navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f]});return}catch(e){if(e&&e.name=='AbortError')return}}
  const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=n;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);toast('Saved '+n)}
 /* one PDF: the uploaded invoice / receipt pages + the plain text summary. The summary shares a page with the image whenever it fits. */
 async function saveCombo(){const J=window.jspdf&&window.jspdf.jsPDF;if(!J)return st('The PDF tool did not load. Check your connection and reload.');
@@ -364,17 +408,15 @@ async function saveCombo(){const J=window.jspdf&&window.jspdf.jsPDF;if(!J)return
     y+=rh});
    y+=10});
   return y-y0};
- const m=new J({unit:'pt',format:[612,792],compress:true}),sh=sum(m,0,0,0+612-2*M,false);let d=null;
+ const m=new J({unit:'pt',format:[612,792],compress:true}),sh=sum(m,0,0,595-2*M,false);let d=null;
  const add=(w,h)=>{const o=h>w?'p':'l';if(!d)d=new J({unit:'pt',format:[w,h],orientation:o,compress:true});else d.addPage([w,h],o);return d};
  if(!imgs.length){add(612,792);sum(d,M,M,612-2*M,true)}
  else{
-  imgs.forEach((im,i)=>{const last=i==imgs.length-1,W=595,H=+(W*im.h/im.w).toFixed(2),tot=H+14+sh+M;
-   if(last&&tot<=842){add(W,tot);d.addImage(im.u,'JPEG',0,0,W,H);sum(d,M,H+14,W-2*M,true)}/* image + summary on one page */
-   else if(last&&imgs.length==1&&(()=>{const ah=792-M-14-sh-M,sc=Math.min(ah/H,(612-2*M)/W);return sc>=.6})()){/* letter page, image scaled to leave room for the summary */
-    const ah=792-M-14-sh-M,sc=Math.min(ah/H,(612-2*M)/W),iw=W*sc,ih=H*sc;add(612,792);d.addImage(im.u,'JPEG',(612-iw)/2,M,iw,ih);sum(d,M,M+ih+14,612-2*M,true)}
-   else{add(W,H);d.addImage(im.u,'JPEG',0,0,W,H);if(last){add(612,792);sum(d,M,M,612-2*M,true)}}})}
+  imgs.forEach((im,i)=>{const last=i==imgs.length-1,W=595,H=+(W*im.h/im.w).toFixed(2);
+   if(last){add(W,H+14+sh+M);d.addImage(im.u,'JPEG',0,0,W,H);sum(d,M,H+14,W-2*M,true)}/* summary sits under the last page of the receipt, same page */
+   else{add(W,H);d.addImage(im.u,'JPEG',0,0,W,H)}})}
  const p=n=>String(n).padStart(2,'0'),dt=Parser.pd(pur?r.date:(r.jobDate||r.date)),n=(dt?dt.getFullYear()+'-'+p(dt.getMonth()+1)+'-'+p(dt.getDate())+' ':'')+(pur?'Receipt and Summary.pdf':'Call Sheet Invoice and Summary.pdf'),f=new File([d.output('blob')],n,{type:'application/pdf'});
- if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f],title:n});return}catch(e){if(e&&e.name=='AbortError')return}}
+ if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f]});return}catch(e){if(e&&e.name=='AbortError')return}}
  const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=n;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);toast('Saved '+n)}
  catch(e){toast('Could not save PDF')}}
 (function(){const s=document.createElement('style');s.textContent=[
@@ -548,4 +590,5 @@ function idSkip(a){S.idRes.splice(a,1);render()}
 '.ic.off .ib textarea.in{background-color:var(--card)!important}'
 ].join('');document.head.appendChild(s)})();
 
+(function(){const s=document.createElement('style');s.textContent=['.sv{display:flex;flex-direction:column;gap:10px}.sv .sl{margin:0}.sv>button{width:100%}.sv .seg{margin:0}','.chips{display:flex;flex-wrap:wrap;gap:6px}.chips button{padding:6px 12px;border-radius:999px;font-size:13px;font-weight:600;background:#fff;color:var(--mut);border-color:var(--ln)}.chips button.on{background:var(--g);color:#fff;border-color:var(--g)}','.srt{display:flex;align-items:center;gap:10px}.srt label{flex:0 0 auto;margin:0}','.svsum{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:var(--mut);padding:0 2px}.svsum b{color:var(--fg);font-size:17px}','.sm{flex:1;min-width:0}.s1{font-weight:600;overflow-wrap:anywhere}.s2{font-size:12px;color:var(--mut);margin-top:1px}','.empty2{border:2px dashed var(--ln);border-radius:16px;padding:28px 16px;text-align:center;color:var(--mut)}','@media(max-width:900px){.nav button{padding:10px 6px;font-size:14px}}'].join('');document.head.appendChild(s)})();
 (function(){const s=document.createElement('style');s.textContent='.sl{background:var(--card);border:1px solid var(--ln);border-radius:14px;padding:6px 14px;margin:10px 0}.sl h4{margin:10px 0 2px;font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}.srow{display:flex;align-items:center;gap:10px;padding:9px 0;font-size:14px}.srow+.srow{border-top:1px solid var(--ln)}.srow span{flex:1;min-width:0}.srow b{white-space:nowrap}.srow .x{flex:0 0 32px;height:32px;padding:0}#f_category{width:100%}';document.head.appendChild(s)})();
