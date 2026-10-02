@@ -70,11 +70,25 @@ function pairColumns(L){const loose=L.filter(l=>ONLYP.test(l));if(!loose.length)
  let k=0;return L.filter(l=>!ONLYP.test(l)).map((l,_)=>{const i=L.indexOf(l);return lab.includes(i)?l+' '+loose[k++]:l})}
 function label(L,re){for(let i=0;i<L.length;i++){const m=L[i].match(re);if(m){const v=(m[1]||'').trim();if(v)return v;if(L[i+1])return L[i+1]}}return null}
 function dateNear(L,re){for(const l of L)if(re.test(l)){const m=l.match(DATE);if(m)return m[1]}return null}
+/* Unlabeled document numbers. Register receipts print a bare number under the barcode (store + register + transaction + date, e.g. "0214 03 40317 0928 26"): it is the receipt number even though no label says so. Only the last lines are searched; phones, dates, prices, card/auth lines and item UPCs are skipped. */
+function bareNo(L){const z=y=>y.replace(/[Oo]/g,'0').replace(/[Il]/g,'1'),BADL=/\b(?:auth(?:orization)?|appr(?:oval)?|aid|acct|account|rrn|terminal|batch|visa|mastercard|amex|card|tel|phone|fax|zip)\b/i,
+ RX=/^\W*((?:[\dOoIl]+[ \-]){2,}[\dOoIl]+|[\dOoIl]{12,})\W*$/;
+ for(let i=L.length-1;i>=Math.max(0,L.length-10);i--){const l=L[i];if(BADL.test(l)||DATE.test(l)||PRICE.test(l))continue;const m=l.match(RX);if(!m)continue;
+  const raw=m[1].trim().replace(/\s+/g,' '),g=raw.split(/[ \-]/),dg=z(raw).replace(/\D/g,'');
+  if(dg.length<10||dg.length>24||!/\d{3}/.test(z(raw)))continue;
+  if(g.length==4&&g[0].length==1&&g[1].length==5&&g[2].length==5&&g[3].length==1)continue;/* item UPC-A (0 47821 30956 3) */
+  if(/^\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}$/.test(z(raw)))continue;/* phone */
+  return z(raw)}
+ return null}
+/* Invoice-style number with no label word: a line that is just "#1042" / "No. 1042", or a prefixed token such as INV-2026-0042. */
+function looseNo(L){for(const l of L){const m=l.match(/^\s*(?:no\.?|n[o\u00ba\u00b0]|#)\s*[:.]?\s*([A-Z]{0,4}-?\d{3,}[A-Z0-9\-]*)\W*$/i)||l.match(/\b(?:invoice|receipt)\s*:\s*#?\s*([A-Z]{0,4}-?\d{3,}[A-Z0-9\-]*)\s*$/i)||l.match(/\b((?:INV|RCPT|REC|ORD|PO)[-\s]?\d{3,}[A-Z0-9\-]*)\b/);if(!m)continue;const d=m[1].match(DATE);if(d&&d.index===0)continue;return m[1].replace(/\s+/g,'-')}return null}
 function invNo(L,tr){const re=new RegExp('\\b(?:invoice|inv|receipt|order|ticket'+(tr?'|trans(?:action)?':'')+')\\s*(?:no\\.?|number|num|#|id)\\s*[:#.]?\\s*([A-Z0-9][A-Z0-9\\-]*\\d[A-Z0-9\\-]*)','i'),re2=/\b(?:invoice|receipt)\s+#?\s*([A-Z]{0,4}-?\d{3,}[A-Z0-9\-]*)/i;
  for(const l of L)for(const r of [re,re2]){const m=l.match(r);if(!m)continue;const d=l.slice(m.index+m[0].length-m[1].length).match(DATE);if(d&&d.index===0)continue;return [0,m[1]]}
  if(tr){/* register receipts: TRN 40317, TXN: 0092, TR# 03294, TC# 4827 3092 1184, CHECK 1042, REF 55102 (card lines are skipped) */
   const T2=/\b(?:(?:trn|trm|trh|irn|txn|tran|trans(?:action)?|chk|check|sale|sls|rcpt)\s*(?:no\.?|num(?:ber)?|id|#)?|(?:tr|tc)\s*#)\s*[:#.]?\s*([\dOoIl][\dOoIl\-]{2,}(?:\s[\dOoIl]{2,}){0,4})(?![\d:\/])/i,FIXN=x=>{x=x.trim();if(!/\d/.test(x))return null;const g=x.split(/\s+/),z=y=>y.replace(/[Oo]/g,'0').replace(/[Il]/g,'1');return g.every(y=>y.length==4)?g.map(z).join(' '):g.map(z).join('')},T3=/\b(?:ref(?:erence)?)\s*(?:no\.?|num(?:ber)?|id|#)?\s*[:#.]?\s*(\d[\d\-]{3,})(?![\d:\/])/i,BAD=/\b(?:auth(?:orization)?|appr(?:oval)?|aid|acct|account|rrn|terminal|batch|visa|mastercard|amex)\b/i;
+  const bn=bareNo(L);if(bn)return [0,bn];
   for(const r of [T2,T3])for(const l of L){if(BAD.test(l))continue;const m=l.match(r);if(!m)continue;const d=l.slice(m.index+m[0].length-m[1].length).match(DATE);if(d&&d.index===0)continue;const fx=FIXN(m[1]);if(fx)return [0,fx]}}
+ const ln=looseNo(L);if(ln)return [0,ln];
  return null}
 /* tax flag letters printed after prices (T taxable, F or N non-taxable). A legend such as "T = TAXABLE  F = NON-TAXABLE" overrides the defaults. */
 function taxFlags(text){const nt=new Set(['N','F','E']),tx=new Set(['T','X','A','B','Y']);
