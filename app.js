@@ -104,7 +104,7 @@ function compute(r){const o={};if(r.mode=='purchase'){const A=r.items;A.forEach(
  if(r.expected&&A.length!=r.expected)o.warn.push('Receipt lists '+r.expected+' items; '+A.length+' found here.');
  if(r.tax===undefined||r.tax==='')o.warn.push('Tax not entered; total excludes tax.')}
  else{const rt=N(r.roundTrip),hr=N(r.hours),ot=N(r.overtime);o.rt=rt;o.tot=hr==null&&ot==null?null:+((hr||0)+(ot||0)).toFixed(2);o.rate=Parser.irs(r.jobDate);o.wear=rt!=null&&o.rate!=null?+(rt*o.rate).toFixed(2):null}return o}
-function calc(){const r=S.rec;if(!r)return;const o=compute(r);if(r.mode=='purchase'){$('#calc').innerHTML='';persist();return}
+function calc(){const r=S.rec;if(!r)return;const o=compute(r);if(r.mode=='purchase'||S.mode=='purchase'){$('#calc').innerHTML='';persist();return}
  const row=(l,v,sub)=>'<div class="crow"><div class="cl">'+l+'</div><div class="cv">'+v+(sub?'<small>'+sub+'</small>':'')+'</div></div>',
   us=d=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d||''));return m?m[2]+'/'+m[3]+'/'+m[1]:d};
  let h='<div class="cal2"><h3>Calculated</h3>';
@@ -241,7 +241,7 @@ async function addShots(files){let r=S.rec;if(!r.doc){S.rec=r=newRec();r.loaded=
   catch(e){bad++}}
  $('#file').value='';S.undo=[];S.redo=[];ensureItem(r);render();renderPages();try{if(localStorage.getItem('ppClip')&&r.items.some(phVague))setTimeout(()=>idPhotos().catch(()=>{}),400)}catch(e){}
  const n=r.items.length;
- if(bad||dup)st((bad?bad+' screenshot'+(bad>1?'s':'')+' could not be read. ':'')+(dup?'Skipped '+dup+' repeated line'+(dup>1?'s':'')+' from overlapping screenshots.':''));else toast(n+' item'+(n==1?'':'s')+' from '+r.shots+' screenshot'+(r.shots>1?'s':''))}
+ if(bad)st(bad+' screenshot'+(bad>1?'s':'')+' could not be read.');else toast(n+' item'+(n==1?'':'s')+' from '+r.shots+' screenshot'+(r.shots>1?'s':''))}
 const FLUFF=/\b(?:Resettable|Portable|Compact|Thickened|Texture|Universal|Sports|Durable|Premium|Upgraded|Professional|Multifunctional)\b/gi;
 function tidyName(n){let t=String(n||'').replace(/\bCombination\b/gi,'Combo').replace(/\b(\d+)\s?pes\b/gi,'$1pc').replace(/\s+\b(?:a|an|the)\b(?=\s)/gi,'').replace(/\bwith\b/gi,'w/').replace(/\s{2,}/g,' ').trim();
  const d=t.replace(FLUFF,'').replace(/\s{2,}/g,' ').trim();if(/[A-Za-z]{3,}/.test(d.replace(/\b(?:\d+pc|set|of)\b/gi,'')))t=d;
@@ -250,7 +250,7 @@ function tidyName(n){let t=String(n||'').replace(/\bCombination\b/gi,'Combo').re
 function itemsHtml(){const r=S.rec,on=r.items.filter(i=>!i.off).length;r.items.forEach(it=>{it.n=tidyName(it.n)});
  const card=(it,i)=>`<div class="ic${it.off?' off':''}"><button class="ck" onclick="tog(${i})" aria-label="Include or exclude item">${it.off?'':'✓'}</button><div class="ib"><label class="nl">Item name</label><textarea class="in" rows="2" placeholder="Item name" oninput="it(${i},'n',this.value)">${esc(it.n)}</textarea>${it.inf?'<div class="inf">Receipt title was cut off. Completed based on available context.</div>':''}<div class="il"><div class="mf"><label>Qty</label><input class="q" type="number" inputmode="numeric" value="${it.q}" oninput="it(${i},'q',this.value)"></div><span class="mx">×</span><div class="mf"><label>Price</label><input class="p" type="number" inputmode="decimal" step="0.01" value="${it.p}" oninput="it(${i},'p',this.value)"></div><div class="tt"><label>Total</label><b id="it_${i}">${M(+((it.q||0)*(it.p||0)).toFixed(2))}</b></div></div></div><button class="x" onclick="r_del(${i})" aria-label="Delete item">✕</button></div>`;
  return '<section class="grp"><div class="ih"><h3>Items</h3>'+(r.items.length?'<span class="chip">'+on+' of '+r.items.length+' work-related</span>':'')+'</div>'
- +(r.items.length?'<p class="ihint">Tap the check to leave out personal items.</p>':'<div class="empty">No items could be read from this receipt. Add them below, or use Identify unclear items.</div>')
+ +(r.items.length?'<p class="ihint">Remove personal items by tapping on the checkmark beside it.</p>':'<div class="empty">No items could be read from this receipt. Add them below, or use Identify unclear items.</div>')
  +r.items.map(card).join('')
  +'<button class="addi" onclick="S.rec.items.push({n:\'\',q:1,p:0});render()">+ Add item</button><button class="lnk idb" onclick="idPhotos()">Identify unclear items from their photos</button><div id="idst" class="hint"></div>'+idHtml()+'</section>'}
 function tog(i){const it=S.rec.items[i];pushU();it.off=!it.off;const r=autoRedact(it);render();if(r!=null)if(r=='none')snack('Could not find this item on the receipt. Redact it by hand.')}
@@ -453,7 +453,7 @@ function itemThumb(it){const b=bandsFor(it)[0];if(!b)return null;const pg=S.page
  const sy=Math.max(0,Math.round(b.y*pg.h)),side=Math.max(16,Math.min(Math.round(b.h*pg.h),Math.round(pg.w*.5),pg.h-sy)),c=document.createElement('canvas');c.width=c.height=224;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,224,224);x.drawImage(pg.c,0,sy,side,side,0,0,224,224);return c}
 function phApply(it,label){const m=String(it.n||'').match(/^(\d+pc\s+)/i),pre=m?m[1]:'',rest=String(it.n||'').replace(/^\d+pc\s*/i,'').replace(/^Set of\s+/i,'').trim(),ws=rest.split(/\s+/).filter(Boolean);return pre+(ws.length&&ws.length<=2?rest+' ':'')+phTitle(label)}
 async function idPhotos(){const its=S.rec.items.filter(phVague),e=()=>$('#idst');
- if(!its.length){if(e())e().textContent='Every item name already looks clear.';return}
+ if(!its.length){if(e())e().textContent='Looks good!';return}
  if(e())e().textContent='Loading the on-device model (first time downloads about 100 MB)…';
  let clf;try{clf=await loadClip()}catch(x){if(e())e().textContent='Could not load the on-device model. Check your connection and try again. ('+String((x&&x.message)||x).slice(0,80)+')';return}
  S.idRes=S.idRes||[];let n=0;
