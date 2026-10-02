@@ -5,7 +5,7 @@ const est=r=>Parser.net30(r.endDate||r.jobDate);
 const chk=()=>S.rec.location?true:(st('Enter the job location first.'),false);
 const IOS=/iPhone|iPad|iPod/.test(navigator.userAgent);
 const gurl=(r,c)=>(c?'googlechromes://':'https://')+'www.google.com/search?q='+encodeURIComponent('round trip driving distance from '+S.start+' to '+(r.location||''));
-const N=v=>{const n=parseFloat(String(v).replace(/[$,]/g,''));return isNaN(n)?null:n},M=v=>v==null?'Not entered':'$'+v.toFixed(2);
+const N=v=>{const n=parseFloat(String(v).replace(/[$,]/g,''));return isNaN(n)?null:n},M=v=>v==null?'Not entered':(v<0?'-$':'$')+Math.abs(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 const PF={purchase:[['date','Date'],['merchant','Merchant'],['location','Location (city, state)'],['number','Receipt/Invoice #'],['tax','Tax'],['extSub','Subtotal $'],['extTotal','Total $']],
 freelance:[['employer','Employer'],['client','Client'],['jobDate','Job date'],['endDate','Event end date'],['location','Job location'],['roundTrip','Round-trip miles'],['hours','Total regular'],['overtime','Total overtime'],['amount','Amount $'],['invoice','Invoice #'],['notes','Notes']]};
 function setMode(m){showWork();S.mode=m;S.rec=newRec();S.pages=[];S.undo=[];S.redo=[];{const dw=$('#docwrap');if(dw)dw.style.display='none'}$('.head h1').textContent=m=='purchase'?'':'New work invoice record';$('#m1').className=m=='purchase'?'on':'';$('#m2').className=m=='freelance'?'on':'';render();renderPages()}
@@ -142,7 +142,7 @@ function calc(){const r=S.rec;if(!r)return;const o=compute(r);if(r.mode=='purcha
 document.addEventListener('selectionchange',updBar);
 function addSel(){const v=(S.sel.length?selText():getSelection().toString().trim()),k=$('#addto').value,r=S.rec;if(k=='+item'){const m=v.match(/(\d+[.,]\d{2})\s*$/);r.items.push({n:v.replace(/\$?\s?\d+[.,]\d{2}\s*$/,'').trim(),q:1,p:m?N(m[1].replace(',','.')):0});render()}else{r[k]=v.replace(/^\$/,'');r.edited[k]=1;render()}getSelection().removeAllRanges();clearSel()}
 /* ---------- output ---------- */
-const fm=v=>v==null?null:'$'+v.toFixed(2);
+const fm=v=>v==null?null:M(v);
 /* Uniform record layout (same for every log): title, info table, detail table (shaded), totals table.
    groups: [{k:'info'|'det'|'tot', rows:[[label,value]]}] */
 const niceMerch=m=>{m=String(m||'').trim();return m.length>=4&&m===m.toUpperCase()&&/[A-Z]/.test(m)?m.toLowerCase().replace(/\b[a-z]/g,c=>c.toUpperCase()):m};
@@ -152,7 +152,7 @@ function rows(r){if(r.mode=='summary')return sumRows(r);const o=compute(r),G=[],
   const t=g('tot');t('Subtotal',M(o.sub));if(o.ship)t('Shipping',M(o.ship));if(o.disc)t('Discount','-'+M(o.disc));if(N(r.tax)!=null)t('Tax',M(o.tax));t('Total',M(o.total));
   return{t:'EXPENSE SUMMARY',G:G.filter(x=>x.rows.length)}}
  const i=g('info');i('Date',r.jobDate);i('Employer',r.employer);i('Client',r.client);i('Location',r.location);i('Invoice #',r.invoice);
- const d=g('det');d('Round-Trip Distance',o.rt!=null?o.rt.toFixed(1)+' mi':null);d('IRS Rate',o.rate!=null&&o.rt!=null?'$'+o.rate+'/mi':null);
+ const d=g('det');d('Round-Trip Distance',o.rt!=null?o.rt.toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:1})+' mi':null);d('IRS Rate',o.rate!=null&&o.rt!=null?'$'+o.rate+'/mi':null);
  const t=g('tot');t('Amount Paid',fm(N(r.amount)));t('Mileage Deduction',fm(o.wear));
  return{t:'INVOICE SUMMARY',G:G.filter(x=>x.rows.length)}}
 /* plain text (print + fallback) */
@@ -229,7 +229,7 @@ function svSort(v){S.sv.sort=v;renderRecs()}
 function svCopy(){const l=svList().map(x=>x[0]).sort((p,q)=>key(p)-key(q));if(!l.length)return;if(S.sv.sec=='x'&&S.sv.cat=='All')l.push({mode:'summary'});copy(l)}
 function delRec(i){if(!confirm('Delete this saved record?'))return;S.records.splice(i,1);renderRecs();store()}
 function delAllRecs(){if(!confirm('Delete all '+S.records.length+' saved records from this phone?'))return;S.records=[];renderRecs();store()}
-function renderRecs(){persist();const nb=$('#m3');if(nb)nb.textContent='Saved'+(S.records.length?' ('+S.records.length+')':'');const el=$('#savedview');if(!el||S.tab!='saved')return;
+function renderRecs(){persist();const nb=$('#m3');if(nb)nb.textContent='Saved';const el=$('#savedview');if(!el||S.tab!='saved')return;
  const nx=S.records.filter(r=>r.mode=='purchase').length,nw=S.records.length-nx;
  if(!S.records.length){el.innerHTML='<div class="sv"><div class="empty2">Nothing saved yet.<br>Fill in a record and tap Save record. It will show up here.</div></div>';return}
  const x=S.sv.sec=='x',cnt={};S.records.filter(r=>r.mode=='purchase').forEach(r=>{const c=recCat(r);cnt[c]=(cnt[c]||0)+1});
@@ -238,8 +238,8 @@ function renderRecs(){persist();const nb=$('#m3');if(nb)nb.textContent='Saved'+(
  const list=svList(),tot=+list.reduce((s,[r])=>s+(recAmt(r)||0),0).toFixed(2),T=totals(),trow=(l,v)=>`<div class="srow"><div class="sm">${l}</div><b>${M(v)}</b></div>`,
  row=([r,i])=>{const pur=r.mode=='purchase',nm=esc((pur?niceMerch(r.merchant):r.client)||(pur?'Receipt':'Work invoice')),sub=[pur?r.date:r.jobDate,pur?r.category:null,r.location].filter(Boolean).map(esc).join(' · ');
   return `<div class="srow"><div class="sm"><div class="s1">${nm}</div>${sub?`<div class="s2">${sub}</div>`:''}</div><b>${M(recAmt(r))}</b><button class="x" onclick="delRec(${i})" aria-label="Delete saved record">✕</button></div>`};
- el.innerHTML='<div class="sv"><div class="seg"><button class="'+(x?'on':'')+'" onclick="svSec(\'x\')">Expenses ('+nx+')</button><button class="'+(x?'':'on')+'" onclick="svSec(\'w\')">Work invoices ('+nw+')</button></div>'
- +(x&&cats.length>1?'<div class="chips"><button class="'+(S.sv.cat=='All'?'on':'')+'" onclick="svCat(\'All\')">All '+nx+'</button>'+cats.map(c=>'<button class="'+(S.sv.cat==c?'on':'')+'" onclick="svCat(\''+c+'\')">'+c+' '+cnt[c]+'</button>').join('')+'</div>':'')
+ el.innerHTML='<div class="sv"><div class="seg"><button class="'+(x?'on':'')+'" onclick="svSec(\'x\')">Expenses</button><button class="'+(x?'':'on')+'" onclick="svSec(\'w\')">Work invoices</button></div>'
+ +(x&&cats.length>1?'<div class="chips"><button class="'+(S.sv.cat=='All'?'on':'')+'" onclick="svCat(\'All\')">All</button>'+cats.map(c=>'<button class="'+(S.sv.cat==c?'on':'')+'" onclick="svCat(\''+c+'\')">'+c+'</button>').join('')+'</div>':'')
  +'<div class="srt"><label for="svsort">Sort</label><select id="svsort" onchange="svSort(this.value)">'+SORTS.map(([v,l])=>'<option value="'+v+'"'+(S.sv.sort==v?' selected':'')+'>'+l+'</option>').join('')+'</select></div>'
  +(list.length?'<div class="svsum"><span>'+(x&&S.sv.cat!='All'?list.length+' in '+S.sv.cat:list.length+' '+(x?'expense':'work invoice')+(list.length==1?'':'s'))+'</span><b>'+M(tot)+'</b></div><div class="sl">'+list.map(row).join('')+'</div>':'<div class="empty2">'+(x?'No expenses saved yet.':'No work invoices saved yet.')+'</div>')
  +(x&&T.n&&S.sv.cat=='All'?`<div class="sl"><h4>Expense totals</h4>${T.months.map(([l,v])=>trow(l,v)).join('')}${T.years.length>1?T.years.map(([l,v])=>trow(l+' total',v)).join(''):''}${T.cats.map(([l,v])=>trow(l,v)).join('')}${trow('Total expenses',T.all)}</div>`:'')

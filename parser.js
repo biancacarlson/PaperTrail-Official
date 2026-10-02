@@ -177,7 +177,7 @@ function parse(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(t
    if(drow.length){const r=drow.map(l=>l.match(tri)),h=r.reduce((a,m)=>a+ +m[1],0),amt=r.reduce((a,m)=>a+ +m[3].replace(/,/g,''),0),low=Math.min(...r.map(m=>+m[2].replace(/,/g,'')));
     set('hours',String(h));if(!found.amount)set('amount',amt.toFixed(2));
     const ot=L.filter(l=>!/^\d{1,2}\/\d{1,2}\/\d{2,4}/.test(l)&&tri.test(l)).map(l=>l.match(tri)).filter(m=>+m[2].replace(/,/g,'')>low+.01).reduce((a,m)=>a+ +m[1],0);
-    const sub=L.filter(l=>!/^\d{1,2}\/\d{1,2}\/\d{2,4}/.test(l)&&tri.test(l)).map(l=>l.match(tri)),money=v=>'$'+(+v.replace(/,/g,'')).toFixed(2);
+    const sub=L.filter(l=>!/^\d{1,2}\/\d{1,2}\/\d{2,4}/.test(l)&&tri.test(l)).map(l=>l.match(tri)),money=v=>'$'+(+v.replace(/,/g,'')).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
     if(ot){set('overtime',String(ot));set('hours',String(+(h-ot).toFixed(2)));delete F.notes;delete found.notes;
      if(sub.length>1){const pr=sub.map(m=>m[1]+' hrs × '+money(m[2])+' = '+money(m[3]));const lo=Math.min(...sub.map(m=>+m[2].replace(/,/g,''))),hi=Math.max(...sub.map(m=>+m[2].replace(/,/g,'')));
       set('notes','Regular: '+pr[0]+'. Overtime: '+pr[pr.length-1]+(Math.abs(hi/lo-1.5)<.01?' (1.5× regular rate)':'')+'.')}}}}
