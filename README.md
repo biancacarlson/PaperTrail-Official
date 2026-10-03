@@ -11,7 +11,7 @@ PaperTrail runs in your browser. Upload a receipt, invoice, screenshot or photo,
 - **Save record** files the record in the **Saved** tab: Expenses in one list, Work invoices in the other. Expenses can be filtered by category (Gear only, Meals only, ...) and sorted by date (default, newest first) or by cost, high to low or low to high
 - Totals regular and overtime hours
 - Calculates wear and tear from the IRS business mileage rate for the job date
-- Calculates the Net 30 payout date from the event end date
+- Calculates the Net 30 payout date from the event end date. **Add to Calendar** creates an event on that date with the amount in the title (e.g. `Net-30 payout $1,250.00 - Client`), and the notes list the amount, client, invoice #, job and end dates, location and hours. The alert shows the amount too
 
 ## Mileage
 PaperTrail does not look up driving distance. Tap **Search in Safari** or **Search in Chrome** to open a Google search in a separate tab, then type the round-trip miles into **Round-trip miles**.
