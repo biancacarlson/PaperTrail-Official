@@ -77,9 +77,27 @@ function tapWord(el){if(!el||!el.dataset||el.dataset.i==null)return;const i=+el.
 function clearSel(){S.sel=[];S.psel=[];document.querySelectorAll('.wb.sel').forEach(e=>e.classList.remove('sel'));updBar()}
 function updBar(){const s=getSelection(),ok=s&&!s.isCollapsed&&($('#ocr').contains(s.anchorNode)||$('#pages').contains(s.anchorNode));$('#addbar').style.display=(ok||hasSel())?'block':'none';$('#selt').textContent=hasSel()?selText():''}
 function showOcr(){$('#docwrap').style.display='block'}
-function showDoc(u){showOcr();const v=$('#view');v.innerHTML='<div id="layer" style="position:absolute;top:0;left:0;width:100%;transform-origin:0 0"><img src="'+u+'" style="position:static;width:100%;display:block"></div>';const im=v.firstChild;S.z=1;S.x=S.y=0;const ap=()=>im.style.transform=`translate(${S.x}px,${S.y}px) scale(${S.z})`;im.style.width='100%';ap();
- const P=new Map();let d0=0;v.onpointerdown=e=>{v.setPointerCapture(e.pointerId);P.set(e.pointerId,e);d0=0;if(P.size==1){sx=e.clientX;sy=e.clientY;mv=0}else mv=1};let sx=0,sy=0,mv=0;v.onpointerup=e=>{const one=P.size==1&&!mv;P.delete(e.pointerId);if(one)tapWord(document.elementFromPoint(e.clientX,e.clientY))};v.onpointercancel=e=>P.delete(e.pointerId);
- v.onpointermove=e=>{const o=P.get(e.pointerId);if(!o)return;if(Math.hypot(e.clientX-sx,e.clientY-sy)>8)mv=1;if(P.size==2){const a=[...P.values()],d=Math.hypot(a[0].clientX-a[1].clientX,a[0].clientY-a[1].clientY);if(d0)S.z=Math.min(6,Math.max(1,S.z*d/d0));d0=d}else{S.x+=e.clientX-o.clientX;S.y+=e.clientY-o.clientY}P.set(e.pointerId,e);ap()}}
+/* v60: the invoice sits in the page at full height, so one finger scrolls the page. Pinch (or the Enlarge button) zooms; only while zoomed does one finger pan the image. */
+function showDoc(u){showOcr();const v=$('#view');v.style.height='';v.innerHTML='<div id="layer" style="position:absolute;top:0;left:0;width:100%;transform-origin:0 0"><img src="'+u+'" style="position:static;width:100%;display:block"></div><button type="button" class="zbtn">Enlarge</button>';
+ const im=v.firstChild,pic=im.firstChild,rb=v.lastChild;S.z=1;S.x=S.y=0;
+ const fit=()=>{if(S.z<=1&&im.offsetHeight)v.style.height=im.offsetHeight+'px'},
+ clampP=()=>{if(S.z<=1){S.x=S.y=0;return}const W=v.clientWidth,H=v.clientHeight,w=W*S.z,h=im.offsetHeight*S.z;S.x=w<=W?0:Math.min(0,Math.max(W-w,S.x));S.y=h<=H?0:Math.min(0,Math.max(H-h,S.y))},
+ ap=()=>{clampP();im.style.transform=`translate(${S.x}px,${S.y}px) scale(${S.z})`;v.style.touchAction=S.z>1?'none':'pan-y';rb.textContent=S.z>1?'Reset zoom':'Enlarge'},
+ zoomTo=(z,cx,cy)=>{const k=z/S.z;S.x=cx-(cx-S.x)*k;S.y=cy-(cy-S.y)*k;S.z=z;ap();if(z<=1)fit()};
+ pic.onload=()=>{fit();ap()};if(pic.complete)fit();ap();
+ rb.onpointerdown=e=>e.stopPropagation();rb.onpointerup=e=>e.stopPropagation();rb.onclick=e=>{e.stopPropagation();S.z>1?zoomTo(1,0,0):zoomTo(2.5,v.clientWidth/2,Math.min(v.clientHeight/2,200))};
+ const P=new Map();let d0=0,sx=0,sy=0,mv=0;
+ const mid=()=>{const a=[...P.values()];return[(a[0].clientX+a[1].clientX)/2,(a[0].clientY+a[1].clientY)/2]};
+ v.onpointerdown=e=>{try{v.setPointerCapture(e.pointerId)}catch(_){}P.set(e.pointerId,e);d0=0;if(P.size==1){sx=e.clientX;sy=e.clientY;mv=0}else mv=1};
+ v.onpointerup=e=>{const one=P.size==1&&!mv;P.delete(e.pointerId);if(one)tapWord(document.elementFromPoint(e.clientX,e.clientY))};
+ v.onpointercancel=e=>P.delete(e.pointerId);
+ v.onpointermove=e=>{const o=P.get(e.pointerId);if(!o)return;if(Math.hypot(e.clientX-sx,e.clientY-sy)>8)mv=1;
+  const pm=P.size==2?mid():null;P.set(e.pointerId,e);
+  if(P.size==2){const a=[...P.values()],d=Math.hypot(a[0].clientX-a[1].clientX,a[0].clientY-a[1].clientY),m=mid(),r=v.getBoundingClientRect(),cx=m[0]-r.left,cy=m[1]-r.top;
+   if(d0){const z=Math.min(6,Math.max(1,S.z*d/d0)),k=z/S.z;S.x=cx-(cx-S.x)*k+(m[0]-pm[0]);S.y=cy-(cy-S.y)*k+(m[1]-pm[1]);S.z=z}d0=d}
+  else if(S.z>1){S.x+=e.clientX-o.clientX;S.y+=e.clientY-o.clientY}
+  ap();if(S.z<=1)fit()};
+ if(!window.__dvr){window.__dvr=1;addEventListener('resize',()=>{const l=$('#layer'),w=$('#view');if(l&&w&&S.z<=1&&l.offsetHeight)w.style.height=l.offsetHeight+'px'})}}
 /* ---------- parsing (deterministic) ---------- */
 function parse(t){const r=S.rec,o=Parser.parse(t,r.mode);Object.assign(r,o.fields);r.src=Object.assign(r.src,o.found);if(r.mode=='purchase'){r.items=o.items;if(o.guess)r.gname=o.guess;ensureItem(r)}}
 /* Only a subtotal was readable (no per-item lines): keep the totals reconcilable with one clearly-flagged combined line. */
@@ -132,7 +150,7 @@ function compute(r){const o={};if(r.mode=='purchase'){const A=r.items;A.forEach(
 /* v57: once any item is left out (unchecked, or covered by a black bar), show the same Subtotal / Tax / Total the saved PDF summary shows. Nothing is shown while every item counts. */
 function purTot(r,o){if(r.mode!='purchase'||!o.nOff)return '';const row=(l,v,sub)=>'<div class="crow"><div class="cl">'+l+'</div><div class="cv">'+v+(sub?'<small>'+sub+'</small>':'')+'</div></div>';
  return '<div class="cal2"><h3>After removed items</h3>'+row('Subtotal',M(o.sub))+(o.ship?row('Shipping',M(o.ship)):'')+(o.disc?row('Discount','-'+M(o.disc)):'')+(N(r.tax)!=null?row('Tax',M(o.tax),N(r.tax)?'adjusted to work items':''):'')+row('Total',M(o.total))+'</div>'}
-function calc(){const r=S.rec;if(!r)return;const o=compute(r);if(r.mode=='purchase'||S.mode=='purchase'){$('#calc').innerHTML=purTot(r,o);persist();return}
+function calc(){const r=S.rec;if(!r)return;try{dupWarn()}catch(e){}const o=compute(r);if(r.mode=='purchase'||S.mode=='purchase'){$('#calc').innerHTML=purTot(r,o);persist();return}
  const row=(l,v,sub)=>'<div class="crow"><div class="cl">'+l+'</div><div class="cv">'+v+(sub?'<small>'+sub+'</small>':'')+'</div></div>',
   us=d=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d||''));return m?m[2]+'/'+m[3]+'/'+m[1]:d};
  let h='<div class="cal2"><h3>Calculated</h3>';
@@ -205,7 +223,7 @@ async function saveImg(){try{const b=await recsBlob([S.rec]),f=new File([b],inam
 function toast(m){$('#status').style.color='#0a0';$('#status').textContent=m;setTimeout(()=>{$('#status').textContent='';$('#status').style.color=''},2500)}
 const noun=()=>S.mode=='purchase'?'Receipt':'Call Sheet';const cpLabel=()=>'Copy '+noun()+' Text';
 let ct;const copyRec=async()=>{if(await copy([S.rec])){const b=$('#cpbtn');clearTimeout(ct);requestAnimationFrame(()=>{b.textContent='Copied'});ct=setTimeout(()=>requestAnimationFrame(()=>{b.textContent=cpLabel()}),2500)}};
-function saveRec(){if(!S.rec||!S.rec.loaded)return;const j=JSON.stringify(S.rec);if(S.records.some(x=>JSON.stringify(x)===j))return toast('Already saved');S.records.push(JSON.parse(j));S.sv.sec=S.rec.mode=='purchase'?'x':'w';S.sv.cat='All';store();showSaved();toast('Added to Saved')}
+function saveRec(){if(!S.rec||!S.rec.loaded)return;const j=JSON.stringify(S.rec);if(S.records.some(x=>JSON.stringify(x)===j))return toast('Already saved');if(S.records.some(x=>sameRec(S.rec,x))&&!confirm('You already have this one saved. Save it again anyway?'))return;S.records.push(JSON.parse(j));S.sv.sec=S.rec.mode=='purchase'?'x':'w';S.sv.cat='All';store();showSaved();toast('Added to Saved')}
 function key(r){const d=Parser.pd(r.date||r.jobDate);return d?+d:Infinity}
 /* expense totals (Expense records only): by month, by year (when more than one), by category */
 function totals(){const m={},y={},c={};let all=0;S.records.filter(r=>r.mode=='purchase').forEach(r=>{const t=compute(r).total||0,d=Parser.pd(r.date),p=n=>String(n).padStart(2,'0'),mk=d?d.getFullYear()+'-'+p(d.getMonth()+1):'0000',yk=d?String(d.getFullYear()):'0000',ck=r.category||'Uncategorized';m[mk]=(m[mk]||0)+t;y[yk]=(y[yk]||0)+t;c[ck]=(c[ck]||0)+t;all+=t});
@@ -232,7 +250,7 @@ function svSort(v){S.sv.sort=v;renderRecs()}
 function svCopy(){const l=svList().map(x=>x[0]).sort((p,q)=>key(p)-key(q));if(!l.length)return;if(S.sv.sec=='x'&&S.sv.cat=='All')l.push({mode:'summary'});copy(l)}
 function delRec(i){if(!confirm('Delete this saved record?'))return;S.records.splice(i,1);renderRecs();store()}
 function delAllRecs(){if(!confirm('Delete all '+S.records.length+' saved records from this phone?'))return;S.records=[];renderRecs();store()}
-function renderRecs(){persist();const nb=$('#m3');if(nb)nb.textContent='Saved';const el=$('#savedview');if(!el||S.tab!='saved')return;
+function renderRecs(){persist();try{dupWarn()}catch(e){}const nb=$('#m3');if(nb)nb.textContent='Saved';const el=$('#savedview');if(!el||S.tab!='saved')return;
  const nx=S.records.filter(r=>r.mode=='purchase').length,nw=S.records.length-nx;
  if(!S.records.length){el.innerHTML='<div class="sv"><div class="empty2">Nothing saved yet.<br>Fill in a record and tap Save record. It will show up here.</div></div>';return}
  const x=S.sv.sec=='x',cnt={};S.records.filter(r=>r.mode=='purchase').forEach(r=>{const c=recCat(r);cnt[c]=(cnt[c]||0)+1});
@@ -240,14 +258,14 @@ function renderRecs(){persist();const nb=$('#m3');if(nb)nb.textContent='Saved';c
  if(S.sv.cat!='All'&&!cnt[S.sv.cat])S.sv.cat='All';
  const list=svList(),tot=+list.reduce((s,[r])=>s+(recAmt(r)||0),0).toFixed(2),T=totals(),trow=(l,v)=>`<div class="srow"><div class="sm">${l}</div><b>${M(v)}</b></div>`,
  row=([r,i])=>{const pur=r.mode=='purchase',nm=esc((pur?niceMerch(r.merchant):r.client)||(pur?'Receipt':'Work invoice')),sub=[pur?r.date:r.jobDate,pur?r.category:null,r.location].filter(Boolean).map(esc).join(' · ');
-  return `<div class="srow"><div class="sm"><div class="s1">${nm}</div>${sub?`<div class="s2">${sub}</div>`:''}</div><b>${M(recAmt(r))}</b><button class="x" onclick="delRec(${i})" aria-label="Delete saved record">✕</button></div>`};
+  return `<div class="srow tap" role="button" tabindex="0" onclick="openRec(${i})" onkeydown="if(event.key=='Enter')openRec(${i})"><div class="sm"><div class="s1">${nm}</div>${sub?`<div class="s2">${sub}</div>`:''}</div><b>${M(recAmt(r))}</b><button class="x" onclick="event.stopPropagation();delRec(${i})" aria-label="Delete saved record">✕</button></div>`};
  el.innerHTML='<div class="sv"><div class="seg"><button class="'+(x?'on':'')+'" onclick="svSec(\'x\')">Expenses</button><button class="'+(x?'':'on')+'" onclick="svSec(\'w\')">Work invoices</button></div>'
  +(x&&cats.length>1?'<div class="chips"><button class="'+(S.sv.cat=='All'?'on':'')+'" onclick="svCat(\'All\')">All</button>'+cats.map(c=>'<button class="'+(S.sv.cat==c?'on':'')+'" onclick="svCat(\''+c+'\')">'+c+'</button>').join('')+'</div>':'')
  +'<div class="srt"><label for="svsort">Sort</label><select id="svsort" onchange="svSort(this.value)">'+SORTS.map(([v,l])=>'<option value="'+v+'"'+(S.sv.sort==v?' selected':'')+'>'+l+'</option>').join('')+'</select></div>'
  +(list.length?'<div class="svsum"><span>'+(x&&S.sv.cat!='All'?list.length+' in '+S.sv.cat:list.length+' '+(x?'expense':'work invoice')+(list.length==1?'':'s'))+'</span><b>'+M(tot)+'</b></div><div class="sl">'+list.map(row).join('')+'</div>':'<div class="empty2">'+(x?'No expenses saved yet.':'No work invoices saved yet.')+'</div>')
  +(x&&T.n&&S.sv.cat=='All'?`<div class="sl"><h4>Expense totals</h4>${T.months.map(([l,v])=>trow(l,v)).join('')}${T.years.length>1?T.years.map(([l,v])=>trow(l+' total',v)).join(''):''}${T.cats.map(([l,v])=>trow(l,v)).join('')}${trow('Total expenses',T.all)}</div>`:'')
  +(list.length?'<button class="pri" onclick="svCopy()">Copy '+(list.length==1?'this record':'these '+list.length+' records')+'</button>':'')
- +'<button onclick="delAllRecs()">Delete all saved records</button><div class="hint">Saved on this phone only, encrypted with your passcode. Receipt images are not kept; use Save as PDF for those.</div></div>'}
+ +'<button onclick="delAllRecs()">Delete all saved records</button><div class="hint">Saved on this phone only, encrypted with your passcode. Tap a record to open it and download its summary PDF. Receipt images are not kept; use Save as PDF for those.</div></div>'}
 
 function dl(f){const r=S.rec,o=compute(r);let d,n='record.'+f;if(f=='json')d=JSON.stringify({...r,calculated:o},null,1);else{const rows=r.mode=='purchase'?[['Item','Qty','Unit','Total'],...r.items.filter(i=>!i.off).map(i=>[i.n,i.q,i.p,i.t]),['Subtotal','','',o.sub],...(o.disc?[['Discount','','',-o.disc]]:[]),['Tax','','',N(r.tax)==null?'':o.tax],['Total','','',o.total]]:[['Field','Value'],...text(r).filter(l=>l.includes(': ')).map(l=>l.split(/: (.*)/s).slice(0,2))];d=rows.map(x=>x.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(',')).join('\n')}
  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([d]));a.download=n;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
@@ -417,9 +435,9 @@ async function savePdf(){const J=window.jspdf&&window.jspdf.jsPDF;if(!J)return s
  if(IOS&&navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f]});return}catch(e){if(e&&e.name=='AbortError')return}}
  const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=n;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);toast('Saved '+n)}
 /* one PDF: the uploaded invoice / receipt pages + the plain text summary. The summary shares a page with the image whenever it fits. */
-async function saveCombo(){const J=window.jspdf&&window.jspdf.jsPDF;if(!J)return st('The PDF tool did not load. Check your connection and reload.');
- try{const r=S.rec,{t,G}=rows(r),pur=S.mode=='purchase',M=36,LW=170;let imgs=[];
- if(pur)imgs=(S.pages||[]).map(p=>({u:baked(p).toDataURL('image/jpeg',.92),w:p.w,h:p.h}));
+async function saveCombo(rec){const J=window.jspdf&&window.jspdf.jsPDF;if(!J)return st('The PDF tool did not load. Check your connection and reload.');
+ try{const sv=rec&&rec.mode?rec:null,r=sv||S.rec,{t,G}=rows(r),pur=r.mode=='purchase',M=36,LW=170;let imgs=[];
+ if(sv)imgs=[];else if(pur)imgs=(S.pages||[]).map(p=>({u:baked(p).toDataURL('image/jpeg',.92),w:p.w,h:p.h}));
  else if(r.doc&&S.img&&S.dim)imgs=[{u:S.img,w:S.dim[0],h:S.dim[1]}];
  /* summary block: draws at (x0,y0) with width SW, returns its height; measure-only when draw is false */
  const sum=(d,x0,y0,SW,draw)=>{const R=x0+SW,VW=SW-LW-24;let y=y0;
@@ -441,7 +459,7 @@ async function saveCombo(){const J=window.jspdf&&window.jspdf.jsPDF;if(!J)return
   imgs.forEach((im,i)=>{const last=i==imgs.length-1,W=595,H=+(W*im.h/im.w).toFixed(2);
    if(last){add(W,H+14+sh+M);d.addImage(im.u,'JPEG',0,0,W,H);sum(d,M,H+14,W-2*M,true)}/* summary sits under the last page of the receipt, same page */
    else{add(W,H);d.addImage(im.u,'JPEG',0,0,W,H)}})}
- const p=n=>String(n).padStart(2,'0'),dt=Parser.pd(pur?r.date:(r.jobDate||r.date)),n=(dt?dt.getFullYear()+'-'+p(dt.getMonth()+1)+'-'+p(dt.getDate())+' ':'')+(pur?'Receipt and Summary.pdf':'Call Sheet Invoice and Summary.pdf'),f=new File([d.output('blob')],n,{type:'application/pdf'});
+ const p=n=>String(n).padStart(2,'0'),dt=Parser.pd(pur?r.date:(r.jobDate||r.date)),n=(dt?dt.getFullYear()+'-'+p(dt.getMonth()+1)+'-'+p(dt.getDate())+' ':'')+(sv?(pur?'Expense Summary.pdf':'Invoice Summary.pdf'):(pur?'Receipt and Summary.pdf':'Call Sheet Invoice and Summary.pdf')),f=new File([d.output('blob')],n,{type:'application/pdf'});
  if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f]});return}catch(e){if(e&&e.name=='AbortError')return}}
  const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=n;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);toast('Saved '+n)}
  catch(e){toast('Could not save PDF')}}
@@ -630,5 +648,35 @@ function idSkip(a){S.idRes.splice(a,1);render()}
 '.ic.off .ib textarea.in{background-color:var(--card)!important}'
 ].join('');document.head.appendChild(s)})();
 
+/* v59: tap a saved record to open it and download its summary PDF; warn when the record being prepared is already saved */
+const nk=v=>String(v||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+const recNum=r=>nk(r.mode=='purchase'?r.number:r.invoice),recWho=r=>nk(r.mode=='purchase'?niceMerch(r.merchant):r.client);
+function sameRec(a,b){if(!a||!b||a.mode!=b.mode)return false;
+ const na=recNum(a),nb=recNum(b),wa=recWho(a),wb=recWho(b),who=!wa||!wb||wa==wb||wa.includes(wb)||wb.includes(wa);
+ if(na.length>=3&&nb.length>=3)return na==nb&&who;
+ const ta=recAmt(a),tb=recAmt(b),da=recDate(a),db=recDate(b);
+ return !!wa&&wa==wb&&da!=null&&da==db&&ta!=null&&ta==tb&&ta>0}
+function dupWarn(){const el=$('#dupwarn');if(!el)return;const r=S.rec,m=r&&r.loaded?S.records.map((x,i)=>[x,i]).filter(([x])=>sameRec(r,x)):[];let h='';
+ if(m.length){const pur=r.mode=='purchase',[x,i]=m[0],a=recAmt(x),nm=esc((pur?niceMerch(x.merchant):x.client)||(pur?'Receipt':'Work invoice')),dt=esc((pur?x.date:x.jobDate)||''),
+  det=[nm,dt,a!=null&&a>0?M(a):''].filter(Boolean).join(' · ');
+  h=`<div class="dup" role="alert"><div><b>Already saved</b><span>${pur?'A receipt':'An invoice'} like this is already in Saved: ${det}${m.length>1?' (+'+(m.length-1)+' more)':''}</span></div><button onclick="openRec(${i})">View</button></div>`}
+ if(el.dataset.h!==h){el.dataset.h=h;el.innerHTML=h}}
+function openRec(i){const r=S.records[i];if(!r)return;closeRec();const{t,G}=rows(r),
+ h=G.map(g=>'<div class="rg">'+g.rows.map(([l,v,hl])=>`<div class="rr${hl?' hl':''}${g.k=='tot'?' tt':''}"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join('')+'</div>').join(''),
+ o=document.createElement('div');o.id='recmodal';o.className='rmo';o.onclick=e=>{if(e.target===o)closeRec()};
+ o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${h}</div><div class="rmf"><button class="pri" onclick="dlRec(${i})">Download PDF</button><button onclick="closeRec()">Close</button></div></div>`;
+ document.body.appendChild(o);document.body.style.overflow='hidden'}
+function closeRec(){const o=$('#recmodal');if(o)o.remove();document.body.style.overflow=''}
+function dlRec(i){const r=S.records[i];if(r)saveCombo(r)}
+document.addEventListener('keydown',e=>{if(e.key=='Escape')closeRec()});
+(function(){const s=document.createElement('style');s.textContent='#view{height:auto;min-height:120px;touch-action:pan-y}#layer{touch-action:auto!important}.zbtn{position:absolute;top:8px;right:8px;z-index:3;padding:6px 12px;font-size:13px;font-weight:700;border-radius:999px;background:rgba(255,255,255,.92);box-shadow:0 1px 4px rgba(0,0,0,.25)}'
+ +'.srow.tap{cursor:pointer}.srow.tap:active{background:rgba(0,0,0,.04)}'
+ +'.dup{display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:10px 12px;border:1px solid #e0a59b;background:var(--warn);border-radius:12px;font-size:14px}.dup>div{flex:1;min-width:0}.dup b{display:block}.dup span{display:block;font-size:13px;overflow-wrap:anywhere}.dup button{flex:0 0 auto;padding:8px 14px;font-weight:700}'
+ +'.rmo{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center}'
+ +'.rm{background:var(--bg);width:100%;max-width:520px;max-height:88vh;display:flex;flex-direction:column;border-radius:18px 18px 0 0;padding:14px 16px calc(14px + env(safe-area-inset-bottom,0px))}'
+ +'.rmh{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}.rmh h3{margin:0}.rmh .x{width:34px;height:34px;padding:0}'
+ +'.rmb{overflow-y:auto;flex:1;min-height:0}.rg{background:var(--card);border:1px solid var(--ln);border-radius:14px;padding:4px 14px;margin:0 0 10px}'
+ +'.rr{display:flex;justify-content:space-between;gap:12px;padding:7px 0;font-size:14px}.rr+.rr{border-top:1px solid var(--ln)}.rr span{color:var(--mut)}.rr b{text-align:right;overflow-wrap:anywhere}.rr.hl b{background:#fff2a8;padding:0 4px;border-radius:4px}.rr.tt{font-weight:700}'
+ +'.rmf{display:flex;gap:10px;margin-top:6px}.rmf button{flex:1}';document.head.appendChild(s)})();
 (function(){const s=document.createElement('style');s.textContent=['.sv{display:flex;flex-direction:column;gap:10px}.sv .sl{margin:0}.sv>button{width:100%}.sv .seg{margin:0}','.chips{display:flex;flex-wrap:wrap;gap:6px}.chips button{padding:6px 12px;border-radius:999px;font-size:13px;font-weight:600;background:#fff;color:var(--mut);border-color:var(--ln)}.chips button.on{background:var(--g);color:#fff;border-color:var(--g)}','.srt{display:flex;align-items:center;gap:10px}.srt label{flex:0 0 auto;margin:0}','.svsum{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:var(--mut);padding:0 2px}.svsum b{color:var(--fg);font-size:17px}','.sm{flex:1;min-width:0}.s1{font-weight:600;overflow-wrap:anywhere}.s2{font-size:12px;color:var(--mut);margin-top:1px}','.empty2{border:2px dashed var(--ln);border-radius:16px;padding:28px 16px;text-align:center;color:var(--mut)}','@media(max-width:900px){.nav button{padding:10px 6px;font-size:14px}}'].join('');document.head.appendChild(s)})();
 (function(){const s=document.createElement('style');s.textContent='.sl{background:var(--card);border:1px solid var(--ln);border-radius:14px;padding:6px 14px;margin:10px 0}.sl h4{margin:10px 0 2px;font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}.srow{display:flex;align-items:center;gap:10px;padding:9px 0;font-size:14px}.srow+.srow{border-top:1px solid var(--ln)}.srow span{flex:1;min-width:0}.srow b{white-space:nowrap}.srow .x{flex:0 0 32px;height:32px;padding:0}#f_category{width:100%}';document.head.appendChild(s)})();

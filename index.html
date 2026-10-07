@@ -41,8 +41,8 @@ label{display:block;font:600 10.5px var(--mono);letter-spacing:.1em;text-transfo
 .drop{border:2px dashed #cfcdc3;border-radius:16px;background:var(--card);padding:22px 18px;text-align:center}.drop small{display:block;color:var(--mut);margin-bottom:12px}
 .drop button{margin-top:12px;background:transparent}
 input[type=file]{border:0;background:transparent;padding:0;width:100%;max-width:100%}input[type=file]::file-selector-button{background:var(--g);color:#fff;border:0;border-radius:8px;padding:10px 16px;font-weight:600;margin-right:10px}
-#view{height:50vh;overflow:hidden;border:1px solid var(--ln);border-radius:16px;background:#fff;touch-action:none;position:relative}#view img{transform-origin:0 0;max-width:none;position:absolute;top:0;left:0}
-#layer{touch-action:none}.wb{position:absolute;border-radius:2px}.wb.sel{background:rgba(217,154,78,.5);outline:1px solid var(--amb)}.wb.lowc{outline:1px dashed #d33}
+#view{height:50vh;overflow:hidden;border:1px solid var(--ln);border-radius:16px;background:#fff;touch-action:pan-y;position:relative}#view img{transform-origin:0 0;max-width:none;position:absolute;top:0;left:0}
+.wb{position:absolute;border-radius:2px}.wb.sel{background:rgba(217,154,78,.5);outline:1px solid var(--amb)}.wb.lowc{outline:1px dashed #d33}
 #ocr{display:none!important;white-space:pre-wrap;max-height:20vh;overflow:auto;border:1px solid var(--ln);border-radius:12px;padding:12px;font:12.5px/1.5 var(--mono);background:var(--card);user-select:text;margin-top:12px}
 #addbar{display:none;position:sticky;top:0;z-index:5;padding:10px;background:var(--card);border:1px solid var(--g);border-radius:12px;margin-top:10px}
 .out{display:flex;flex-direction:column;gap:16px;min-width:0}
@@ -75,7 +75,7 @@ input[type=file]{border:0;background:transparent;padding:0;width:100%;max-width:
 <div id="lock"></div>
 <div id="app"><div class="shell">
 <div class="side">
-<div class="brand"><span class="logo">$</span><b>PaperTrail</b><span class="pill" id="ver">v57</span></div>
+<div class="brand"><span class="logo">$</span><b>PaperTrail</b><span class="pill" id="ver">v60</span></div>
 <div class="nav"><div class="gt">Record type</div><button id="m1" onclick="goMode('purchase')">Expense</button><button id="m2" onclick="goMode('freelance')">Work Invoice</button><button id="m3" onclick="showSaved()">Saved</button></div>
 <div class="sp"></div>
 <details><summary>Settings</summary><label>Auto-logout after idle (minutes) - locks the app; saved records stay encrypted on this phone</label><input id="idle" type="number" min="1" value="15" onchange="setIdle()"><button onclick="nuke()">Delete all saved records</button></details>
@@ -92,7 +92,7 @@ input[type=file]{border:0;background:transparent;padding:0;width:100%;max-width:
 <div id="pages"></div>
 </div>
 <div class="out">
-<div id="form"></div><div id="calc"></div>
+<div id="dupwarn"></div><div id="form"></div><div id="calc"></div>
 <div id="copypanel" class="panel" style="display:none"><div id="copymsg" class="msg" style="color:var(--fg)"></div><textarea id="copyta" readonly rows="14" style="font:13px/1.4 var(--mono)"></textarea></div>
 <div id="actions"><div class="acts"><button id="imgbtn" class="pri" onclick="saveCombo()">Save as PDF</button><button id="svbtn" onclick="saveRec()">Save record</button></div>
 <div class="quiet"><button onclick="clearAll()">Clear all</button><button onclick="dl('json')">JSON</button></div></div>
