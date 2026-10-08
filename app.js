@@ -272,7 +272,6 @@ function renderRecs(){persist();try{dupWarn()}catch(e){}const nb=$('#m3');if(nb)
  +(list.length?'<div class="svsum"><span>'+(x&&S.sv.cat!='All'?list.length+' in '+S.sv.cat:list.length+' '+(x?'expense':'work invoice')+(list.length==1?'':'s'))+'</span><b>'+M(tot)+'</b></div><div class="sl">'+list.map(row).join('')+'</div>':'<div class="empty2">'+(x?'No expenses saved yet.':'No work invoices saved yet.')+'</div>')
  +(x&&T.n&&S.sv.cat=='All'?`<div class="sl"><h4>Expense totals</h4>${T.months.map(([l,v])=>trow(l,v)).join('')}${T.years.length>1?T.years.map(([l,v])=>trow(l+' total',v)).join(''):''}${T.cats.map(([l,v])=>trow(l,v)).join('')}${trow('Total expenses',T.all)}</div>`:'')
  +(list.length?'<button class="pri" onclick="svCopy()">Copy '+(list.length==1?'this record':'these '+list.length+' records')+'</button>':'')
- +(localStorage.getItem('pt_hasold')?'<button onclick="importOld()">Bring over records from old passcode</button>':'')
  +'<button onclick="delAllRecs()">Delete all saved records</button><div class="hint">Saved on this phone only, encrypted with your passcode. Tap a record to open it and download its summary PDF. Receipt images are not kept; use Save as PDF for those.</div></div>'}
 
 function dl(f){const r=S.rec,o=compute(r);let d,n='record.'+f;if(f=='json')d=JSON.stringify({...r,calculated:o},null,1);else{const rows=r.mode=='purchase'?[['Item','Qty','Unit','Total'],...r.items.filter(i=>!i.off).map(i=>[i.n,i.q,i.p,i.t]),['Subtotal','','',o.sub],...(o.disc?[['Discount','','',-o.disc]]:[]),['Tax','','',N(r.tax)==null?'':o.tax],['Total','','',o.total]]:[['Field','Value'],...text(r).filter(l=>l.includes(': ')).map(l=>l.split(/: (.*)/s).slice(0,2))];d=rows.map(x=>x.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(',')).join('\n')}
@@ -726,7 +725,7 @@ function ui(tab){
  +'<input id="em" type="email" inputmode="email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="Email" value="'+esc(up?'':last)+'">'
  +'<input id="pw" type="password" autocomplete="'+(up?'new-password':'current-password')+'" placeholder="Password'+(up?' (8+ characters)':'')+'">'
  +(up?'<input id="pw2" type="password" autocomplete="new-password" placeholder="Confirm password">'
-   +'<input id="old" type="password" autocomplete="off" placeholder="Old passcode (optional: bring over records saved before accounts)">'
+   +(legacy?'<input id="old" type="password" autocomplete="off" placeholder="Old passcode (optional: bring over records saved before accounts)">':'')
    +'<div class="hint" style="font-size:13px;color:var(--mut);margin:2px 0 8px">Your records are encrypted on this device with this password. There is no reset: if you forget it, the saved records cannot be opened.</div>'
    +'<button class="pri" type="button" onclick="authUp()">Create account</button>'
   :'<button class="pri" type="button" onclick="authIn()">Sign in</button>'
@@ -738,13 +737,14 @@ window.authTab=ui;
 window.showLock=function(){
  /* is there a pre-accounts vault on this device? (offers the "old passcode" link) */
  S.uid=null;ui('in');
- idb('get').then(x=>{if(x&&x.iv&&!legacy){legacy=true;try{localStorage.setItem('pt_hasold','1')}catch(e){}if($('#em')&&!$('#pw2'))ui('in')}}).catch(()=>{});
+ idb('get').then(x=>{if(x&&x.iv&&!legacy){legacy=true;if($('#em')&&!$('#pw2'))ui('in')}}).catch(()=>{});
 };
 
 async function enter(uid,em,pw,o,recs){
  S.uid=uid;S.email=em;S.key=await dk(pp(em,pw),o.e);S.records=recs||[];S.noStore=false;
  try{const x=await idb('get');if(x&&x.iv){try{S.records=await dec(x)}catch(e){S.noStore=true;S.records=[]}}}catch(e){}
  S.loaded=true;try{localStorage.setItem(LAST,em)}catch(e){}
+ bringBtn(true);
  const v=$('#ver');if(v)v.title=em;
  open_();
  if(recs&&recs.length&&!S.noStore)await store();
@@ -753,7 +753,7 @@ async function enter(uid,em,pw,o,recs){
 
 window.authUp=async function(){
  try{
-  const em=norm($('#em').value),p1=$('#pw').value,p2=$('#pw2').value,old=$('#old').value;
+  const em=norm($('#em').value),p1=$('#pw').value,p2=$('#pw2').value,old=$('#old')?$('#old').value:'';
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(em))return msg('Enter a valid email address.');
   if(p1.length<8)return msg('Use at least 8 characters for the password.');
   if(p1!==p2)return msg('The two passwords do not match.');
@@ -786,29 +786,35 @@ window.authIn=async function(){
 };
 
 /* pre-accounts single passcode, for the owner's existing saved records */
+function bringBtn(on){
+ let b=$('#bring');
+ if(!b){const d=document.querySelector('.side details');if(!d)return;b=document.createElement('button');b.id='bring';b.type='button';b.textContent='Bring over records saved before accounts';b.onclick=window.authBring;d.appendChild(b)}
+ b.style.display=on&&legacy?'':'none';
+}
+/* copy (never move) the pre-accounts records into the signed-in account; the old vault is left untouched */
+window.authBring=async function(){
+ if(!S.uid||!S.key)return;
+ const v=prompt('Enter your old passcode to copy the records saved before accounts into this account:');if(!v)return;
+ const uid=S.uid,key=S.key;let recs=null,err='';
+ try{
+  if(await hash(v,unhex(PW.s))!==PW.h)err='That old passcode is not correct.';
+  else{S.uid=null;const x=await idb('get');S.uid=uid;if(!x||!x.iv)err='No old saved records were found on this device.';else{S.key=await dk(v,PW.e);recs=await dec(x)}}
+ }catch(e){err='The old saved records could not be opened.'}
+ S.uid=uid;S.key=key;
+ if(err||!recs)return alert(err||'Nothing to copy.');
+ const have=new Set(S.records.map(r=>JSON.stringify(r)));const add=recs.filter(r=>!have.has(JSON.stringify(r)));
+ S.records=S.records.concat(add);await store();try{renderRecs()}catch(e){}
+ toast(add.length+' record'+(add.length==1?'':'s')+' copied'+(recs.length-add.length?' ('+(recs.length-add.length)+' already here)':''));
+};
 window.authOld=function(){
  lockUI('<h2>Old passcode</h2><input id="authold" type="password" autocomplete="off" placeholder="Passcode"><button class="pri" type="button" onclick="window.authOldGo()">Log in</button><button type="button" class="lnk" style="margin-top:8px" onclick="authTab(\'in\')">Back</button><div id="lm" class="msg" style="margin-top:10px"></div>');
 };
 window.authOldGo=async function(){
  const v=$('#authold').value;
  if(await hash(v,unhex(PW.s))!==PW.h)return msg('Wrong passcode.');
- S.uid=null;S.email=null;S.key=await dk(v,PW.e);S.records=[];S.noStore=false;
+ S.uid=null;S.email=null;S.key=await dk(v,PW.e);S.records=[];S.noStore=false;bringBtn(false);
  try{const x=await idb('get');if(x&&x.iv){try{S.records=await dec(x)}catch(e){S.noStore=true}}}catch(e){}
  S.loaded=true;open_();try{renderRecs()}catch(e){}
-};
-
-/* Saved tab > "Bring over records from old passcode": copies the pre-accounts vault into the signed-in account (merge, no duplicates, old vault untouched) */
-window.importOld=async function(){
- if(!S.uid||!S.key)return alert('Sign in to an account first.');
- const p=prompt('Old passcode (the single passcode used before accounts):');if(!p)return;
- let x=null;const uid=S.uid;S.uid=null;try{x=await idb('get')}catch(e){}finally{S.uid=uid}
- if(!x||!x.iv)return alert('No older saved records were found in this browser at this web address. Saved records stay on the phone, browser and web address where they were saved, so open this app there.');
- let recs;
- try{const k=await dk(p,PW.e);recs=JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:x.iv},k,x.c)))}
- catch(e){return alert('Older saved records are here, but that passcode could not open them. Use the passcode that was active when they were saved. If the built-in passcode was changed in a later version, copy the line starting "const PW=" from that version\'s app.js into this one.')}
- const seen=new Set(S.records.map(r=>JSON.stringify(r)));const add=recs.filter(r=>!seen.has(JSON.stringify(r)));
- S.records=S.records.concat(add);await store();try{renderRecs()}catch(e){}
- alert(add.length+' of '+recs.length+' older record'+(recs.length==1?'':'s')+' brought over'+(add.length<recs.length?' (the rest were already here)':'')+'.');
 };
 /* the app calls showLock() at load, before this file runs: draw the new screen now */
 if($('#lock')&&$('#lock').style.display!='none')window.showLock();
