@@ -10,6 +10,8 @@ const PAY=/\b(visa|mastercard|master card|amex|american express|discover|debit|c
 const SKIP=/\bchange\b|cash tender|tendered|\bcard\b|visa|mastercard|amex|debit|balance due|thank|\bauth|\bref\b|approval|points|savings total|you saved/i;
 const LBL=/^(?:bill(?:ed)?\s*to|client|employer|customer|company|job|event|service|work|invoice|payment|pay|location|venue|address|site|hours|total|amount|mileage|miles|distance|fuel|gas|date|paid|one[\s-]*way|round[\s-]*trip|wear|vehicle|net|gross)\b/i;
 const PK=/^\d+(?:\/\d+)+\s*pcs?$/i;
+/* payment methods printed with an amount (Apple Pay $19.92, Google Pay, PayPal...) are how the order was paid, never products */
+const WALLET=/\b(?:apple|google|samsung|shop|amazon|click\s*to)\s*pay\b|\bg\s?pay\b|pay\s?pal|\bvenmo\b|\bzelle\b|\bklarna\b|\bafterpay\b|\baffirm\b|\bcash\s?app\b|\bpay\W*$|\bpaid\s+on\b|one-?click\s+pay/i;
 /* Turn a raw OCR'd marketplace title into a readable product name. v = variant line (e.g. "Blue 2") */
 /* ALL-CAPS brand words (4+ letters) become Title case: DURATECH -> Duratech. Short ones (LED, USB) stay. */
 const uncap=s=>String(s).replace(/\b[A-Z]{4,}\b/g,w=>w[0]+w.slice(1).toLowerCase());
@@ -18,7 +20,7 @@ const cleanName=(n,v)=>{let t=n.replace(/\s{2,}/g,' ').trim().split(' ');
  let last=t[t.length-1]||'';if(/(\.{2,}|\u2026)$/.test(last)){const b=last.replace(/(\.{2,}|\u2026)$/,'');if(b)t[t.length-1]=b;else t.pop();}
  /* product-photo text read in front of the title: stray 1-2 letter bits, "OPCS", etc. */
  while(t.length>2&&(/^[^\w]*$/.test(t[0])||(t[0].length<=2&&!/\d/.test(t[0])&&!/^[AI]$/.test(t[0]))||/^[O0]pcs$/i.test(t[0])))t.shift();
- if(/^A(?=pcs?$)/.test(t[0]||''))t[0]='4'+t[0].slice(1);
+ if(/^A(?=p(?:cs?|es)$)/.test(t[0]||''))t[0]='4'+t[0].slice(1);
  /* "2pcs 2/5/10pcs ...": the photo's count echoed in front of the pack options */
  if(t.length>2&&/^\d+p(?:cs|es)$/i.test(t[0])&&PK.test(t[1])){t[0]=t[0].replace(/pes$/i,'pcs');t.splice(1,1)}
  /* "2/5/10pcs ..." with variant "Blue 2": the number in the variant is the pack actually bought */
@@ -112,13 +114,13 @@ function cityState(L){const rx=[new RegExp(',\\s*('+ST+')\\b\\s+\\d{5}(?:-\\d{4}
 /* ---------- merchant + item-block helpers (layout-agnostic: Amazon app/web, Temu, receipts without a logo line) ---------- */
 const KNOWN=/\b(temu|amazon|walmart|target|costco|home depot|lowe's|lowes|best buy|harbor freight|staples|aliexpress|shein|ebay|etsy|walgreens|cvs|ikea|wayfair|newegg|adorama|sweetwater|guitar center|autozone|o'reilly|michaels|ace hardware|office depot|trader joe's|whole foods|safeway|kroger|7-eleven|starbucks|uber|lyft|doordash|apple|b&h)\b/i;
 const tcase=s=>s.replace(/(^|[\s'-])[a-z]/g,c=>c.toUpperCase());
-const UIJUNK=/search|ask a question|\?|order details|order summary|ordered on|order placed|order\s*#|items? ordered|buy it again|your orders|sign in|hello,|deliver(?:ing)? to|returns|\bcart\b|\bmenu\b|view order|invoice|receipt|^\W*orders?\W*$|^\W*(?:back|done|share|help|close|edit)\W*$|status|delivered|arriving|tracking|\bqty\b|total|subtotal|\btax\b|shipping|payment|\bprime\b|\bsold by\b/i;
+const UIJUNK=/item details|order id|order time|payment|search|ask a question|\?|order details|order summary|ordered on|order placed|order\s*#|items? ordered|buy it again|your orders|sign in|hello,|deliver(?:ing)? to|returns|\bcart\b|\bmenu\b|view order|invoice|receipt|^\W*orders?\W*$|^\W*(?:back|done|share|help|close|edit)\W*$|status|delivered|arriving|tracking|\bqty\b|total|subtotal|\btax\b|shipping|payment|\bprime\b|\bsold by\b/i;
 function guessMerchant(text,L){
  if(/\b\d{3}-\d{7}-\d{7}\b/.test(text)||/item\(s\)\s*subtotal|estimated tax to be collected|\bamazon\b/i.test(text))return{n:'Amazon',sure:1};
  const km=text.match(KNOWN);if(km)return{n:tcase(km[1]),sure:1};
  const ty=text.match(/(?:thank you for (?:shopping|visiting)(?:\s+(?:at|with))?|order(?:ed)? from|purchased from)\s*:?\s*([A-Z][A-Za-z0-9&'.\- ]{2,28})/);if(ty)return{n:ty[1].trim(),sure:0};
  const d=text.match(/\b(?:www\.)?([a-z0-9][a-z0-9-]{2,})\.(?:com|net|org|co|shop|store|us)\b/i);if(d&&!/^(google|gmail|apple|icloud|yahoo|outlook|hotmail|facebook|paypal|gstatic)$/i.test(d[1]))return{n:tcase(d[1]),sure:0};
- const l=L.slice(0,12).map(x=>x.replace(/^[^A-Za-z0-9]*[Qq]\s+(?=[A-Z])/,'').trim()).find(l=>/[A-Za-z]{3}/.test(l)&&l.length<=40&&!DATE.test(l)&&!PRICE.test(l)&&!UIJUNK.test(l)&&!/\d{3}[-. ]\d{4}|^\W*(tel|phone|www|http)/i.test(l)&&/^[A-Z0-9]/.test(l));
+ const l=L.slice(0,12).map(x=>x.replace(/^[^A-Za-z0-9]*[Qq]\s+(?=[A-Z])/,'').trim()).find(l=>/[A-Za-z]{3}/.test(l)&&l.length<=40&&!DATE.test(l)&&!PRICE.test(l)&&!UIJUNK.test(l)&&!/\d{3}[-. ]\d{4}|^\W*(tel|phone|www|http)/i.test(l)&&l.split(/\s+/).length<=7&&/^[A-Z0-9]/.test(l));
  return l?{n:l,sure:0}:null}
 /* Item block for marketplace-style pages: a (wrapped) product title above a price that sits alone on its own line. */
 const ONLINE=/\b\d{3}-\d{7}-\d{7}\b|item\(s\)\s*subtotal|\b(?:amazon|temu|aliexpress|shein|ebay|etsy|wayfair|newegg)\b/i;
@@ -137,7 +139,7 @@ function blockItems(L){
  for(const end of [si>0?si:L.length,L.length]){if(out.length)break;
  for(let i=0;i<end;i++){const l=fix(L[i]);if(!ONLYP.test(l))continue;const v=num(l);if(v==null||v<=0)continue;
   const t=[];let seen=false;
-  for(let j=i-1;j>=0&&i-j<=7;j--){const x=L[j];if(ONLYP.test(fix(x)))break;const ok=readable(x)&&x.length>3&&!NOTTITLE.test(x)&&!SELLER.test(x)&&!DATE.test(x);if(ok){t.unshift(x);seen=true}else if(seen)break}
+  for(let j=i-1;j>=0&&i-j<=7;j--){const x=L[j];if(ONLYP.test(fix(x))||PRICE.test(fix(x)))break;const ok=readable(x)&&x.length>3&&!NOTTITLE.test(x)&&!SELLER.test(x)&&!DATE.test(x);if(ok){t.unshift(x);seen=true}else if(seen)break}
   if(!t.length)continue;
   let q=1;for(let j=Math.max(0,i-7);j<Math.min(L.length,i+3);j++){const m=L[j].match(/^\W*(?:qty|quantity)\s*:?\s*(\d{1,3})\b/i);if(m){q=+m[1];break}}
   const title=t.join(' '),cut=/\S(\.{2,}|\u2026)\s*$/.test(title),cn=cleanName(title);if(!readable(cn))continue;
@@ -152,18 +154,19 @@ function parse(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(t
  if(mode==='purchase'){
   {const gm=guessMerchant(text,L);if(gm){set('merchant',gm.n);if(gm.sure)found.mk=1}}
   if(!ONLINE.test(text)){const cs=cityState(L.slice(0,25));if(cs)set('location',cs)}
-  set('date',dateNear(L,/ordered on|order placed|order date|purchase date|date of purchase|date placed|invoice date|\bdate\b/i)||(text.match(DATE)||[])[1]);{const ic=text.match(/item details\s*\(\s*(\d+)\s*\)/i);if(ic)set('expected',+ic[1])}set('number',(text.match(/\b(\d{3}-\d{7}-\d{7})\b/)||[])[1]||(inv&&inv[1]));
-  for(const raw of L){const l=fix(raw),pm=l.match(PRICE),fm=l.match(/\d[.,]\d{2}\s*-?\s*([A-Z])\s*$/);if(!pm){const qm=l.match(/(?:^|\s)[x×]\s?(\d+)\s*$/i),li=items[items.length-1];if(qm&&li&&+qm[1]>1&&li.q==1&&!li.qs){li.q=+qm[1];li.qs=1}if(qm&&li&&!li.v){li.v=l.replace(/\s*[x×]\s?\d+\s*$/i,'').trim();li.n=shortName(li.full||li.n,li.v,li.cut)}continue}const v=num(pm[1]);if(v==null)continue;const head=l.slice(0,pm.index).trim();
+  set('date',dateNear(L,/ordered on|order placed|order date|order time|purchase date|date of purchase|date placed|invoice date|\bdate\b/i)||(text.match(DATE)||[])[1]);{const ic=text.match(/item details\s*\(\s*(\d+)\s*\)/i);if(ic)set('expected',+ic[1])}set('number',(text.match(/\b(\d{3}-\d{7}-\d{7})\b/)||[])[1]||(inv&&inv[1]));
+  const mk=ONLINE.test(text)||/item details|\ba[fl]ter\s+(?:promos?|credit)/i.test(text),dp=x=>mk&&!PRICE.test(x)?x.replace(/\$\s?(\d{1,2})(\d{2})\s*$/,'$$$1.$2'):x;
+  for(const raw of L){const l=dp(fix(raw)),pm=l.match(PRICE),fm=l.match(/\d[.,]\d{2}\s*-?\s*([A-Z])\s*$/);if(!pm){const qm=l.match(/(?:^|\s)[x×]\s?(\d+)\s*$/i),li=items[items.length-1];if(qm&&li&&+qm[1]>1&&li.q==1&&!li.qs){li.q=+qm[1];li.qs=1}if(qm&&li&&!li.v){li.v=l.replace(/\s*[x×]\s?\d+\s*$/i,'').trim();li.n=shortName(li.full||li.n,li.v,li.cut)}continue}const v=num(pm[1]);if(v==null)continue;const head=l.slice(0,pm.index).trim();
    if(/[il1]tems?\s*\)?\s*\(?s?\)?\s*(total|discount)|extra bonus/i.test(head))continue;
    if(/^\W*(items?|qty|quantity|price|amount|each|unit)\W*$/i.test(head))continue;
-   if(/after\s+promos?/i.test(head)&&items.length){const it=items[items.length-1];it.p=+(v/(it.q||1)).toFixed(2);continue}
+   if(/\ba[fl]ter\s+(?:promos?|credits?|discounts?|coupons?)\b|^\W*a[fl]ter\b/i.test(head)&&items.length){const it=items[items.length-1],nv=+(v/(it.q||1)).toFixed(2);if(it.lp==null)it.lp=it.p;if(nv<=Math.max(it.lp*2,it.lp+1))it.p=nv;continue}
    if(/\b(shipping|delivery|handling)\b/i.test(head)&&!/item/i.test(head)){set('shipping',v);continue}
    if(/total before tax|before tax|pre-?tax/i.test(head)){if(F.extSub==null)set('extSub',v)}
    else if(/sub\s?-?total/i.test(head))set('extSub',v);
    else if(/\b(grand total|order total|total for this order|total payment)\b/i.test(head)&&!/savings|saved/i.test(head)){set('extTotal',v);found.gt=1}
    else if(/\b(total|amount due)\b/i.test(head)&&!/savings|saved/i.test(head)){if(!found.gt)set('extTotal',v)}
    else if(/\b(sales\s)?tax\b|\bvat\b|\bgst\b/i.test(head))set('tax',(F.tax||0)+v);
-   else if(/\b(?:visa|master\s?card|amex|american express|discover|debit|cash|tender(?:ed)?|change)\b|^\W*credit(?:\s+card)?\W*$/i.test(head)){}
+   else if(WALLET.test(head)||/\b(?:visa|master\s?card|amex|american express|discover|debit|cash|tender(?:ed)?|change)\b|^\W*credit(?:\s+card)?\W*$/i.test(head)){}
    else if(/discount|coupon|promo|savings|rewards?|points|gift\s*card|store credit|credit applied|\bcredit\b/i.test(head))set('discount',(F.discount||0)+Math.abs(v));
    else if(/tip|gratuity/i.test(head)){} else if(!SKIP.test(head)&&head.length>1){
     let q=1,p=v,n=head,m;

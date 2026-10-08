@@ -51,13 +51,19 @@ function pdfWords(items,vp){const out=[];pdfRows(items).forEach(r=>r.forEach(t=>
 function prep(c){const o=document.createElement('canvas');o.width=c.width;o.height=c.height;const x=o.getContext('2d');x.drawImage(c,0,0);const d=x.getImageData(0,0,o.width,o.height),p=d.data;for(let i=0;i<p.length;i+=4){const l=.299*p[i]+.587*p[i+1]+.114*p[i+2],v=l>=228?255:0;p[i]=p[i+1]=p[i+2]=v}x.putImageData(d,0,0);return o}
 const st=m=>$('#status').textContent=m||'';
 async function handle(f){if(!f)return;S.rec=newRec();S.pages=[];S.undo=[];S.redo=[];S.rec.loaded=true;S.rec.doc=true;S.sel=[];S.words=[];S.conf=null;st('Reading…');try{
- let canvas,text='',pw=[];
+ let canvas,text='',pw=[],more=[],ex=[];
  if(f.type=='application/pdf'||/\.pdf$/i.test(f.name)){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-  const pdf=await pdfjsLib.getDocument({data:await f.arrayBuffer()}).promise,pg=await pdf.getPage(1);
-  let vp=pg.getViewport({scale:2}),one=0,tot=0;
-  for(let n=1;n<=Math.min(pdf.numPages,10);n++){const c=await (await pdf.getPage(n)).getTextContent();c.items.forEach(i=>{const s=i.str.trim();if(s){tot++;if(s.length==1)one++}});text+=pdfLines(c.items)+'\n';if(n==1)pw=pdfWords(c.items,vp)}
-  canvas=document.createElement('canvas');canvas.width=vp.width;canvas.height=vp.height;await pg.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
-  if(text.trim().length<30)text=''}
+  const pdf=await pdfjsLib.getDocument({data:await f.arrayBuffer()}).promise,pg=await pdf.getPage(1),NP=Math.min(pdf.numPages,10),pit=[];
+  let one=0,tot=0;
+  for(let n=1;n<=NP;n++){const c=await (await pdf.getPage(n)).getTextContent();c.items.forEach(i=>{const s=i.str.trim();if(s){tot++;if(s.length==1)one++}});text+=pdfLines(c.items)+'\n';pit.push(c.items)}
+  /* v61: a scanned / print-to-PDF file has no text layer. Every page is rendered and read, not just the first. */
+  const imgOnly=text.trim().length<30,sc=imgOnly?Math.min(4,2200/pg.getViewport({scale:1}).width):2,vp=pg.getViewport({scale:sc}),
+   renderN=async n=>{const p=await pdf.getPage(n),v=p.getViewport({scale:sc}),c=document.createElement('canvas');c.width=v.width;c.height=v.height;await p.render({canvasContext:c.getContext('2d'),viewport:v}).promise;return c};
+  if(imgOnly&&S.rec.mode=='purchase'){const cap=Math.min(pdf.numPages,6),lz=[];for(let n=1;n<=cap;n++)lz.push(()=>renderN(n));return await addShots(lz,{pdf:1,all:pdf.numPages})}
+  if(imgOnly)for(let n=2;n<=Math.min(pdf.numPages,4);n++)more.push(()=>renderN(n));
+  if(!imgOnly){pw=pdfWords(pit[0],vp);if(S.rec.mode=='purchase')for(let n=2;n<=NP;n++){const v=(await pdf.getPage(n)).getViewport({scale:sc}),c=await renderN(n);ex.push({c,words:pdfWords(pit[n-1],v)})}}
+  canvas=await renderN(1);
+  if(imgOnly)text=''}
  else if(/^image\//.test(f.type)){const b=await createImageBitmap(f),sc=Math.min(1,1600/Math.max(b.width,b.height));canvas=document.createElement('canvas');canvas.width=b.width*sc;canvas.height=b.height*sc;canvas.getContext('2d').drawImage(b,0,0,canvas.width,canvas.height)}
  else{return st('Unsupported file. Use PDF, JPG or PNG.')}
  S.img=canvas.toDataURL('image/jpeg',.85);S.dim=[canvas.width,canvas.height];showDoc(S.img);if(text&&pw.length){S.words=pw;drawWords(canvas.width,canvas.height)}
@@ -65,8 +71,9 @@ async function handle(f){if(!f)return;S.rec=newRec();S.pages=[];S.undo=[];S.redo
   const ocr=async c=>{const r=await Promise.race([Tesseract.recognize(c,'eng'),new Promise((_,j)=>setTimeout(()=>j(0),60000))]);return {t:r.data.text,w:(r.data.words||[]).filter(w=>w.text.trim()),c:r.data.confidence}};
   let best=text?{t:text,w:S.words,c:null,n:cnt(text)}:null;
   for(const pre of [0,1]){if(best&&best.n>=need)break;st('Running OCR on this device (first run downloads language data)…');try{const o=await ocr(pre?prep(canvas):canvas),n=cnt(o.t);if(!best||n>best.n)best={t:o.t,w:o.w,c:o.c,n}}catch(e){}}
-  if(best&&best.t!==text){document.querySelectorAll('.wb').forEach(e=>e.remove());text=best.t;S.words=best.w;S.conf=best.c;drawWords(canvas.width,canvas.height)}}
- $('#ocr').textContent=text;parse(text);if(S.rec.mode=='purchase'&&canvas){const td=topRightDate(S.words,canvas.width,canvas.height);if(td){S.rec.date=td;S.rec.src.date=1}}lowConf();if(S.rec.mode=='purchase'&&canvas){S.pages=[{id:++PGID,words:S.words,c:canvas,url:S.img,w:canvas.width,h:canvas.height,marks:autoHL(S.words,canvas.width,canvas.height)}];locate(S.pages[0],S.rec.items)}const q=[];if(S.conf!=null&&S.conf<70)q.push('Low scan quality ('+Math.round(S.conf)+'% confidence). Retake in good light if fields look wrong.');if(canvas&&Math.min(canvas.width,canvas.height)<500)q.push('Low-resolution image.');if(S.rec.mode=='purchase'&&/\bhours\b/i.test(text)&&/\brate\b/i.test(text)&&/position|event|crew|technician|labor/i.test(text))q.push('This looks like a work invoice. Tap Work Invoice above and upload again.');st(text.trim()?q.join(' ')||(Object.keys(S.rec.src).length?'':'Text was read but no fields matched. Enter values manually.'):'No text found. Enter values manually.');render();renderPages()
+  if(best&&best.t!==text){document.querySelectorAll('.wb').forEach(e=>e.remove());text=best.t;S.words=best.w;S.conf=best.c;drawWords(canvas.width,canvas.height)}
+  for(let k=0;k<more.length;k++){st('Reading page '+(k+2)+' of the PDF…');try{const c2=await more[k](),o2=await ocr(c2);text+='\n'+o2.t}catch(e){}}}
+ $('#ocr').textContent=text;parse(text);if(S.rec.mode=='purchase'&&canvas){const td=topRightDate(S.words,canvas.width,canvas.height);if(td){S.rec.date=td;S.rec.src.date=1}}lowConf();if(S.rec.mode=='purchase'&&canvas){S.pages=[{id:++PGID,words:S.words,c:canvas,url:S.img,w:canvas.width,h:canvas.height,marks:autoHL(S.words,canvas.width,canvas.height)}];ex.forEach(e=>S.pages.push({id:++PGID,words:e.words,c:e.c,url:e.c.toDataURL('image/jpeg',.85),w:e.c.width,h:e.c.height,marks:autoHL(e.words,e.c.width,e.c.height,seenHL())}));S.pages.forEach(pg=>locate(pg,S.rec.items))}const q=[];if(S.conf!=null&&S.conf<70)q.push('Low scan quality ('+Math.round(S.conf)+'% confidence). Retake in good light if fields look wrong.');if(canvas&&Math.min(canvas.width,canvas.height)<500)q.push('Low-resolution image.');if(S.rec.mode=='purchase'&&/\bhours\b/i.test(text)&&/\brate\b/i.test(text)&&/position|event|crew|technician|labor/i.test(text))q.push('This looks like a work invoice. Tap Work Invoice above and upload again.');st(text.trim()?q.join(' ')||(Object.keys(S.rec.src).length?'':'Text was read but no fields matched. Enter values manually.'):'No text found. Enter values manually.');render();renderPages()
 }catch(e){st('Extraction failed ('+((e&&e.message)||e||'unknown')+'). Enter values manually or try a clearer file.');showOcr();render()}}
 /* The receipt's own date is printed at the top right. When a date is read there it beats any other date on the page (order, delivery, etc.). */
 function topRightDate(ws,W,H){try{const a=(ws||[]).filter(w=>w.bbox&&(w.bbox.x0+w.bbox.x1)/2>W*.5&&w.bbox.y1<H*.2);for(const l of wLines(a).sort((p,q)=>p.y0-q.y0)){const d=Parser.dateIn(l.t);if(d)return d}}catch(e){}return null}
@@ -142,7 +149,7 @@ function r_del(i){S.rec.items.splice(i,1);render()}
 /* ---------- calculation ---------- */
 function compute(r){const o={};if(r.mode=='purchase'){const A=r.items;A.forEach(i=>i.t=+((i.q||0)*(i.p||0)).toFixed(2));const sm=a=>+a.reduce((s,i)=>s+i.t,0).toFixed(2);o.all=sm(A);o.sub=sm(A.filter(i=>!i.off));o.removed=+(o.all-o.sub).toFixed(2);o.nOff=A.filter(i=>i.off).length;const tx=N(r.tax)||0,sh=N(r.shipping)||0,k=o.all>0?o.sub/o.all:1,fl=A.some(i=>i.tx===0||i.tx===1),ta=fl?sm(A.filter(i=>i.tx!==0)):0,ts=fl?sm(A.filter(i=>i.tx!==0&&!i.off)):0,kt=fl&&ta>0?ts/ta:k;o.ship=+(sh*k).toFixed(2);o.tax=+(tx*kt).toFixed(2);o.total=+(o.sub+o.ship+o.tax).toFixed(2);o.full=+(o.all+sh+tx).toFixed(2);o.warn=[];
  {const d=N(r.discount)||0,xt=N(r.extTotal);o.disc=0;if(d>0&&xt!=null&&Math.abs(o.all+sh+tx-d-xt)<=0.01&&Math.abs(o.all+sh+tx-xt)>0.01){o.disc=+(d*k).toFixed(2);o.total=+(o.total-o.disc).toFixed(2);o.full=+(o.full-d).toFixed(2)}}
- if(A.some(i=>i.guess))o.warn.push('Only the order subtotal could be read, so it is shown as one combined line. Rename it, or add each item if the order had several.');else if(r.extSub&&Math.abs(N(r.extSub)-o.all)>0.01)o.warn.push('Item prices add up to '+M(o.all)+' but the receipt subtotal is '+M(N(r.extSub))+'. Check for a missed or misread item.');
+ if(A.some(i=>i.guess))o.warn.push('Only the order subtotal could be read, so it is shown as one combined line. Rename it, or add each item if the order had several.');else if(r.extSub&&Math.abs(N(r.extSub)-o.all)>0.01&&!(r.extTotal&&Math.abs(N(r.extTotal)-o.full)<=0.01))o.warn.push('Item prices add up to '+M(o.all)+' but the receipt subtotal is '+M(N(r.extSub))+'. Check for a missed or misread item.');
  if(r.extTotal&&Math.abs(N(r.extTotal)-o.full)>0.01)o.warn.push('Calculated order total '+M(o.full)+' differs from the receipt total '+M(N(r.extTotal))+'.');
  if(r.expected&&A.length!=r.expected)o.warn.push('Receipt lists '+r.expected+' items; '+A.length+' found here.');
  if(r.tax===undefined||r.tax==='')o.warn.push('Tax not entered; total excludes tax.');if((r.shots||(S.pages&&S.pages.length))&&(r.number==null||r.number===''))o.warn.push('Receipt number not found. Tap it on the receipt, choose Receipt/Invoice # in the bar at the bottom, then tap Add.')}
@@ -279,7 +286,7 @@ function addCal(){const r=S.rec,d=est(r);if(!d)return;const e=d.replace(/-/g,'')
  a=document.createElement('a');a.href=URL.createObjectURL(new Blob([ics],{type:'text/calendar'}));a.download='payout.ics';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
 function doPrint(){$('#print').textContent=text(S.rec).join('\n');print()}
 /* ---------- encrypted autosave (AES-GCM, key from passcode, IndexedDB on this device) ---------- */
-const idb=(m,v)=>new Promise((ok,no)=>{const q=indexedDB.open('bench',1);q.onupgradeneeded=()=>q.result.createObjectStore('s');q.onerror=()=>no(q.error);q.onsuccess=()=>{const d=q.result,tx=d.transaction('s',m=='get'?'readonly':'readwrite'),o=tx.objectStore('s'),r=m=='get'?o.get('state'):m=='put'?o.put(v,'state'):o.delete('state');tx.oncomplete=()=>{d.close();ok(r.result)};tx.onerror=()=>no(tx.error)}});
+const idb=(m,v)=>new Promise((ok,no)=>{const q=indexedDB.open('bench',1);q.onupgradeneeded=()=>q.result.createObjectStore('s');q.onerror=()=>no(q.error);q.onsuccess=()=>{const d=q.result,tx=d.transaction('s',m=='get'?'readonly':'readwrite'),o=tx.objectStore('s'),K=S.uid?'state:'+S.uid:'state',r=m=='get'?o.get(K):m=='put'?o.put(v,K):o.delete(K);tx.oncomplete=()=>{d.close();ok(r.result)};tx.onerror=()=>no(tx.error)}});
 async function dk(p,e){const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(p),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt:new Uint8Array(e.match(/../g).map(h=>parseInt(h,16))),iterations:310000,hash:'SHA-256'},k,{name:'AES-GCM',length:256},false,['encrypt','decrypt'])}
 async function dec(x){return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:x.iv},S.key,x.c)))}
 let pt;function persist(){}
@@ -317,8 +324,16 @@ addEventListener('afterprint',()=>{$('#print').textContent=''});
  const f=document.getElementById('file');if(f&&!document.getElementById('pick')){f.style.cssText='position:absolute;width:1px;height:1px;opacity:0;pointer-events:none';const k=document.createElement('button');k.id='pick';k.type='button';k.textContent='Add receipt screenshots or PDF';k.style.cssText='background:var(--g);color:#fff;border-color:var(--g)';k.onclick=()=>f.click();f.parentNode.insertBefore(k,f)}})();
 
 /* ---------- build 28: multi-screenshot purchases ---------- */
-async function readImg(f){const b=await createImageBitmap(f),sc=Math.min(1,2800/Math.max(b.width,b.height)),c=document.createElement('canvas');c.width=b.width*sc;c.height=b.height*sc;c.getContext('2d').drawImage(b,0,0,c.width,c.height);
+/* v61: PDF pages are read as one uniform block so each price stays on its item's row (the default layout mode splits the price column away from the titles). */
+let W6=null;
+async function ocrP(cv){const run=async()=>{try{if(!W6)W6=await Tesseract.createWorker('eng');await W6.setParameters({tessedit_pageseg_mode:'6'});return (await W6.recognize(cv)).data}catch(e){try{W6&&await W6.terminate()}catch(_){}W6=null;return (await Tesseract.recognize(cv,'eng')).data}};
+ return Promise.race([run(),new Promise((_,j)=>setTimeout(()=>j(0),90000))])}
+async function readImg(f,opts){opts=opts||{};const src=typeof f=='function'?await f():f,b=src instanceof HTMLCanvasElement?src:await createImageBitmap(src),sc=Math.min(1,2800/Math.max(b.width,b.height)),c=document.createElement('canvas');c.width=b.width*sc;c.height=b.height*sc;c.getContext('2d').drawImage(b,0,0,c.width,c.height);if(src instanceof HTMLCanvasElement){src.width=src.height=0}
  let best={t:'',n:-1,w:[],c:null};
+ if(opts.pdf){const d=await ocrP(c),P0=Parser.parse(d.text,'purchase');best={t:d.text,n:P0.items.length+Object.keys(P0.found).length,w:(d.words||[]).filter(w=>w.text.trim()&&w.bbox),c:d.confidence};
+  /* pages of items: read again with light-gray text turned black, so 'After credit applied' lines are not lost */
+  if(P0.items.length){try{best.alt=(await ocrP(prep(c))).text}catch(e){}}
+  return{c,text:best.t,words:best.w,conf:best.c,alt:best.alt,url:c.toDataURL('image/jpeg',.85)}}
  for(const pre of [0,1]){try{const r=await Promise.race([Tesseract.recognize(pre?prep(c):c,'eng'),new Promise((_,j)=>setTimeout(()=>j(0),60000))]),t=r.data.text,p=Parser.parse(t,'purchase'),n=p.items.length+Object.keys(p.found).length;if(n>best.n)best={t,n,w:(r.data.words||[]).filter(w=>w.text.trim()),c:r.data.confidence};if(best.n>=5)break}catch(e){}}
  try{const pp=Parser.parse(best.t,'purchase');if(!pp.fields.number&&pp.items.length&&!/amazon|temu|\d{3}-\d{7}-\d{7}/i.test(best.t)){const z=Math.min(2,2600/Math.max(c.width,c.height));
   if(z>1.15){const c2=document.createElement('canvas');c2.width=Math.round(c.width*z);c2.height=Math.round(c.height*z);const x2=c2.getContext('2d');x2.imageSmoothingQuality='high';x2.drawImage(c,0,0,c2.width,c2.height);
@@ -326,10 +341,11 @@ async function readImg(f){const b=await createImageBitmap(f),sc=Math.min(1,2800/
    if(Parser.parse(r.data.text,'purchase').fields.number){best.t=r.data.text;best.w=(r.data.words||[]).filter(w=>w.text.trim()&&w.bbox).map(w=>({...w,bbox:{x0:w.bbox.x0/z,y0:w.bbox.y0/z,x1:w.bbox.x1/z,y1:w.bbox.y1/z}}));best.c=r.data.confidence}}}}catch(e){}
  return{c,text:best.t,words:best.w,conf:best.c,url:c.toDataURL('image/jpeg',.85)}}
 function handleFiles(fl){const a=[...(fl||[])];if(!a.length)return;dismissRestore();if(S.mode!='purchase'||a.some(f=>!/^image\//.test(f.type)))return handle(a[0]);return addShots(a)}
-async function addShots(files){let r=S.rec;if(!r.doc){S.rec=r=newRec();r.loaded=true;r.doc=true;S.sel=[];S.words=[];S.pages=[];S.undo=[];S.redo=[]}r.shots=r.shots||0;let dup=0,bad=0;
+async function addShots(files,opts){opts=opts||{};let r=S.rec;if(!r.doc){S.rec=r=newRec();r.loaded=true;r.doc=true;S.sel=[];S.words=[];S.pages=[];S.undo=[];S.redo=[]}r.shots=r.shots||0;let dup=0,bad=0;
  const kf=x=>String(x.n).toLowerCase().replace(/[^a-z0-9]/g,'')+'|'+x.p;
- for(let i=0;i<files.length;i++){st('Reading screenshot '+(i+1)+' of '+files.length+'… (first run downloads language data)');
-  try{const o=await readImg(files[i]),P=Parser.parse(o.text,'purchase'),cur=r.shots++;S.pages.push({id:++PGID,words:o.words,c:o.c,url:o.url,w:o.c.width,h:o.c.height,marks:autoHL(o.words,o.c.width,o.c.height,seenHL())});locate(S.pages[S.pages.length-1],P.items);
+ for(let i=0;i<files.length;i++){st((opts.pdf?'Reading page ':'Reading screenshot ')+(i+1)+' of '+files.length+'… (first run downloads language data)');
+  try{const o=await readImg(files[i],opts),P=Parser.parse(o.text,'purchase'),cur=r.shots++;
+   if(o.alt){try{const Q=Parser.parse(o.alt,'purchase');if(Q.items.length==P.items.length)P.items.forEach((x,k)=>{const y=Q.items[k];if(y&&y.lp!=null)x.p=y.p})}catch(e){}}S.pages.push({id:++PGID,words:o.words,c:o.c,url:o.url,w:o.c.width,h:o.c.height,marks:autoHL(o.words,o.c.width,o.c.height,seenHL())});locate(S.pages[S.pages.length-1],P.items);
    if(cur===0){S.img=o.url;S.dim=[o.c.width,o.c.height];S.words=o.words;S.conf=o.conf;showDoc(o.url);drawWords(o.c.width,o.c.height)}
    Object.keys(P.fields).forEach(k=>{if(k=='merchant'?(P.found.mk||!r.merchant):(r[k]==null||r[k]===''))r[k]=P.fields[k]});
    Object.keys(P.found).forEach(k=>r.src[k]=1);if(P.guess&&!r.gname)r.gname=P.guess;
@@ -338,7 +354,7 @@ async function addShots(files){let r=S.rec;if(!r.doc){S.rec=r=newRec();r.loaded=
   catch(e){bad++}}
  $('#file').value='';S.undo=[];S.redo=[];ensureItem(r);render();renderPages();try{if(localStorage.getItem('ppClip')&&r.items.some(phVague))setTimeout(()=>idPhotos().catch(()=>{}),400)}catch(e){}
  const n=r.items.length;
- if(bad)st(bad+' screenshot'+(bad>1?'s':'')+' could not be read.');else toast(n+' item'+(n==1?'':'s')+' from '+r.shots+' screenshot'+(r.shots>1?'s':''))}
+ if(bad)st(bad+(opts.pdf?' page':' screenshot')+(bad>1?'s':'')+' could not be read.');else if(opts.pdf&&opts.all>files.length)st('Only the first '+files.length+' of '+opts.all+' pages were read.');else toast(n+' item'+(n==1?'':'s')+' from '+r.shots+(opts.pdf?' page':' screenshot')+(r.shots>1?'s':''))}
 const FLUFF=/\b(?:Resettable|Portable|Compact|Thickened|Texture|Universal|Sports|Durable|Premium|Upgraded|Professional|Multifunctional)\b/gi;
 function tidyName(n){let t=String(n||'').replace(/\bCombination\b/gi,'Combo').replace(/\b(\d+)\s?pes\b/gi,'$1pc').replace(/\s+\b(?:a|an|the)\b(?=\s)/gi,'').replace(/\bwith\b/gi,'w/').replace(/\s{2,}/g,' ').trim();
  const d=t.replace(FLUFF,'').replace(/\s{2,}/g,' ').trim();if(/[A-Za-z]{3,}/.test(d.replace(/\b(?:\d+pc|set|of)\b/gi,'')))t=d;
@@ -680,3 +696,105 @@ document.addEventListener('keydown',e=>{if(e.key=='Escape')closeRec()});
  +'.rmf{display:flex;gap:10px;margin-top:6px}.rmf button{flex:1}';document.head.appendChild(s)})();
 (function(){const s=document.createElement('style');s.textContent=['.sv{display:flex;flex-direction:column;gap:10px}.sv .sl{margin:0}.sv>button{width:100%}.sv .seg{margin:0}','.chips{display:flex;flex-wrap:wrap;gap:6px}.chips button{padding:6px 12px;border-radius:999px;font-size:13px;font-weight:600;background:#fff;color:var(--mut);border-color:var(--ln)}.chips button.on{background:var(--g);color:#fff;border-color:var(--g)}','.srt{display:flex;align-items:center;gap:10px}.srt label{flex:0 0 auto;margin:0}','.svsum{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:var(--mut);padding:0 2px}.svsum b{color:var(--fg);font-size:17px}','.sm{flex:1;min-width:0}.s1{font-weight:600;overflow-wrap:anywhere}.s2{font-size:12px;color:var(--mut);margin-top:1px}','.empty2{border:2px dashed var(--ln);border-radius:16px;padding:28px 16px;text-align:center;color:var(--mut)}','@media(max-width:900px){.nav button{padding:10px 6px;font-size:14px}}'].join('');document.head.appendChild(s)})();
 (function(){const s=document.createElement('style');s.textContent='.sl{background:var(--card);border:1px solid var(--ln);border-radius:14px;padding:6px 14px;margin:10px 0}.sl h4{margin:10px 0 2px;font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}.srow{display:flex;align-items:center;gap:10px;padding:9px 0;font-size:14px}.srow+.srow{border-top:1px solid var(--ln)}.srow span{flex:1;min-width:0}.srow b{white-space:nowrap}.srow .x{flex:0 0 32px;height:32px;padding:0}#f_category{width:100%}';document.head.appendChild(s)})();
+
+/* ---------- v62: accounts (email + password, kept on this device) ---------- */
+/* PaperTrail accounts (v62): email + password sign-in, kept on this device.
+   Load AFTER app.js. It replaces only the lock screen (showLock). Everything else in app.js is untouched, apart from
+   the one-line change in idb() that gives each account its own saved-records slot (see README-auth.md).
+   Each account = email + password. The password never leaves the phone: it is stretched with PBKDF2 (310,000 rounds,
+   same as before) into (a) a check value used to sign in and (b) an AES-GCM key that encrypts that account's saved records.
+   There is no server and so no password reset: a forgotten password means that account's saved records cannot be opened. */
+(function(){
+const AK='pt_acct:',FK='pt_f:',LK='pt_l:',LAST='pt_last',MAXF=5,COOL=15*60000;
+const norm=s=>String(s||'').trim().toLowerCase();
+const rnd=n=>hex(crypto.getRandomValues(new Uint8Array(n)));
+const unhex=h=>new Uint8Array(h.match(/../g).map(x=>parseInt(x,16)));
+const uidOf=async em=>hex(await crypto.subtle.digest('SHA-256',new TextEncoder().encode('papertrail:'+em))).slice(0,24);
+/* email is mixed into the passphrase so the same password on two accounts still gives two different keys */
+const pp=(em,pw)=>em+'\u0000'+pw;
+const msg=t=>{const m=$('#lm');if(m)m.textContent=t||''};
+const esc=v=>String(v||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+let legacy=false;
+
+function ui(tab){
+ S.uid=null;S.email=null;
+ let last='';try{last=localStorage.getItem(LAST)||''}catch(e){}
+ const up=tab=='up';
+ lockUI('<h2>PaperTrail</h2>'
+ +'<div style="display:flex;gap:8px;margin:14px 0 4px"><button type="button" class="'+(up?'':'pri')+'" onclick="authTab(\'in\')">Sign in</button><button type="button" class="'+(up?'pri':'')+'" onclick="authTab(\'up\')">Create account</button></div>'
+ +'<input id="em" type="email" inputmode="email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="Email" value="'+esc(up?'':last)+'">'
+ +'<input id="pw" type="password" autocomplete="'+(up?'new-password':'current-password')+'" placeholder="Password'+(up?' (8+ characters)':'')+'">'
+ +(up?'<input id="pw2" type="password" autocomplete="new-password" placeholder="Confirm password">'
+   +'<input id="old" type="password" autocomplete="off" placeholder="Old passcode (optional: bring over records saved before accounts)">'
+   +'<div class="hint" style="font-size:13px;color:var(--mut);margin:2px 0 8px">Your records are encrypted on this device with this password. There is no reset: if you forget it, the saved records cannot be opened.</div>'
+   +'<button class="pri" type="button" onclick="authUp()">Create account</button>'
+  :'<button class="pri" type="button" onclick="authIn()">Sign in</button>'
+   +(legacy?'<button type="button" class="lnk" style="margin-top:8px" onclick="authOld()">Use old passcode</button>':''))
+ +'<div id="lm" class="msg" style="margin-top:10px"></div>');
+ const f=$(up?'#em':(last?'#pw':'#em'));if(f)try{f.focus()}catch(e){}
+}
+window.authTab=ui;
+window.showLock=function(){
+ /* is there a pre-accounts vault on this device? (offers the "old passcode" link) */
+ S.uid=null;ui('in');
+ idb('get').then(x=>{if(x&&x.iv&&!legacy){legacy=true;if($('#em')&&!$('#pw2'))ui('in')}}).catch(()=>{});
+};
+
+async function enter(uid,em,pw,o,recs){
+ S.uid=uid;S.email=em;S.key=await dk(pp(em,pw),o.e);S.records=recs||[];S.noStore=false;
+ try{const x=await idb('get');if(x&&x.iv){try{S.records=await dec(x)}catch(e){S.noStore=true;S.records=[]}}}catch(e){}
+ S.loaded=true;try{localStorage.setItem(LAST,em)}catch(e){}
+ const v=$('#ver');if(v)v.title=em;
+ open_();
+ if(recs&&recs.length&&!S.noStore)await store();
+ try{renderRecs();if(S.noStore)st('Saved records could not be opened.')}catch(e){}
+}
+
+window.authUp=async function(){
+ try{
+  const em=norm($('#em').value),p1=$('#pw').value,p2=$('#pw2').value,old=$('#old').value;
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(em))return msg('Enter a valid email address.');
+  if(p1.length<8)return msg('Use at least 8 characters for the password.');
+  if(p1!==p2)return msg('The two passwords do not match.');
+  const uid=await uidOf(em);
+  if(localStorage.getItem(AK+uid))return msg('An account for this email already exists on this device. Use Sign in.');
+  let recs=[];
+  if(old){ /* optional: carry the pre-accounts saved records into this account */
+   if(await hash(old,unhex(PW.s))!==PW.h)return msg('That old passcode is not correct.');
+   try{const x=await idb('get');if(x&&x.iv){S.key=await dk(old,PW.e);recs=await dec(x)}}catch(e){S.key=null;return msg('The old saved records could not be opened.')}
+  }
+  const salt=rnd(16),o={s:salt,h:await hash(pp(em,p1),unhex(salt)),e:rnd(16)};
+  localStorage.setItem(AK+uid,JSON.stringify(o));
+  await enter(uid,em,p1,o,recs);
+ }catch(e){msg('Could not create the account on this device.')}
+};
+
+window.authIn=async function(){
+ try{
+  const em=norm($('#em').value),pw=$('#pw').value;
+  if(!em||!pw)return msg('Enter your email and password.');
+  const uid=await uidOf(em),lock=+localStorage.getItem(LK+uid)||0;
+  if(Date.now()<lock)return msg('Too many wrong attempts. Try again in '+Math.ceil((lock-Date.now())/60000)+' minute(s).');
+  let o=null;try{o=JSON.parse(localStorage.getItem(AK+uid))}catch(e){}
+  if(!o){await hash(pp(em,pw),unhex(rnd(16)));return msg('No account for this email on this device. Accounts are stored on the device where they were created. Use Create account.')}
+  if(await hash(pp(em,pw),unhex(o.s))===o.h){localStorage.removeItem(FK+uid);localStorage.removeItem(LK+uid);return enter(uid,em,pw,o)}
+  const f=(+localStorage.getItem(FK+uid)||0)+1;
+  if(f>=MAXF){localStorage.removeItem(FK+uid);localStorage.setItem(LK+uid,String(Date.now()+COOL));return msg('Too many wrong attempts. Locked for 15 minutes.')}
+  localStorage.setItem(FK+uid,String(f));msg('Wrong email or password. '+(MAXF-f)+' attempt'+(MAXF-f==1?'':'s')+' left.');
+ }catch(e){msg('Could not sign in.')}
+};
+
+/* pre-accounts single passcode, for the owner's existing saved records */
+window.authOld=function(){
+ lockUI('<h2>Old passcode</h2><input id="authold" type="password" autocomplete="off" placeholder="Passcode"><button class="pri" type="button" onclick="window.authOldGo()">Log in</button><button type="button" class="lnk" style="margin-top:8px" onclick="authTab(\'in\')">Back</button><div id="lm" class="msg" style="margin-top:10px"></div>');
+};
+window.authOldGo=async function(){
+ const v=$('#authold').value;
+ if(await hash(v,unhex(PW.s))!==PW.h)return msg('Wrong passcode.');
+ S.uid=null;S.email=null;S.key=await dk(v,PW.e);S.records=[];S.noStore=false;
+ try{const x=await idb('get');if(x&&x.iv){try{S.records=await dec(x)}catch(e){S.noStore=true}}}catch(e){}
+ S.loaded=true;open_();try{renderRecs()}catch(e){}
+};
+/* the app calls showLock() at load, before this file runs: draw the new screen now */
+if($('#lock')&&$('#lock').style.display!='none')window.showLock();
+})();
