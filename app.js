@@ -28,12 +28,9 @@ function restoreCleared(){const c=S.cleared;if(!c)return;if(S.rec&&S.rec.loaded&
  if(S.mode!='purchase'&&S.img){showDoc(S.img);if(S.words&&S.words.length&&S.dim)drawWords(S.dim[0],S.dim[1])}
  render();renderPages();showRestore()}
 async function lockNow(){clearTimeout(pt);S.key=null;S.loaded=false;S.noStore=false;wipe();$('#lock').style.display='block';showLock()}
-const PW={"s":"62f53ba61516d37ff300ce68df2b2afe","h":"ba82c58f3766e930b59ed2480c7f8db564f999a0e0f1a415a9dedd4cb2b2f32a","e":"7a8c7dd61c94dcf41108ee71ee436129"};
-function showLock(){if(localStorage.getItem('lk'))return lockUI('<h2>Locked</h2><div class="msg">Too many wrong attempts. This app is locked on this device.</div>');lockUI('<h2>Enter passcode</h2><input id="pw" type="password" autocomplete="off"><button class="pri" onclick="unlock()">Log in</button><div id="lm" class="msg"></div>')}
+function showLock(){}
 
 
-async function unlock(){if(localStorage.getItem('lk'))return showLock();const o=PW,s=new Uint8Array(o.s.match(/../g).map(h=>parseInt(h,16)));
- if(await hash($('#pw').value,s)===o.h){localStorage.removeItem('lf');S.key=await dk($('#pw').value,o.e);try{const x=await idb('get');if(x&&x.iv){try{S.records=await dec(x)}catch(e){S.noStore=true;S.records=[]}}}catch(e){}S.loaded=true;open_();try{renderRecs();if(S.noStore)st('Saved records could not be opened with this passcode.')}catch(e){}}else{const f=(+localStorage.getItem('lf')||0)+1;localStorage.setItem('lf',f);if(f>=3){localStorage.setItem('lk','1');showLock()}else $('#lm').textContent='Wrong passcode. '+(3-f)+' attempt'+(3-f==1?'':'s')+' left.'}}
 function open_(){try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}$('#lock').style.display='none';$('#app').style.display='block'}
 let t;function bump(){clearTimeout(t);S.last=Date.now();t=setTimeout(lockNow,S.idle*60000)}document.addEventListener('visibilitychange',()=>{if(!document.hidden&&$('#app').style.display!='none'&&Date.now()-S.last>S.idle*60000)lockNow()});['touchstart','click','keydown'].forEach(e=>addEventListener(e,bump));
 function setIdle(){S.idle=Math.max(1,+$('#idle').value||15);bump()}
@@ -697,6 +694,31 @@ document.addEventListener('keydown',e=>{if(e.key=='Escape')closeRec()});
 (function(){const s=document.createElement('style');s.textContent=['.sv{display:flex;flex-direction:column;gap:10px}.sv .sl{margin:0}.sv>button{width:100%}.sv .seg{margin:0}','.chips{display:flex;flex-wrap:wrap;gap:6px}.chips button{padding:6px 12px;border-radius:999px;font-size:13px;font-weight:600;background:#fff;color:var(--mut);border-color:var(--ln)}.chips button.on{background:var(--g);color:#fff;border-color:var(--g)}','.srt{display:flex;align-items:center;gap:10px}.srt label{flex:0 0 auto;margin:0}','.svsum{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:var(--mut);padding:0 2px}.svsum b{color:var(--fg);font-size:17px}','.sm{flex:1;min-width:0}.s1{font-weight:600;overflow-wrap:anywhere}.s2{font-size:12px;color:var(--mut);margin-top:1px}','.empty2{border:2px dashed var(--ln);border-radius:16px;padding:28px 16px;text-align:center;color:var(--mut)}','@media(max-width:900px){.nav button{padding:10px 6px;font-size:14px}}'].join('');document.head.appendChild(s)})();
 (function(){const s=document.createElement('style');s.textContent='.sl{background:var(--card);border:1px solid var(--ln);border-radius:14px;padding:6px 14px;margin:10px 0}.sl h4{margin:10px 0 2px;font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}.srow{display:flex;align-items:center;gap:10px;padding:9px 0;font-size:14px}.srow+.srow{border-top:1px solid var(--ln)}.srow span{flex:1;min-width:0}.srow b{white-space:nowrap}.srow .x{flex:0 0 32px;height:32px;padding:0}#f_category{width:100%}';document.head.appendChild(s)})();
 
+
+/* ---------- v69: add-to-Home-Screen guide ---------- */
+(function(){
+const standalone=()=>{try{return navigator.standalone===true||matchMedia('(display-mode: standalone)').matches}catch(e){return false}};
+const li='margin:0 0 10px;padding-left:2px';
+window.installGuide=function(open){
+ if(standalone())return '<div class="hint" style="font-size:14px;margin:12px 0;color:var(--gd)">&#10003; You are using the Home Screen app. Your saved records are protected from Safari clearing.</div>';
+ return '<details'+(open?' open':'')+' style="margin:14px 0;background:var(--usr);border:1px solid #ecd3a8;border-radius:12px;padding:12px 14px"><summary style="font-weight:700;color:var(--fg);font-size:15px">Do this first: add PaperTrail to your Home Screen</summary>'
+ +'<div style="font-size:14px;line-height:1.5;margin-top:10px;color:var(--fg)">'
+ +'<p style="margin:0 0 10px">Safari can erase a website\'s saved data if you have not opened it in about a week. An app on your Home Screen is not erased that way, so your invoices stay safe.</p>'
+ +'<ol style="margin:0;padding-left:20px">'
+ +'<li style="'+li+'">Open this page in <b>Safari</b> (not inside Messages, Instagram or another app).</li>'
+ +'<li style="'+li+'">Tap the <b>Share</b> button: a square with an arrow pointing up, at the bottom of the screen. If you do not see it, tap the <b>&bull;&bull;&bull;</b> button first.</li>'
+ +'<li style="'+li+'">Scroll down the menu and tap <b>Add to Home Screen</b>. If you do not see it, tap <b>View More</b>.</li>'
+ +'<li style="'+li+'">Leave <b>Open as Web App</b> switched on, then tap <b>Add</b> (top right).</li>'
+ +'<li style="'+li+'">Close Safari. From now on, <b>open PaperTrail from the new icon on your Home Screen</b>.</li>'
+ +'<li style="'+li+'">Create your account <b>in the Home Screen app</b>, then save your invoices there.</li></ol>'
+ +'<p style="margin:10px 0 0;font-weight:600">Important: the Home Screen app keeps its own separate storage. Anything you saved in Safari before will not show up in it, so do these steps before you save anything.</p>'
+ +'</div></details>';
+};
+/* Settings: always available */
+const d=document.querySelector('.side details');
+if(d){const w=document.createElement('div');w.innerHTML=installGuide(false);d.insertBefore(w,d.children[1])}
+})();
+
 /* ---------- v62: accounts (email + password, kept on this device) ---------- */
 /* PaperTrail accounts (v62): email + password sign-in, kept on this device.
    Load AFTER app.js. It replaces only the lock screen (showLock). Everything else in app.js is untouched, apart from
@@ -714,7 +736,6 @@ const uidOf=async em=>hex(await crypto.subtle.digest('SHA-256',new TextEncoder()
 const pp=(em,pw)=>em+'\u0000'+pw;
 const msg=t=>{const m=$('#lm');if(m)m.textContent=t||''};
 const esc=v=>String(v||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
-let legacy=false;
 
 function ui(tab){
  S.uid=null;S.email=null;
@@ -725,57 +746,37 @@ function ui(tab){
  +'<input id="em" type="email" inputmode="email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="Email" value="'+esc(up?'':last)+'">'
  +'<input id="pw" type="password" autocomplete="'+(up?'new-password':'current-password')+'" placeholder="Password'+(up?' (8+ characters)':'')+'">'
  +(up?'<input id="pw2" type="password" autocomplete="new-password" placeholder="Confirm password">'
-   +(legacy?'<input id="old" type="password" autocomplete="off" placeholder="Old passcode (optional: bring over records saved before accounts)">':'')
-   +'<div class="hint" style="font-size:13px;color:var(--mut);margin:2px 0 8px">Your records are encrypted on this device with this password. There is no reset: if you forget it, the saved records cannot be opened.</div>'
+      +installGuide(true)
+      +'<div class="hint" style="font-size:13px;color:var(--mut);margin:2px 0 8px">Your records are encrypted on this device with this password. There is no reset: if you forget it, the saved records cannot be opened.</div>'
    +'<button class="pri" type="button" onclick="authUp()">Create account</button>'
   :'<button class="pri" type="button" onclick="authIn()">Sign in</button>'
-   +(legacy?'<button type="button" class="lnk" style="margin-top:8px" onclick="authOld()">Use old passcode</button>':'')+'<button type="button" class="lnk" style="margin-top:8px" onclick="authDiag()">Check what is saved on this device</button>')
+   )
  +'<div id="lm" class="msg" style="margin-top:10px"></div>');
  const f=$(up?'#em':(last?'#pw':'#em'));if(f)try{f.focus()}catch(e){}
 }
-window.authDiag=async function(){
- let o='Address: '+location.host+'\n';
- try{const dbs=indexedDB.databases?await indexedDB.databases():[];o+='Databases: '+(dbs.map(d=>d.name+' v'+d.version).join(', ')||'none')+'\n';
-  for(const d of dbs){await new Promise(ok=>{const q=indexedDB.open(d.name);q.onerror=()=>ok();q.onsuccess=()=>{const db=q.result;const names=[...db.objectStoreNames];if(!names.length){db.close();return ok()}const tx=db.transaction(names,'readonly');let n=names.length;names.forEach(sn=>{const s=tx.objectStore(sn),r=s.getAllKeys();r.onsuccess=()=>{o+=d.name+'/'+sn+' keys: '+(r.result.map(k=>String(k).slice(0,14)).join(', ')||'none')+'\n';if(!--n){db.close();ok()}}})}})}
- }catch(e){o+='Could not list databases ('+e+')\n'}
- let a=0;try{for(let i=0;i<localStorage.length;i++)if(localStorage.key(i).indexOf(AK)==0)a++}catch(e){}
- o+='Accounts on this device: '+a;
- const m=$('#lm');if(m){m.style.whiteSpace='pre-wrap';m.textContent=o}
-};
 window.authTab=ui;
-window.showLock=function(){
- /* is there a pre-accounts vault on this device? (offers the "old passcode" link) */
- S.uid=null;ui('in');
- idb('get').then(x=>{if(x&&x.iv&&!legacy){legacy=true;if($('#em')&&!$('#pw2'))ui('in')}}).catch(()=>{});
-};
+window.showLock=function(){S.uid=null;ui('in')};
 
-async function enter(uid,em,pw,o,recs){
- S.uid=uid;S.email=em;S.key=await dk(pp(em,pw),o.e);S.records=recs||[];S.noStore=false;
+async function enter(uid,em,pw,o){
+ S.uid=uid;S.email=em;S.key=await dk(pp(em,pw),o.e);S.records=[];S.noStore=false;
  try{const x=await idb('get');if(x&&x.iv){try{S.records=await dec(x)}catch(e){S.noStore=true;S.records=[]}}}catch(e){}
  S.loaded=true;try{localStorage.setItem(LAST,em)}catch(e){}
- bringBtn(true);
  const v=$('#ver');if(v)v.title=em;
  open_();
- if(recs&&recs.length&&!S.noStore)await store();
  try{renderRecs();if(S.noStore)st('Saved records could not be opened.')}catch(e){}
 }
 
 window.authUp=async function(){
  try{
-  const em=norm($('#em').value),p1=$('#pw').value,p2=$('#pw2').value,old=$('#old')?$('#old').value:'';
+  const em=norm($('#em').value),p1=$('#pw').value,p2=$('#pw2').value;
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(em))return msg('Enter a valid email address.');
   if(p1.length<8)return msg('Use at least 8 characters for the password.');
   if(p1!==p2)return msg('The two passwords do not match.');
   const uid=await uidOf(em);
-  if(localStorage.getItem(AK+uid))return msg('This email already has an account on this device. Tap Sign in with it, then open Settings and tap Bring over records saved before accounts.');
-  let recs=[];
-  if(old){ /* optional: carry the pre-accounts saved records into this account */
-   if(await hash(old,unhex(PW.s))!==PW.h)return msg('That old passcode is not correct.');
-   try{const x=await idb('get');if(x&&x.iv){S.key=await dk(old,PW.e);recs=await dec(x)}}catch(e){S.key=null;return msg('The old saved records could not be opened.')}
-  }
+  if(localStorage.getItem(AK+uid))return msg('This email already has an account on this device. Tap Sign in.');
   const salt=rnd(16),o={s:salt,h:await hash(pp(em,p1),unhex(salt)),e:rnd(16)};
   localStorage.setItem(AK+uid,JSON.stringify(o));
-  await enter(uid,em,p1,o,recs);
+  await enter(uid,em,p1,o);
  }catch(e){msg('Could not create the account on this device.')}
 };
 
@@ -794,43 +795,6 @@ window.authIn=async function(){
  }catch(e){msg('Could not sign in.')}
 };
 
-/* pre-accounts single passcode, for the owner's existing saved records */
-function bringBtn(on){
- let b=$('#bring');
- if(!b){const d=document.querySelector('.side details');if(!d)return;b=document.createElement('button');b.id='bring';b.type='button';b.textContent='Bring over records saved before accounts';b.onclick=window.authBring;d.appendChild(b)}
- b.style.display=on?'':'none';
- let n=$('#bringbar');
- if(!n){const m=document.querySelector('.main');if(!m)return;n=document.createElement('div');n.id='bringbar';n.style.cssText='display:none;gap:8px;align-items:center;flex-wrap:wrap;background:var(--usr);border:1px solid #ecd3a8;border-radius:12px;padding:10px 12px;margin-bottom:14px';n.innerHTML='<span style="flex:1;min-width:180px">Bring over the records you saved before accounts?</span><button type="button" class="pri" style="flex:0 0 auto">Bring over</button><button type="button" style="flex:0 0 auto">Not now</button>';n.children[1].onclick=window.authBring;n.children[2].onclick=()=>{n.style.display='none'};m.insertBefore(n,m.firstChild)}
- let done=false;try{done=!!localStorage.getItem('pt_brought:'+S.uid)}catch(e){}
- n.style.display=on&&(!done||!S.records.length)?'flex':'none';
-}
-/* copy (never move) the pre-accounts records into the signed-in account; the old vault is left untouched */
-window.authBring=async function(){
- if(!S.uid||!S.key)return;
- const v=prompt('Enter your old passcode to copy the records saved before accounts into this account:');if(!v)return;
- const uid=S.uid,key=S.key;let recs=null,err='';
- try{
-  if(await hash(v,unhex(PW.s))!==PW.h)err='That old passcode is not correct.';
-  else{S.uid=null;const x=await idb('get');S.uid=uid;if(!x||!x.iv)err='No old saved records were found on this device.';else{S.key=await dk(v,PW.e);recs=await dec(x)}}
- }catch(e){err='The old saved records could not be opened.'}
- S.uid=uid;S.key=key;
- if(err||!recs)return alert(err||'Nothing to copy.');
- const have=new Set(S.records.map(r=>JSON.stringify(r)));const add=recs.filter(r=>!have.has(JSON.stringify(r)));
- S.records=S.records.concat(add);await store();try{renderRecs()}catch(e){}
- try{localStorage.setItem('pt_brought:'+uid,'1')}catch(e){}bringBtn(true);
- toast(add.length+' record'+(add.length==1?'':'s')+' copied'+(recs.length-add.length?' ('+(recs.length-add.length)+' already here)':''));
-};
-window.authOld=function(){
- lockUI('<h2>Old passcode</h2><input id="authold" type="password" autocomplete="off" placeholder="Passcode"><button class="pri" type="button" onclick="window.authOldGo()">Log in</button><button type="button" class="lnk" style="margin-top:8px" onclick="authTab(\'in\')">Back</button><div id="lm" class="msg" style="margin-top:10px"></div>');
-};
-window.authOldGo=async function(){
- const v=$('#authold').value;
- if(await hash(v,unhex(PW.s))!==PW.h)return msg('Wrong passcode.');
- S.uid=null;S.email=null;S.key=await dk(v,PW.e);S.records=[];S.noStore=false;bringBtn(false);
- try{const x=await idb('get');if(x&&x.iv){try{S.records=await dec(x)}catch(e){S.noStore=true}}}catch(e){}
- S.loaded=true;open_();try{renderRecs()}catch(e){}
- if(S.noStore)st('Old records found but could not be opened with this passcode.');else if(!S.records.length)st('No old saved records were found at this web address ('+location.host+'). Records are stored per web address, so open the address you used when you saved them.');
-};
 /* the app calls showLock() at load, before this file runs: draw the new screen now */
 if($('#lock')&&$('#lock').style.display!='none')window.showLock();
 })();
