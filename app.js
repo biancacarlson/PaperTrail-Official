@@ -729,10 +729,19 @@ function ui(tab){
    +'<div class="hint" style="font-size:13px;color:var(--mut);margin:2px 0 8px">Your records are encrypted on this device with this password. There is no reset: if you forget it, the saved records cannot be opened.</div>'
    +'<button class="pri" type="button" onclick="authUp()">Create account</button>'
   :'<button class="pri" type="button" onclick="authIn()">Sign in</button>'
-   +(legacy?'<button type="button" class="lnk" style="margin-top:8px" onclick="authOld()">Use old passcode</button>':''))
+   +(legacy?'<button type="button" class="lnk" style="margin-top:8px" onclick="authOld()">Use old passcode</button>':'')+'<button type="button" class="lnk" style="margin-top:8px" onclick="authDiag()">Check what is saved on this device</button>')
  +'<div id="lm" class="msg" style="margin-top:10px"></div>');
  const f=$(up?'#em':(last?'#pw':'#em'));if(f)try{f.focus()}catch(e){}
 }
+window.authDiag=async function(){
+ let o='Address: '+location.host+'\n';
+ try{const dbs=indexedDB.databases?await indexedDB.databases():[];o+='Databases: '+(dbs.map(d=>d.name+' v'+d.version).join(', ')||'none')+'\n';
+  for(const d of dbs){await new Promise(ok=>{const q=indexedDB.open(d.name);q.onerror=()=>ok();q.onsuccess=()=>{const db=q.result;const names=[...db.objectStoreNames];if(!names.length){db.close();return ok()}const tx=db.transaction(names,'readonly');let n=names.length;names.forEach(sn=>{const s=tx.objectStore(sn),r=s.getAllKeys();r.onsuccess=()=>{o+=d.name+'/'+sn+' keys: '+(r.result.map(k=>String(k).slice(0,14)).join(', ')||'none')+'\n';if(!--n){db.close();ok()}}})}})}
+ }catch(e){o+='Could not list databases ('+e+')\n'}
+ let a=0;try{for(let i=0;i<localStorage.length;i++)if(localStorage.key(i).indexOf(AK)==0)a++}catch(e){}
+ o+='Accounts on this device: '+a;
+ const m=$('#lm');if(m){m.style.whiteSpace='pre-wrap';m.textContent=o}
+};
 window.authTab=ui;
 window.showLock=function(){
  /* is there a pre-accounts vault on this device? (offers the "old passcode" link) */
@@ -793,7 +802,7 @@ function bringBtn(on){
  let n=$('#bringbar');
  if(!n){const m=document.querySelector('.main');if(!m)return;n=document.createElement('div');n.id='bringbar';n.style.cssText='display:none;gap:8px;align-items:center;flex-wrap:wrap;background:var(--usr);border:1px solid #ecd3a8;border-radius:12px;padding:10px 12px;margin-bottom:14px';n.innerHTML='<span style="flex:1;min-width:180px">Bring over the records you saved before accounts?</span><button type="button" class="pri" style="flex:0 0 auto">Bring over</button><button type="button" style="flex:0 0 auto">Not now</button>';n.children[1].onclick=window.authBring;n.children[2].onclick=()=>{n.style.display='none'};m.insertBefore(n,m.firstChild)}
  let done=false;try{done=!!localStorage.getItem('pt_brought:'+S.uid)}catch(e){}
- n.style.display=on&&!done?'flex':'none';
+ n.style.display=on&&(!done||!S.records.length)?'flex':'none';
 }
 /* copy (never move) the pre-accounts records into the signed-in account; the old vault is left untouched */
 window.authBring=async function(){
@@ -820,6 +829,7 @@ window.authOldGo=async function(){
  S.uid=null;S.email=null;S.key=await dk(v,PW.e);S.records=[];S.noStore=false;bringBtn(false);
  try{const x=await idb('get');if(x&&x.iv){try{S.records=await dec(x)}catch(e){S.noStore=true}}}catch(e){}
  S.loaded=true;open_();try{renderRecs()}catch(e){}
+ if(S.noStore)st('Old records found but could not be opened with this passcode.');else if(!S.records.length)st('No old saved records were found at this web address ('+location.host+'). Records are stored per web address, so open the address you used when you saved them.');
 };
 /* the app calls showLock() at load, before this file runs: draw the new screen now */
 if($('#lock')&&$('#lock').style.display!='none')window.showLock();
