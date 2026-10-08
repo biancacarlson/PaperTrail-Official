@@ -758,7 +758,7 @@ window.authUp=async function(){
   if(p1.length<8)return msg('Use at least 8 characters for the password.');
   if(p1!==p2)return msg('The two passwords do not match.');
   const uid=await uidOf(em);
-  if(localStorage.getItem(AK+uid))return msg('An account for this email already exists on this device. Use Sign in.');
+  if(localStorage.getItem(AK+uid))return msg('This email already has an account on this device. Tap Sign in with it, then open Settings and tap Bring over records saved before accounts.');
   let recs=[];
   if(old){ /* optional: carry the pre-accounts saved records into this account */
    if(await hash(old,unhex(PW.s))!==PW.h)return msg('That old passcode is not correct.');
@@ -789,7 +789,11 @@ window.authIn=async function(){
 function bringBtn(on){
  let b=$('#bring');
  if(!b){const d=document.querySelector('.side details');if(!d)return;b=document.createElement('button');b.id='bring';b.type='button';b.textContent='Bring over records saved before accounts';b.onclick=window.authBring;d.appendChild(b)}
- b.style.display=on&&legacy?'':'none';
+ b.style.display=on?'':'none';
+ let n=$('#bringbar');
+ if(!n){const m=document.querySelector('.main');if(!m)return;n=document.createElement('div');n.id='bringbar';n.style.cssText='display:none;gap:8px;align-items:center;flex-wrap:wrap;background:var(--usr);border:1px solid #ecd3a8;border-radius:12px;padding:10px 12px;margin-bottom:14px';n.innerHTML='<span style="flex:1;min-width:180px">Bring over the records you saved before accounts?</span><button type="button" class="pri" style="flex:0 0 auto">Bring over</button><button type="button" style="flex:0 0 auto">Not now</button>';n.children[1].onclick=window.authBring;n.children[2].onclick=()=>{n.style.display='none'};m.insertBefore(n,m.firstChild)}
+ let done=false;try{done=!!localStorage.getItem('pt_brought:'+S.uid)}catch(e){}
+ n.style.display=on&&!done?'flex':'none';
 }
 /* copy (never move) the pre-accounts records into the signed-in account; the old vault is left untouched */
 window.authBring=async function(){
@@ -804,6 +808,7 @@ window.authBring=async function(){
  if(err||!recs)return alert(err||'Nothing to copy.');
  const have=new Set(S.records.map(r=>JSON.stringify(r)));const add=recs.filter(r=>!have.has(JSON.stringify(r)));
  S.records=S.records.concat(add);await store();try{renderRecs()}catch(e){}
+ try{localStorage.setItem('pt_brought:'+uid,'1')}catch(e){}bringBtn(true);
  toast(add.length+' record'+(add.length==1?'':'s')+' copied'+(recs.length-add.length?' ('+(recs.length-add.length)+' already here)':''));
 };
 window.authOld=function(){
