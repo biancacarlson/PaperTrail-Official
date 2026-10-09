@@ -81,6 +81,13 @@ function tapWord(el){if(!el||!el.dataset||el.dataset.i==null)return;const i=+el.
 function clearSel(){S.sel=[];S.psel=[];document.querySelectorAll('.wb.sel').forEach(e=>e.classList.remove('sel'));updBar()}
 function updBar(){const s=getSelection(),ok=s&&!s.isCollapsed&&($('#ocr').contains(s.anchorNode)||$('#pages').contains(s.anchorNode));$('#addbar').style.display=(ok||hasSel())?'block':'none';$('#selt').textContent=hasSel()?selText():''}
 function showOcr(){$('#docwrap').style.display='block'}
+/* v75: invoices are shown as an image, so the phone's own text selection can't reach them. Tap words (or Select all text), then Copy. */
+function selAll(){S.sel=S.words.map((_,i)=>i);document.querySelectorAll('#view .wb').forEach(e=>e.classList.add('sel'));updBar()}
+function selLines(){const ix=[...S.sel].sort((a,b)=>a-b);let o='',p=null;ix.forEach(i=>{const w=S.words[i],b=w.bbox;if(p&&b&&p.bbox&&b.y0>p.bbox.y0+(p.bbox.y1-p.bbox.y0)*.6)o+='\n';else if(p)o+=' ';o+=w.text;p=w});return o}
+async function copySel(){const t=(S.psel&&S.psel.length)?selText():selLines();if(!t)return;let ok=false;
+ try{if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(t);ok=true}}catch(e){}
+ if(!ok){try{const a=document.createElement('textarea');a.value=t;a.setAttribute('readonly','');a.style.cssText='position:fixed;top:0;left:0;opacity:0;font-size:16px';document.body.appendChild(a);a.focus();a.select();a.setSelectionRange(0,t.length);ok=document.execCommand('copy');a.remove()}catch(e){}}
+ toast(ok?'Copied':'Could not copy. Try again.')}
 /* v60: the invoice sits in the page at full height, so one finger scrolls the page. Pinch (or the Enlarge button) zooms; only while zoomed does one finger pan the image. */
 function showDoc(u){showOcr();const v=$('#view');v.style.height='';v.innerHTML='<div id="layer" style="position:absolute;top:0;left:0;width:100%;transform-origin:0 0"><img src="'+u+'" style="position:static;width:100%;display:block"></div><button type="button" class="zbtn">Enlarge</button>';
  const im=v.firstChild,pic=im.firstChild,rb=v.lastChild;S.z=1;S.x=S.y=0;
@@ -142,12 +149,12 @@ function setCat(v){const r=S.rec;r.category=v;r.edited.category=v?1:0;if(!v)auto
 const LNK='background:transparent;border:0;color:var(--gd);text-decoration:underline;font-weight:600;padding:8px 0;text-align:left';
 const esc=v=>String(v??'').replace(/"/g,'&quot;').replace(/</g,'&lt;'),miss=k=>{const r=S.rec;return r.doc&&!r[k]&&['date','merchant','client','jobDate','location','amount'].includes(k)&&!(k=='location'&&r.mode=='purchase')};
 function ed(k,v){S.rec[k]=v;if(k=='location'){const g=$('#gs'),c=$('#gc');if(g)g.href=gurl(S.rec);if(c)c.href=gurl(S.rec,1)}S.rec.edited[k]=1;const e=$('#f_'+k);if(e){const f=String(v).trim()!=='';e.classList.toggle('ext',f);e.classList.remove('usr');if(f)e.classList.remove('warn')}calc();if(k=='date')refreshActs();if(k=='merchant')autoCat()}
-function it(i,k,v){S.rec.items[i][k]=k=='n'?v:N(v)||0;S.rec.items[i].ext=0;S.rec.items[i].guess=0;if(k=='n')S.rec.items[i].inf=0;calc();const e=$('#it_'+i);if(e)e.textContent=M(S.rec.items[i].t);if(k=='n')autoCat()}
+function it(i,k,v){S.rec.items[i][k]=k=='n'?v:N(v)||0;S.rec.items[i].ext=0;S.rec.items[i].guess=0;if(k=='n'){S.rec.items[i].inf=0;S.rec.items[i].chk=0}calc();const e=$('#it_'+i);if(e)e.textContent=M(S.rec.items[i].t);if(k=='n')autoCat()}
 function r_del(i){S.rec.items.splice(i,1);render()}
 /* ---------- calculation ---------- */
 function compute(r){const o={};if(r.mode=='purchase'){const A=r.items;A.forEach(i=>i.t=+((i.q||0)*(i.p||0)).toFixed(2));const sm=a=>+a.reduce((s,i)=>s+i.t,0).toFixed(2);o.all=sm(A);o.sub=sm(A.filter(i=>!i.off));o.removed=+(o.all-o.sub).toFixed(2);o.nOff=A.filter(i=>i.off).length;const tx=N(r.tax)||0,sh=N(r.shipping)||0,k=o.all>0?o.sub/o.all:1,fl=A.some(i=>i.tx===0||i.tx===1),ta=fl?sm(A.filter(i=>i.tx!==0)):0,ts=fl?sm(A.filter(i=>i.tx!==0&&!i.off)):0,kt=fl&&ta>0?ts/ta:k;o.ship=+(sh*k).toFixed(2);o.tax=+(tx*kt).toFixed(2);o.total=+(o.sub+o.ship+o.tax).toFixed(2);o.full=+(o.all+sh+tx).toFixed(2);o.warn=[];
  {const d=N(r.discount)||0,xt=N(r.extTotal);o.disc=0;if(d>0&&xt!=null&&Math.abs(o.all+sh+tx-d-xt)<=0.01&&Math.abs(o.all+sh+tx-xt)>0.01){o.disc=+(d*k).toFixed(2);o.total=+(o.total-o.disc).toFixed(2);o.full=+(o.full-d).toFixed(2)}}
- if(A.some(i=>i.guess))o.warn.push('Only the order subtotal could be read, so it is shown as one combined line. Rename it, or add each item if the order had several.');else if(r.extSub&&Math.abs(N(r.extSub)-o.all)>0.01&&!(r.extTotal&&Math.abs(N(r.extTotal)-o.full)<=0.01))o.warn.push('Item prices add up to '+M(o.all)+' but the receipt subtotal is '+M(N(r.extSub))+'. Check for a missed or misread item.');
+ if(A.some(i=>i.guess))o.warn.push('Only the order subtotal could be read, so it is shown as one combined line. Rename it, or add each item if the order had several.');else if(r.extSub&&Math.abs(N(r.extSub)-o.all)>0.01&&!(r.extTotal&&Math.abs(N(r.extTotal)-o.full)<=0.01))o.warn.push('Item prices add up to '+M(o.all)+' but the receipt subtotal is '+M(N(r.extSub))+'. '+M(Math.abs(N(r.extSub)-o.all))+' is unaccounted for. Check for a missed or misread item.');
  if(r.extTotal&&Math.abs(N(r.extTotal)-o.full)>0.01)o.warn.push('Calculated order total '+M(o.full)+' differs from the receipt total '+M(N(r.extTotal))+'.');
  if(r.expected&&A.length!=r.expected)o.warn.push('Receipt lists '+r.expected+' items; '+A.length+' found here.');
  if(r.tax===undefined||r.tax==='')o.warn.push('Tax not entered; total excludes tax.');if((r.shots||(S.pages&&S.pages.length))&&(r.number==null||r.number===''))o.warn.push('Receipt number not found. Tap it on the receipt, choose Receipt/Invoice # in the bar at the bottom, then tap Add.')}
@@ -244,7 +251,9 @@ async function saveImg(){try{const b=await recsBlob([S.rec]),f=new File([b],inam
 function toast(m){$('#status').style.color='#0a0';$('#status').textContent=m;setTimeout(()=>{$('#status').textContent='';$('#status').style.color=''},2500)}
 const noun=()=>S.mode=='purchase'?'Receipt':'Call Sheet';const cpLabel=()=>'Copy '+noun()+' Text';
 let ct;const copyRec=async()=>{if(await copy([S.rec])){const b=$('#cpbtn');clearTimeout(ct);requestAnimationFrame(()=>{b.textContent='Copied'});ct=setTimeout(()=>requestAnimationFrame(()=>{b.textContent=cpLabel()}),2500)}};
-function saveRec(){if(!S.rec||!S.rec.loaded)return;const j=JSON.stringify(S.rec);if(S.records.some(x=>JSON.stringify(x)===j))return toast('Already saved');if(S.records.some(x=>sameRec(S.rec,x))&&!confirm('You already have this one saved. Save it again anyway?'))return;S.records.push(JSON.parse(j));S.sv.sec=S.rec.mode=='purchase'?'x':'w';S.sv.cat='All';store();showSaved();toast('Added to Saved')}
+function saveRec(){if(!S.rec||!S.rec.loaded)return;const j=JSON.stringify(S.rec);
+ if(S.rec.rid){const k=S.records.findIndex(x=>x.rid===S.rec.rid);if(k>=0){const same=JSON.stringify(S.records[k])===j;if(!same){S.records[k]=JSON.parse(j);S.sv.sec=S.rec.mode=='purchase'?'x':'w';S.sv.cat='All';store()}endEdit();showSaved();return toast(same?'No changes to save':'Changes saved')}}
+if(S.records.some(x=>JSON.stringify(x)===j))return toast('Already saved');if(S.records.some(x=>sameRec(S.rec,x))&&!confirm('You already have this one saved. Save it again anyway?'))return;S.records.push(JSON.parse(j));S.sv.sec=S.rec.mode=='purchase'?'x':'w';S.sv.cat='All';store();showSaved();toast('Added to Saved')}
 function key(r){const d=Parser.pd(r.date||r.jobDate);return d?+d:Infinity}
 /* expense totals (Expense records only): by month, by year (when more than one), by category */
 function totals(){const m={},y={},c={};let all=0;S.records.filter(r=>r.mode=='purchase').forEach(r=>{const t=compute(r).total||0,d=Parser.pd(r.date),p=n=>String(n).padStart(2,'0'),mk=d?d.getFullYear()+'-'+p(d.getMonth()+1):'0000',yk=d?String(d.getFullYear()):'0000',ck=r.category||'Uncategorized';m[mk]=(m[mk]||0)+t;y[yk]=(y[yk]||0)+t;c[ck]=(c[ck]||0)+t;all+=t});
@@ -348,7 +357,13 @@ async function readImg(f,opts){opts=opts||{};const src=typeof f=='function'?awai
   /* pages of items: read again with light-gray text turned black, so 'After credit applied' lines are not lost */
   if(P0.items.length){try{best.alt=(await ocrP(prep(c))).text}catch(e){}}
   return{c,text:best.t,words:best.w,conf:best.c,alt:best.alt,url:c.toDataURL('image/jpeg',.85)}}
- for(const pre of [0,1]){try{const r=await Promise.race([Tesseract.recognize(pre?prep(c):c,'eng'),new Promise((_,j)=>setTimeout(()=>j(0),60000))]),t=r.data.text,p=Parser.parse(t,'purchase'),n=p.items.length+Object.keys(p.found).length;if(n>best.n)best={t,n,w:(r.data.words||[]).filter(w=>w.text.trim()),c:r.data.confidence};if(best.n>=5)break}catch(e){}}
+ /* Several reads, best one wins: normal layout read, then row-by-row read (keeps each price on its item's line), then high-contrast row read.
+    A read whose items add up to the receipt's subtotal ends the search; otherwise the read with the most items/fields is kept. */
+ {const tmo=pr=>Promise.race([pr,new Promise((_,j)=>setTimeout(()=>j(0),90000))]),
+  passes=[()=>tmo(Tesseract.recognize(c,'eng')).then(r=>r.data),()=>ocrP(c),()=>ocrP(prep(c))];
+  for(let k=0;k<passes.length;k++){try{const d=await passes[k](),t=d.text,p=Parser.parse(t,'purchase'),n=p.items.length+Object.keys(p.found).length+(p.recon&&p.recon.ok?20:0);
+   if(n>best.n)best={t,n,w:(d.words||[]).filter(w=>w.text.trim()&&w.bbox),c:d.confidence};
+   if(p.recon&&p.recon.ok)break;if(!(p.recon&&p.recon.target!=null)&&p.items.length>=6&&k>=1)break}catch(e){}}}
  try{const pp=Parser.parse(best.t,'purchase');if(!pp.fields.number&&pp.items.length&&!/amazon|temu|\d{3}-\d{7}-\d{7}/i.test(best.t)){const z=Math.min(2,2600/Math.max(c.width,c.height));
   if(z>1.15){const c2=document.createElement('canvas');c2.width=Math.round(c.width*z);c2.height=Math.round(c.height*z);const x2=c2.getContext('2d');x2.imageSmoothingQuality='high';x2.drawImage(c,0,0,c2.width,c2.height);
    const r=await Promise.race([Tesseract.recognize(c2,'eng'),new Promise((_,j)=>setTimeout(()=>j(0),60000))]);
@@ -375,7 +390,7 @@ function tidyName(n){let t=String(n||'').replace(/\bCombination\b/gi,'Combo').re
  const m=t.match(/^(\d+pc )(.+) Set$/i);if(m)t=m[1]+'Set of '+m[2];
  return t}
 function itemsHtml(){const r=S.rec,on=r.items.filter(i=>!i.off).length;r.items.forEach(it=>{it.n=tidyName(it.n)});
- const card=(it,i)=>`<div class="ic${it.off?' off':''}"><button class="ck" onclick="tog(${i})" aria-label="Include or exclude item">${it.off?'':'✓'}</button><div class="ib"><label class="nl">Item name</label><textarea class="in" rows="2" placeholder="Item name" oninput="it(${i},'n',this.value)">${esc(it.n)}</textarea>${it.inf?'<div class="inf">Receipt title was cut off. Completed based on available context.</div>':''}<div class="il"><div class="mf"><label>Qty</label><input class="q" type="number" inputmode="numeric" value="${it.q}" oninput="it(${i},'q',this.value)"></div><span class="mx">×</span><div class="mf"><label>Price</label><input class="p" type="number" inputmode="decimal" step="0.01" value="${it.p}" oninput="it(${i},'p',this.value)"></div><div class="tt"><label>Total</label><b id="it_${i}">${M(+((it.q||0)*(it.p||0)).toFixed(2))}</b></div></div></div><button class="x" onclick="r_del(${i})" aria-label="Delete item">✕</button></div>`;
+ const card=(it,i)=>`<div class="ic${it.off?' off':''}"><button class="ck" onclick="tog(${i})" aria-label="Include or exclude item">${it.off?'':'✓'}</button><div class="ib"><label class="nl">Item name</label><textarea class="in" rows="2" placeholder="Item name" oninput="it(${i},'n',this.value)">${esc(it.n)}</textarea>${it.inf?'<div class="inf">Receipt title was cut off. Completed based on available context.</div>':''}${it.chk?'<div class="inf">This line was hard to read. It was added so the items match the receipt subtotal. Please check the name.</div>':''}<div class="il"><div class="mf"><label>Qty</label><input class="q" type="number" inputmode="numeric" value="${it.q}" oninput="it(${i},'q',this.value)"></div><span class="mx">×</span><div class="mf"><label>Price</label><input class="p" type="number" inputmode="decimal" step="0.01" value="${it.p}" oninput="it(${i},'p',this.value)"></div><div class="tt"><label>Total</label><b id="it_${i}">${M(+((it.q||0)*(it.p||0)).toFixed(2))}</b></div></div></div><button class="x" onclick="r_del(${i})" aria-label="Delete item">✕</button></div>`;
  return '<section class="grp"><div class="ih"><h3>Items</h3>'+(r.items.length?'<span class="chip">'+on+' of '+r.items.length+' work-related</span>':'')+'</div>'
  +(r.items.length?'<p class="ihint">Remove personal items by tapping on the checkmark beside it.</p>':'<div class="empty">No items could be read from this receipt. Add them below, or use Identify unclear items.</div>')
  +r.items.map(card).join('')
@@ -456,8 +471,14 @@ function rmPage(i){if(!confirm('Remove page '+(i+1)+' from the PDF?'))return;pus
 function baked(p){const c=document.createElement('canvas');c.width=p.w;c.height=p.h;const x=c.getContext('2d');x.drawImage(p.c,0,0,p.w,p.h);
  x.globalCompositeOperation='multiply';x.fillStyle='#ffe600';p.marks.filter(m=>m.t=='h').forEach(m=>x.fillRect(m.x*p.w,m.y*p.h,m.w*p.w,m.h*p.h));
  x.globalCompositeOperation='source-over';x.fillStyle='#000';p.marks.filter(m=>m.t=='r').forEach(m=>x.fillRect(Math.floor(m.x*p.w),Math.floor(m.y*p.h),Math.ceil(m.w*p.w)+1,Math.ceil(m.h*p.h)+1));return c}
-function rname(){const r=S.rec||{},pur=S.mode=='purchase',d=Parser.pd(pur?r.date:(r.jobDate||r.date)),p=n=>String(n).padStart(2,'0');return(d?d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' ':'')+(pur?'Physical Receipt':'Physical Call Sheet')}
-function iname(){const r=S.rec||{},pur=r.mode=='purchase',d=Parser.pd(pur?r.date:(r.jobDate||r.date)),p=n=>String(n).padStart(2,'0');return(d?d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' ':'')+(pur?'Plain Text Receipt':'Plain Text Call Sheet')}
+/* v77: file names carry date + business + receipt/invoice number (or total), so two documents from the same day never share a name */
+function uname(r,label){r=r||{};const pur=r.mode=='purchase',p=n=>String(n).padStart(2,'0'),d=Parser.pd(pur?r.date:(r.jobDate||r.date)),
+ who=String((pur?r.merchant:(r.client||r.employer))||'').replace(/[\\\/:*?"<>|#%{}\[\]~]+/g,' ').replace(/\s+/g,' ').trim().slice(0,24).trim(),
+ no=String((pur?r.number:r.invoice)||'').replace(/[^A-Za-z0-9\-]/g,'').slice(0,20),amt=N(pur?r.extTotal:r.amount),now=new Date(),
+ id=no?'No '+no:(amt>0?'$'+amt.toFixed(2):'at '+p(now.getHours())+p(now.getMinutes()));
+ return [d?d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()):'',who,id,label].filter(Boolean).join(' ')}
+function rname(){const r=S.rec||{};return uname(r,r.mode=='purchase'||S.mode=='purchase'?'Physical Receipt':'Physical Call Sheet')}
+function iname(){const r=S.rec||{};return uname(r,r.mode=='purchase'?'Plain Text Receipt':'Plain Text Call Sheet')}
 function refreshActs(){const on=!!(S.pages&&S.pages.length>0);document.querySelectorAll('.pdfx').forEach(b=>b.style.display=on?'':'none');const c=$('#cpbtn'),m=$('#imgbtn');if(c){c.textContent=cpLabel()}if(m){m.classList.remove('sec');m.textContent='Save as PDF';m.onclick=saveCombo}}
 async function savePdf(){const J=window.jspdf&&window.jspdf.jsPDF;if(!J)return st('The PDF tool did not load. Check your connection and reload.');if(!S.pages.length)return;
  let d=null;S.pages.forEach(p=>{const W=595,H=+(W*p.h/p.w).toFixed(2),o=H>W?'p':'l',u=baked(p).toDataURL('image/jpeg',.92);if(!d)d=new J({unit:'pt',format:[W,H],orientation:o,compress:true});else d.addPage([W,H],o);d.addImage(u,'JPEG',0,0,W,H)});
@@ -489,7 +510,7 @@ async function saveCombo(rec){const J=window.jspdf&&window.jspdf.jsPDF;if(!J)ret
   imgs.forEach((im,i)=>{const last=i==imgs.length-1,W=595,H=+(W*im.h/im.w).toFixed(2);
    if(last){add(W,H+14+sh+M);d.addImage(im.u,'JPEG',0,0,W,H);sum(d,M,H+14,W-2*M,true)}/* summary sits under the last page of the receipt, same page */
    else{add(W,H);d.addImage(im.u,'JPEG',0,0,W,H)}})}
- const p=n=>String(n).padStart(2,'0'),dt=Parser.pd(pur?r.date:(r.jobDate||r.date)),n=(dt?dt.getFullYear()+'-'+p(dt.getMonth()+1)+'-'+p(dt.getDate())+' ':'')+(sv?(pur?'Expense Summary.pdf':'Invoice Summary.pdf'):(pur?'Receipt and Summary.pdf':'Call Sheet Invoice and Summary.pdf')),f=new File([d.output('blob')],n,{type:'application/pdf'});
+ const p=n=>String(n).padStart(2,'0'),dt=Parser.pd(pur?r.date:(r.jobDate||r.date)),n=uname(r,sv?(pur?'Expense Summary':'Invoice Summary'):(pur?'Receipt and Summary':'Call Sheet Invoice and Summary'))+'.pdf',f=new File([d.output('blob')],n,{type:'application/pdf'});
  if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f]});return}catch(e){if(e&&e.name=='AbortError')return}}
  const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=n;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);toast('Saved '+n)}
  catch(e){toast('Could not save PDF')}}
@@ -686,18 +707,28 @@ function sameRec(a,b){if(!a||!b||a.mode!=b.mode)return false;
  if(na.length>=3&&nb.length>=3)return na==nb&&who;
  const ta=recAmt(a),tb=recAmt(b),da=recDate(a),db=recDate(b);
  return !!wa&&wa==wb&&da!=null&&da==db&&ta!=null&&ta==tb&&ta>0}
-function dupWarn(){const el=$('#dupwarn');if(!el)return;const r=S.rec,m=r&&r.loaded?S.records.map((x,i)=>[x,i]).filter(([x])=>sameRec(r,x)):[];let h='';
+function dupWarn(){const el=$('#dupwarn');if(!el)return;const r=S.rec,m=r&&r.loaded?S.records.map((x,i)=>[x,i]).filter(([x])=>sameRec(r,x)&&!(r.rid&&x.rid===r.rid)):[];let h='';
  if(m.length){const pur=r.mode=='purchase',[x,i]=m[0],a=recAmt(x),nm=esc((pur?niceMerch(x.merchant):x.client)||(pur?'Receipt':'Work invoice')),dt=esc((pur?x.date:x.jobDate)||''),
   det=[nm,dt,a!=null&&a>0?M(a):''].filter(Boolean).join(' · ');
   h=`<div class="dup" role="alert"><div><b>Already saved</b><span>${pur?'A receipt':'An invoice'} like this is already in Saved: ${det}${m.length>1?' (+'+(m.length-1)+' more)':''}</span></div><button onclick="openRec(${i})">View</button></div>`}
+ {const ed=!!(r&&r.rid&&S.records.some(x=>x.rid===r.rid)),sb=$('#svbtn');if(sb)sb.textContent=ed?'Save changes':'Save record';if(ed)h='<div class="dup" role="status" style="background:#e9f1ed;border-color:#b9d2c4;color:var(--fg)"><div><b>Editing a saved record</b><span>Fix anything below, then tap Save changes.</span></div><button onclick="cancelEdit()">Cancel</button></div>'+h}
  if(el.dataset.h!==h){el.dataset.h=h;el.innerHTML=h}}
 function openRec(i){const r=S.records[i];if(!r)return;closeRec();const{t,G}=rows(r),
  h=G.map(g=>'<div class="rg">'+g.rows.map(([l,v,hl])=>`<div class="rr${hl?' hl':''}${g.k=='tot'?' tt':''}"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join('')+'</div>').join(''),
  o=document.createElement('div');o.id='recmodal';o.className='rmo';o.onclick=e=>{if(e.target===o)closeRec()};
- o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${h}</div><div class="rmf"><button class="pri" onclick="dlRec(${i})">Download PDF</button><button onclick="closeRec()">Close</button></div></div>`;
+ o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${h}</div><div class="rmf"><button class="pri" onclick="dlRec(${i})">Download PDF</button><button onclick="editRec(${i})">Edit</button><button onclick="closeRec()">Close</button></div></div>`;
  document.body.appendChild(o);document.body.style.overflow='hidden'}
 function closeRec(){const o=$('#recmodal');if(o)o.remove();document.body.style.overflow=''}
 function dlRec(i){const r=S.records[i];if(r)saveCombo(r)}
+/* v78: open a saved record back in the form. Saving then updates that same record instead of adding a copy. */
+function endEdit(){S.rec=newRec();S.pages=[];S.undo=[];S.redo=[];S.sel=[];S.psel=[];S.words=[];S.img=null;const dw=$('#docwrap');if(dw)dw.style.display='none';const dz=$('#dupwarn');if(dz){dz.dataset.h='';dz.innerHTML=''}render();renderPages()}
+function cancelEdit(){endEdit();showSaved()}
+function editRec(i){const r=S.records[i];if(!r)return;
+ if(S.rec&&S.rec.loaded&&!S.rec.rid&&!confirm('Replace the record you are working on with this saved one? Unsaved changes will be lost.'))return;
+ closeRec();if(!r.rid){r.rid=Date.now().toString(36)+Math.random().toString(36).slice(2,7);store()}
+ showWork();S.mode=r.mode;S.rec=JSON.parse(JSON.stringify(r));S.rec.loaded=true;S.pages=[];S.undo=[];S.redo=[];S.sel=[];S.psel=[];S.words=[];S.img=null;
+ const dw=$('#docwrap');if(dw)dw.style.display='none';$('#m1').className=r.mode=='purchase'?'on':'';$('#m2').className=r.mode=='freelance'?'on':'';$('.head h1').textContent='Edit saved record';
+ render();renderPages();window.scrollTo(0,0)}
 document.addEventListener('keydown',e=>{if(e.key=='Escape')closeRec()});
 (function(){const s=document.createElement('style');s.textContent='#view{height:auto;min-height:120px;touch-action:pan-y}#layer{touch-action:auto!important}.zbtn{position:absolute;top:8px;right:8px;z-index:3;padding:6px 12px;font-size:13px;font-weight:700;border-radius:999px;background:rgba(255,255,255,.92);box-shadow:0 1px 4px rgba(0,0,0,.25)}'
  +'.srow.tap{cursor:pointer}.srow.tap:active{background:rgba(0,0,0,.04)}'
@@ -718,17 +749,17 @@ const standalone=()=>{try{return navigator.standalone===true||matchMedia('(displ
 const li='margin:0 0 10px;padding-left:2px';
 window.installGuide=function(open){
  if(standalone())return '<div class="hint" style="font-size:14px;margin:12px 0;color:var(--gd)">&#10003; You are using the Home Screen app. Your saved records are protected from Safari clearing.</div>';
- return '<details'+(open?' open':'')+' style="margin:14px 0;background:var(--usr);border:1px solid #ecd3a8;border-radius:12px;padding:12px 14px"><summary style="font-weight:700;color:var(--fg);font-size:15px">Do this first: add PaperTrail to your Home Screen</summary>'
+ return '<details'+(open?' open':'')+' style="margin:14px 0;background:var(--usr);border:1px solid #ecd3a8;border-radius:12px;padding:12px 14px"><summary style="font-weight:700;color:var(--fg);font-size:15px">Before you begin: add PaperTrail to your Home Screen</summary>'
  +'<div style="font-size:14px;line-height:1.5;margin-top:10px;color:var(--fg)">'
- +'<p style="margin:0 0 10px">Safari can erase a website\'s saved data if you have not opened it in about a week. An app on your Home Screen is not erased that way, so your invoices stay safe.</p>'
+ +'<p style="margin:0 0 10px">Safari may delete a website\'s saved data after about a week without use. Installing PaperTrail on your Home Screen helps keep your invoices safe.</p>'
  +'<ol style="margin:0;padding-left:20px">'
- +'<li style="'+li+'">Open this page in <b>Safari</b> (not inside Messages, Instagram or another app).</li>'
- +'<li style="'+li+'">Tap the <b>Share</b> button: a square with an arrow pointing up, at the bottom of the screen. If you do not see it, tap the <b>&bull;&bull;&bull;</b> button first.</li>'
- +'<li style="'+li+'">Scroll down the menu and tap <b>Add to Home Screen</b>. If you do not see it, tap <b>View More</b>.</li>'
- +'<li style="'+li+'">Leave <b>Open as Web App</b> switched on, then tap <b>Add</b> (top right).</li>'
- +'<li style="'+li+'">Close Safari. From now on, <b>open PaperTrail from the new icon on your Home Screen</b>.</li>'
- +'<li style="'+li+'">Create your account <b>in the Home Screen app</b>, then save your invoices there.</li></ol>'
- +'<p style="margin:10px 0 0;font-weight:600">Important: the Home Screen app keeps its own separate storage. Anything you saved in Safari will not show up in it automatically. To move it: in Safari open Settings and tap Download backup, then in the Home Screen app tap Restore from a backup file on the sign-in screen.</p>'
+ +'<li style="'+li+'">Open PaperTrail in <b>Safari</b>.</li>'
+ +'<li style="'+li+'">Tap <b>Share</b> (the square with an up arrow). If you do not see it, tap <b>&bull;&bull;&bull;</b> first.</li>'
+ +'<li style="'+li+'">Choose <b>Add to Home Screen</b>. If it is not listed, tap <b>View More</b>.</li>'
+ +'<li style="'+li+'">Make sure <b>Open as Web App</b> is on, then tap <b>Add</b>.</li>'
+ +'<li style="'+li+'">Open PaperTrail from the new Home Screen icon and create your account there.</li></ol>'
+ +'<p style="margin:10px 0 0"><b>Moving existing invoices?</b> In Safari, open Settings and tap <b>Download backup</b>. In the Home Screen app, tap <b>Restore from a backup file</b> on the sign-in screen.</p>'
+ +'<p style="margin:10px 0 0;font-weight:600">Save your recovery code. Your records are encrypted with your password, so the recovery code is your only way back in if you forget it.</p>'
  +'</div></details>';
 };
 /* Settings: always available */

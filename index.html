@@ -75,7 +75,7 @@ input[type=file]{border:0;background:transparent;padding:0;width:100%;max-width:
 <div id="lock"></div>
 <div id="app"><div class="shell">
 <div class="side">
-<div class="brand"><span class="logo">$</span><b>PaperTrail</b><span class="pill" id="ver">v73</span></div>
+<div class="brand"><span class="logo">$</span><b>PaperTrail</b><span class="pill" id="ver">v78</span></div>
 <div class="nav"><div class="gt">Record type</div><button id="m1" onclick="goMode('purchase')">Expense</button><button id="m2" onclick="goMode('freelance')">Work Invoice</button><button id="m3" onclick="showSaved()">Saved</button></div>
 <div class="sp"></div>
 <details><summary>Settings</summary><label>Auto-logout after idle (minutes) - locks the app; saved records stay encrypted on this phone</label><input id="idle" type="number" min="1" value="15" onchange="setIdle()"><button onclick="nuke()">Delete all saved records</button></details>
@@ -88,7 +88,7 @@ input[type=file]{border:0;background:transparent;padding:0;width:100%;max-width:
 <div class="src">
 <div id="restore"><span>Record cleared.</span><button class="pri" onclick="restoreCleared()">Undo clear</button><button onclick="dismissRestore()" aria-label="Dismiss">✕</button></div>
 <div class="drop"><input type="file" id="file" accept="image/*,.pdf,application/pdf" multiple onchange="handleFiles(this.files)"><button class="lnk" onclick="manual()">Enter manually instead</button></div>
-<div id="docwrap" style="display:none"><div id="view"></div><div id="addbar"><div class="row"><select id="addto"></select><button class="pri s" onclick="addSel()">Add</button><button class="s" onclick="clearSel()">Clear</button></div><div id="selt" style="font-size:12px;margin-top:4px"></div></div><div id="ocr"></div></div>
+<div id="docwrap" style="display:none"><div id="view"></div><button type="button" id="selall" onclick="selAll()" style="width:100%;margin-top:8px;background:transparent;color:var(--gd);border-style:dashed">Select all text</button><div id="addbar"><div class="row"><select id="addto"></select><button class="pri s" onclick="addSel()">Add</button><button class="s" onclick="copySel()">Copy</button><button class="s" onclick="clearSel()">Clear</button></div><div id="selt" style="font-size:12px;margin-top:4px"></div></div><div id="ocr"></div></div>
 <div id="pages"></div>
 </div>
 <div class="out">
@@ -98,4 +98,4 @@ input[type=file]{border:0;background:transparent;padding:0;width:100%;max-width:
 <div class="quiet"><button onclick="clearAll()">Clear all</button><button onclick="dl('json')">JSON</button></div></div>
 </div></div><div id="savedview" style="display:none"></div></main>
 </div></div><div id="print"></div>
-<script src="parser.js?v=62"></script><script src="app.js?v=62"></script><script></script></body></html>
+<script src="parser.js?v=78"></script><script src="app.js?v=78"></script><script></script></body></html>
