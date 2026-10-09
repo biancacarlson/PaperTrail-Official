@@ -103,7 +103,7 @@ function showDoc(u){showOcr();const v=$('#view');v.style.height='';v.innerHTML='
   ap();if(S.z<=1)fit()};
  if(!window.__dvr){window.__dvr=1;addEventListener('resize',()=>{const l=$('#layer'),w=$('#view');if(l&&w&&S.z<=1&&l.offsetHeight)w.style.height=l.offsetHeight+'px'})}}
 /* ---------- parsing (deterministic) ---------- */
-function parse(t){const r=S.rec,o=Parser.parse(t,r.mode);Object.assign(r,o.fields);r.src=Object.assign(r.src,o.found);if(r.mode=='purchase'){r.items=o.items;if(o.guess)r.gname=o.guess;ensureItem(r)}}
+function parse(t){const r=S.rec,o=Parser.parse(t,r.mode);Object.assign(r,o.fields);r.src=Object.assign(r.src,o.found);if(r.mode!='purchase'&&o.shifts&&o.shifts.length)r.shifts=o.shifts;if(r.mode=='purchase'){r.items=o.items;if(o.guess)r.gname=o.guess;ensureItem(r)}}
 /* Only a subtotal was readable (no per-item lines): keep the totals reconcilable with one clearly-flagged combined line. */
 function ensureItem(r){if(r.mode=='purchase'&&!r.items.length&&N(r.extSub)>0)r.items.push({n:r.gname||'',q:1,p:N(r.extSub),guess:1,ext:1})}
 /* ---------- form ---------- */
@@ -112,8 +112,8 @@ function render(){const r=S.rec;{const pl=$('#pick');if(pl)pl.textContent=S.mode
  const lab=(k,l)=>`<label for="f_${k}">${l}${r.edited[k]?' (edited)':''}${miss(k)?' (needs review)':''}${r.low&&r.low[k]&&!r.edited[k]?' - low confidence, check':''}</label>`,
  W=['location','notes','number','client','employer','category'],
  fld=k=>{if(k=='category')return `<div class="f w"><label for="f_category">Category${r.edited.category?' (edited)':''}</label><select id="f_category" onchange="setCat(this.value);render()"><option value="">Select…</option>${CATS.map(c=>`<option${r.category==c?' selected':''}>${c}</option>`).join('')}</select></div>`;const l=(fs.find(f=>f[0]==k)||[])[1];return `<div class="f${W.includes(k)?' w':''}">`+lab(k,l)+(k=='notes'?`<textarea id="f_${k}" class="${String(r[k]??'').trim()?'ext':''}" rows="3" oninput="ed('${k}',this.value)">${esc(r[k])}</textarea>`:(inp=>k=='roundTrip'?`<div class="row" style="margin:0">${inp}<button class="pri" style="flex:0 0 auto" onclick="render()">Recalculate</button></div>`:inp)(`<input autocomplete="off" id="f_${k}" class="${String(r[k]??'').trim()?'ext':''}${miss(k)?' warn':''}" value="${esc(r[k])}" oninput="ed('${k}',this.value)">`))+(k=='roundTrip'?`<div class="srch"><a id="gs" class="btn" target="_blank" rel="noopener noreferrer" href="${esc(gurl(r))}" onclick="return chk()">Search round-trip distance</a></div>`:'')+'</div>'},
- G=r.mode=='purchase'?[['Receipt',['date','merchant','location','number','category']],['Amounts',['tax','extSub','extTotal']]]:[['',['employer','client','invoice']],['',['jobDate','endDate','location']],['Mileage',['roundTrip']],['Hours & pay',['hours','overtime','amount']],['',['notes']]];
- let h=G.map(([t,ks])=>`<section class="grp${t=='Amounts'?' amt':''}">${t?`<h3>${t}</h3>`:''}<div class="fg">${ks.map(fld).join('')}</div></section>`).join('');
+ G=r.mode=='purchase'?[['Receipt',['date','merchant','location','number','category']],['Amounts',['tax','extSub','extTotal']]]:[['',['employer','client','invoice']],['',['jobDate','endDate','location']],['Mileage',['roundTrip']],['Hours & pay',['hours','overtime','amount']],['__shifts',[]],['',['notes']]];
+ let h=G.map(([t,ks])=>t=='__shifts'?shiftsHtml():`<section class="grp${t=='Amounts'?' amt':''}">${t?`<h3>${t}</h3>`:''}<div class="fg">${ks.map(fld).join('')}</div></section>`).join('');
  if(r.mode=='purchase')h+=itemsHtml();
  $('#form').className=r.mode;$('#form').innerHTML=h;$('#actions').style.display='block';calc();renderRecs();refreshActs()}
 const CATS=['Supplies','Gear','Meals','Travel','Software','Other'];
@@ -139,6 +139,7 @@ function guessCat(r){const m=String(r.merchant||'').toLowerCase(),sc={};let tot=
  if(!best&&CATK.Supplies.test(m))best='Supplies';return best||'Other'}
 function autoCat(){const r=S.rec;if(!r||r.mode!='purchase'||!r.loaded||(r.edited&&r.edited.category))return;const c=guessCat(r);if(c!==r.category){r.category=c;const e=$('#f_category');if(e)e.value=c}}
 function setCat(v){const r=S.rec;r.category=v;r.edited.category=v?1:0;if(!v)autoCat()}
+const LNK='background:transparent;border:0;color:var(--gd);text-decoration:underline;font-weight:600;padding:8px 0;text-align:left';
 const esc=v=>String(v??'').replace(/"/g,'&quot;').replace(/</g,'&lt;'),miss=k=>{const r=S.rec;return r.doc&&!r[k]&&['date','merchant','client','jobDate','location','amount'].includes(k)&&!(k=='location'&&r.mode=='purchase')};
 function ed(k,v){S.rec[k]=v;if(k=='location'){const g=$('#gs'),c=$('#gc');if(g)g.href=gurl(S.rec);if(c)c.href=gurl(S.rec,1)}S.rec.edited[k]=1;const e=$('#f_'+k);if(e){const f=String(v).trim()!=='';e.classList.toggle('ext',f);e.classList.remove('usr');if(f)e.classList.remove('warn')}calc();if(k=='date')refreshActs();if(k=='merchant')autoCat()}
 function it(i,k,v){S.rec.items[i][k]=k=='n'?v:N(v)||0;S.rec.items[i].ext=0;S.rec.items[i].guess=0;if(k=='n')S.rec.items[i].inf=0;calc();const e=$('#it_'+i);if(e)e.textContent=M(S.rec.items[i].t);if(k=='n')autoCat()}
@@ -171,12 +172,28 @@ const fm=v=>v==null?null:M(v);
 /* Uniform record layout (same for every log): title, info table, detail table (shaded), totals table.
    groups: [{k:'info'|'det'|'tot', rows:[[label,value]]}] */
 const niceMerch=m=>{m=String(m||'').trim();return m.length>=4&&m===m.toUpperCase()&&/[A-Z]/.test(m)?m.toLowerCase().replace(/\b[a-z]/g,c=>c.toUpperCase()):m};
+/* ---------- v72: shifts (split shifts = several rows on the same date) ---------- */
+const t12=s=>{const m=/^(\d{1,2}):(\d{2})/.exec(s||'');if(!m)return s||'';let h=+m[1];const ap=h>=12?'PM':'AM';h=h%12||12;return h+':'+m[2]+' '+ap};
+const shDate=d=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d||''));return m?m[2]+'/'+m[3]+'/'+m[1]:String(d||'')};
+function shHrs(a,b){const f=s=>{const m=/^(\d{1,2}):(\d{2})/.exec(s||'');return m?+m[1]*60+ +m[2]:null},s=f(a),e=f(b);if(s==null||e==null||s==e)return null;let d=e-s;if(d<0)d+=1440;return +(d/60).toFixed(2)}
+const shTotal=r=>+((r.shifts||[]).reduce((a,x)=>a+(N(x.hours)||0),0)).toFixed(2);
+function shNew(){const r=S.rec;r.shifts=r.shifts||[];const l=r.shifts[r.shifts.length-1];r.shifts.push({date:l?l.date:(r.jobDate||''),start:'',end:'',hours:''});render()}
+function shDel(i){S.rec.shifts.splice(i,1);render()}
+function shSet(i,k,v){const x=(S.rec.shifts||[])[i];if(!x)return;x[k]=v;if(k=='start'||k=='end'){const h=shHrs(x.start,x.end);if(h!=null)x.hours=h}render()}
+function shUse(){const r=S.rec,ot=N(r.overtime)||0;r.hours=String(+(shTotal(r)-ot).toFixed(2));r.edited.hours=1;render()}
+function shiftsHtml(){const r=S.rec,sh=r.shifts||[],tot=shTotal(r),have=(N(r.hours)||0)+(N(r.overtime)||0);
+ const card=(x,i)=>`<div class="grp" style="padding:12px;margin:0 0 10px;border-radius:12px"><div class="row" style="margin-bottom:8px"><input aria-label="Shift date" value="${esc(shDate(x.date))}" placeholder="Date (mm/dd/yyyy)" onchange="shSet(${i},'date',this.value)"><button class="x" onclick="shDel(${i})" aria-label="Remove shift">\u2715</button></div><div class="row" style="margin:0"><div><label>Start</label><input type="time" value="${esc(x.start||'')}" onchange="shSet(${i},'start',this.value)"></div><div><label>End</label><input type="time" value="${esc(x.end||'')}" onchange="shSet(${i},'end',this.value)"></div><div><label>Hours</label><input inputmode="decimal" value="${esc(x.hours==null?'':x.hours)}" placeholder="0" onchange="shSet(${i},'hours',this.value)"></div></div></div>`;
+ return `<section class="grp"><h3>Shifts</h3><div class="hint" style="margin:-4px 0 10px">One row per shift. For a split shift, add a second row with the same date. Times work out the hours; you can also type the hours directly.</div>${sh.map(card).join('')}<button type="button" onclick="shNew()">+ Add shift</button>${sh.length?`<div class="hint" style="margin-top:10px">Shifts total: <b>${tot} h</b>${Math.abs(tot-have)>.01?` (Total regular + overtime above is ${+have.toFixed(2)} h)`:''}</div>`+(Math.abs(tot-have)>.01?'<button type="button" style="margin-top:8px" onclick="shUse()">Set Total regular from shifts</button>':''):''}</section>`}
 function rows(r){if(r.mode=='summary')return sumRows(r);const o=compute(r),G=[],g=k=>{const x={k,rows:[]};G.push(x);return(l,v,h)=>{if(v!=null&&String(v).trim()!=='')x.rows.push([l,String(v).trim(),!!h])}};
  if(r.mode=='purchase'){const i=g('info');i('Date',r.date);i('Merchant',niceMerch(r.merchant));i('Location',r.location);i('Receipt/Invoice #',r.number);i('Category',r.category);
   const d=g('det');r.items.filter(x=>!x.off).forEach(x=>d((String(x.n||'Item').replace(/\s*(\.{2,}|…)\s*$/,'').trim()),M(x.t)));
   const t=g('tot');t('Subtotal',M(o.sub));if(o.ship)t('Shipping',M(o.ship));if(o.disc)t('Discount','-'+M(o.disc));if(N(r.tax)!=null)t('Tax',M(o.tax));t('Total',M(o.total));
   return{t:'EXPENSE SUMMARY',G:G.filter(x=>x.rows.length)}}
  const i=g('info');i('Date',r.jobDate);i('Employer',r.employer);i('Client',r.client);i('Location',r.location);i('Invoice #',r.invoice);
+ const hg=g('det'),fh=v=>v==null?null:(+(+v).toFixed(2))+' h';hg('Regular Hours',fh(N(r.hours)));hg('Overtime Hours',fh(N(r.overtime)));hg('Total Hours',fh(o.tot));
+ {const sg=g('det'),sh=(r.shifts||[]).filter(x=>x&&(N(x.hours)!=null||(x.start&&x.end))),days=[];sh.forEach(x=>{const k=shDate(x.date),y=days.find(d=>d.k==k);y?y.a.push(x):days.push({k,a:[x]})});
+  days.forEach(d=>{d.a.forEach((x,j)=>{const tm=x.start&&x.end?t12(x.start)+' \u2013 '+t12(x.end):'',hr=N(x.hours)!=null?fh(N(x.hours)):'';sg([d.k||'Shift',tm].filter(Boolean).join(' \u00b7 '),hr)});
+   if(d.a.length>1)sg('Split shift total',fh(+d.a.reduce((s,x)=>s+(N(x.hours)||0),0).toFixed(2)),1)})}
  const d=g('det');d('Round-Trip Distance',o.rt!=null?o.rt.toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:1})+' mi':null);d('IRS Rate',o.rate!=null&&o.rt!=null?'$'+o.rate+'/mi':null);
  const t=g('tot');t('Amount Paid',fm(N(r.amount)));t('Mileage Deduction',fm(o.wear));
  return{t:'INVOICE SUMMARY',G:G.filter(x=>x.rows.length)}}
@@ -692,7 +709,7 @@ document.addEventListener('keydown',e=>{if(e.key=='Escape')closeRec()});
  +'.rr{display:flex;justify-content:space-between;gap:12px;padding:7px 0;font-size:14px}.rr+.rr{border-top:1px solid var(--ln)}.rr span{color:var(--mut)}.rr b{text-align:right;overflow-wrap:anywhere}.rr.hl b{background:#fff2a8;padding:0 4px;border-radius:4px}.rr.tt{font-weight:700}'
  +'.rmf{display:flex;gap:10px;margin-top:6px}.rmf button{flex:1}';document.head.appendChild(s)})();
 (function(){const s=document.createElement('style');s.textContent=['.sv{display:flex;flex-direction:column;gap:10px}.sv .sl{margin:0}.sv>button{width:100%}.sv .seg{margin:0}','.chips{display:flex;flex-wrap:wrap;gap:6px}.chips button{padding:6px 12px;border-radius:999px;font-size:13px;font-weight:600;background:#fff;color:var(--mut);border-color:var(--ln)}.chips button.on{background:var(--g);color:#fff;border-color:var(--g)}','.srt{display:flex;align-items:center;gap:10px}.srt label{flex:0 0 auto;margin:0}','.svsum{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:var(--mut);padding:0 2px}.svsum b{color:var(--fg);font-size:17px}','.sm{flex:1;min-width:0}.s1{font-weight:600;overflow-wrap:anywhere}.s2{font-size:12px;color:var(--mut);margin-top:1px}','.empty2{border:2px dashed var(--ln);border-radius:16px;padding:28px 16px;text-align:center;color:var(--mut)}','@media(max-width:900px){.nav button{padding:10px 6px;font-size:14px}}'].join('');document.head.appendChild(s)})();
-(function(){const s=document.createElement('style');s.textContent='.sl{background:var(--card);border:1px solid var(--ln);border-radius:14px;padding:6px 14px;margin:10px 0}.sl h4{margin:10px 0 2px;font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}.srow{display:flex;align-items:center;gap:10px;padding:9px 0;font-size:14px}.srow+.srow{border-top:1px solid var(--ln)}.srow span{flex:1;min-width:0}.srow b{white-space:nowrap}.srow .x{flex:0 0 32px;height:32px;padding:0}#f_category{width:100%}';document.head.appendChild(s)})();
+(function(){const s=document.createElement('style');s.textContent='.sl{background:var(--card);border:1px solid var(--ln);border-radius:14px;padding:6px 14px;margin:10px 0}.sl h4{margin:10px 0 2px;font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}.srow{display:flex;align-items:center;gap:10px;padding:9px 0;font-size:14px}.srow+.srow{border-top:1px solid var(--ln)}.srow span{flex:1;min-width:0}.srow b{white-space:nowrap}.srow .x{flex:0 0 32px;height:32px;padding:0}#f_category{width:100%}input[type=time]{padding-inline:8px;font-size:15px;min-width:0}';document.head.appendChild(s)})();
 
 
 /* ---------- v69: add-to-Home-Screen guide ---------- */
@@ -711,7 +728,7 @@ window.installGuide=function(open){
  +'<li style="'+li+'">Leave <b>Open as Web App</b> switched on, then tap <b>Add</b> (top right).</li>'
  +'<li style="'+li+'">Close Safari. From now on, <b>open PaperTrail from the new icon on your Home Screen</b>.</li>'
  +'<li style="'+li+'">Create your account <b>in the Home Screen app</b>, then save your invoices there.</li></ol>'
- +'<p style="margin:10px 0 0;font-weight:600">Important: the Home Screen app keeps its own separate storage. Anything you saved in Safari before will not show up in it, so do these steps before you save anything.</p>'
+ +'<p style="margin:10px 0 0;font-weight:600">Important: the Home Screen app keeps its own separate storage. Anything you saved in Safari will not show up in it automatically. To move it: in Safari open Settings and tap Download backup, then in the Home Screen app tap Restore from a backup file on the sign-in screen.</p>'
  +'</div></details>';
 };
 /* Settings: always available */
@@ -738,19 +755,20 @@ const msg=t=>{const m=$('#lm');if(m)m.textContent=t||''};
 const esc=v=>String(v||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
 
 function ui(tab){
- S.uid=null;S.email=null;
+ S.uid=null;S.email=null;S.pp=null;
  let last='';try{last=localStorage.getItem(LAST)||''}catch(e){}
  const up=tab=='up';
  lockUI('<h2>PaperTrail</h2>'
  +'<div style="display:flex;gap:8px;margin:14px 0 4px"><button type="button" class="'+(up?'':'pri')+'" onclick="authTab(\'in\')">Sign in</button><button type="button" class="'+(up?'pri':'')+'" onclick="authTab(\'up\')">Create account</button></div>'
  +'<input id="em" type="email" inputmode="email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="Email" value="'+esc(up?'':last)+'">'
  +'<input id="pw" type="password" autocomplete="'+(up?'new-password':'current-password')+'" placeholder="Password'+(up?' (8+ characters)':'')+'">'
+ +'<label style="display:flex;align-items:center;gap:8px;margin:0 0 10px;font:14px -apple-system,system-ui,sans-serif;letter-spacing:0;text-transform:none;color:var(--fg)"><input type="checkbox" style="width:auto;margin:0" onchange="[\'pw\',\'pw2\'].forEach(function(i){var e=document.getElementById(i);if(e)e.type=event.target.checked?\'text\':\'password\'})"> Show password</label>'
  +(up?'<input id="pw2" type="password" autocomplete="new-password" placeholder="Confirm password">'
       +installGuide(true)
-      +'<div class="hint" style="font-size:13px;color:var(--mut);margin:2px 0 8px">Your records are encrypted on this device with this password. There is no reset: if you forget it, the saved records cannot be opened.</div>'
+      +'<div class="hint" style="font-size:13px;color:var(--mut);margin:2px 0 8px">Your records are encrypted on this device with this password. On the next screen you will get a recovery code. Save it: it is the only way back in if you forget your password.</div>'
    +'<button class="pri" type="button" onclick="authUp()">Create account</button>'
   :'<button class="pri" type="button" onclick="authIn()">Sign in</button>'
-   )
+   +'<div style="display:flex;flex-direction:column;gap:2px;margin-top:6px"><button type="button" style="'+LNK+'" onclick="authForgot()">Forgot password?</button><button type="button" style="'+LNK+'" onclick="authRestore()">Restore from a backup file</button></div>')
  +'<div id="lm" class="msg" style="margin-top:10px"></div>');
  const f=$(up?'#em':(last?'#pw':'#em'));if(f)try{f.focus()}catch(e){}
 }
@@ -758,13 +776,123 @@ window.authTab=ui;
 window.showLock=function(){S.uid=null;ui('in')};
 
 async function enter(uid,em,pw,o){
- S.uid=uid;S.email=em;S.key=await dk(pp(em,pw),o.e);S.records=[];S.noStore=false;
+ S.uid=uid;S.email=em;S.pp=pp(em,pw);S.key=await dk(S.pp,o.e);S.records=[];S.noStore=false;
  try{const x=await idb('get');if(x&&x.iv){try{S.records=await dec(x)}catch(e){S.noStore=true;S.records=[]}}}catch(e){}
  S.loaded=true;try{localStorage.setItem(LAST,em)}catch(e){}
  const v=$('#ver');if(v)v.title=em;
  open_();
  try{renderRecs();if(S.noStore)st('Saved records could not be opened.')}catch(e){}
+ extras();
 }
+
+
+/* ---------- v71: recovery code + backup file ---------- */
+/* Recovery code: 20 random letters/numbers (100 bits). It encrypts a copy of the account's passphrase and that copy is kept on this device.
+   With the code, the saved records can be re-locked under a new password. Without it (and without the password) nothing can open them. */
+const RC='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const newCode=()=>{const b=crypto.getRandomValues(new Uint8Array(20));let s='';for(const x of b)s+=RC[x%32];return s.replace(/(.{4})(?=.)/g,'$1-')};
+const cn=c=>String(c||'').toUpperCase().replace(/[^A-Z2-9]/g,'');
+async function ck(code,salt){const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(cn(code)),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt:unhex(salt),iterations:310000,hash:'SHA-256'},k,{name:'AES-GCM',length:256},false,['encrypt','decrypt'])}
+async function wrap(code,passphrase){const s=rnd(16),iv=crypto.getRandomValues(new Uint8Array(12));const c=await crypto.subtle.encrypt({name:'AES-GCM',iv},await ck(code,s),new TextEncoder().encode(passphrase));return{s,iv:hex(iv),c:hex(c)}}
+async function unwrap(code,w){return new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:unhex(w.iv)},await ck(code,w.s),unhex(w.c)))}
+const getAcct=uid=>{try{return JSON.parse(localStorage.getItem(AK+uid))}catch(e){return null}};
+const setAcct=(uid,o)=>localStorage.setItem(AK+uid,JSON.stringify(o));
+
+function showCode(code,next,title){
+ lockUI('<h2>'+title+'</h2><p style="margin:0 0 12px;font-size:14px;line-height:1.5">If you forget your password, this code is the only way to get your saved invoices back. Save it now: write it down, or copy it into Notes or a password manager. Keep it private.</p>'
+ +'<div style="font:600 18px var(--mono);letter-spacing:.04em;background:var(--card);border:1px solid var(--ln);border-radius:12px;padding:16px 10px;text-align:center;user-select:all;-webkit-user-select:all;word-break:break-all">'+code+'</div>'
+ +'<div style="display:flex;gap:8px;margin:10px 0"><button type="button" onclick="authCopy()">Copy</button><button type="button" onclick="authShare()">Share / Save</button></div>'
+ +'<label style="display:flex;align-items:center;gap:10px;margin:14px 0;font:14px -apple-system,system-ui,sans-serif;letter-spacing:0;text-transform:none;color:var(--fg)"><input type="checkbox" id="rsaved" style="width:auto;margin:0"> I saved my recovery code</label>'
+ +'<button class="pri" type="button" onclick="authCodeDone()">Continue</button><div id="lm" class="msg" style="margin-top:10px"></div>');
+ window.__rc=code;
+ window.authCodeDone=()=>{if(!$('#rsaved').checked)return msg('Tick the box once you have saved the code.');window.__rc=null;next()};
+}
+window.authCopy=async function(){try{await navigator.clipboard.writeText(window.__rc);msg('Copied.')}catch(e){try{const r=document.createRange();r.selectNodeContents($('#lock div[style*="mono"]'));const s=getSelection();s.removeAllRanges();s.addRange(r);msg('Selected. Tap Copy in the menu that appears.')}catch(x){msg('Press and hold the code to copy it.')}}};
+window.authShare=async function(){try{if(navigator.share)await navigator.share({title:'PaperTrail recovery code',text:'PaperTrail recovery code'+(S.email?' for '+S.email:'')+': '+window.__rc});else msg('Sharing is not available here. Use Copy.')}catch(e){}};
+
+/* Settings buttons and the "no recovery code yet" bar, added once someone is signed in */
+function extras(){
+ const d=document.querySelector('.side details');
+ if(d&&!$('#rcbtn')){
+  const mk=(id,txt,fn)=>{const b=document.createElement('button');b.id=id;b.type='button';b.textContent=txt;b.onclick=fn;d.appendChild(b)};
+  mk('rcbtn','Recovery code (create a new one)',()=>window.authMakeCode());
+  mk('bkbtn','Download backup',()=>window.authBackup());
+ }
+ let n=$('#rcbar');
+ if(!n){const m=document.querySelector('.main');if(!m)return;n=document.createElement('div');n.id='rcbar';n.style.cssText='display:none;gap:8px;align-items:center;flex-wrap:wrap;background:var(--usr);border:1px solid #ecd3a8;border-radius:12px;padding:10px 12px;margin-bottom:14px';n.innerHTML='<span style="flex:1;min-width:180px">Create a recovery code so you can get back in if you forget your password.</span><button type="button" class="pri" style="flex:0 0 auto">Create</button>';n.children[1].onclick=()=>window.authMakeCode();m.insertBefore(n,m.firstChild)}
+ const o=getAcct(S.uid);n.style.display=o&&!o.rw?'flex':'none';
+}
+window.authMakeCode=async function(){
+ if(!S.uid||!S.pp)return;
+ const o=getAcct(S.uid);if(!o)return;
+ if(o.rw&&!confirm('This replaces your current recovery code. The old one will stop working. Continue?'))return;
+ const code=newCode();o.rw=await wrap(code,S.pp);setAcct(S.uid,o);
+ showCode(code,()=>{open_();extras()},'Your recovery code');
+};
+
+window.authForgot=function(){
+ let last='';try{last=localStorage.getItem(LAST)||''}catch(e){}
+ lockUI('<h2>Reset password</h2><p style="margin:0 0 10px;font-size:14px;line-height:1.5">Enter your email, your recovery code and a new password. Your saved records stay as they are.</p>'
+ +'<input id="em" type="email" inputmode="email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Email" value="'+esc(last)+'">'
+ +'<input id="rc" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Recovery code (XXXX-XXXX-...)">'
+ +'<input id="pw" type="password" autocomplete="new-password" placeholder="New password (8+ characters)">'
+ +'<input id="pw2" type="password" autocomplete="new-password" placeholder="Confirm new password">'
+ +'<button class="pri" type="button" onclick="authReset()">Reset password</button>'
+ +'<button type="button" style="'+LNK+'" onclick="authTab(\'in\')">Back</button><div id="lm" class="msg" style="margin-top:10px"></div>');
+};
+window.authReset=async function(){
+ try{
+  const em=norm($('#em').value),code=cn($('#rc').value),p1=$('#pw').value,p2=$('#pw2').value;
+  if(!em||code.length<20)return msg('Enter your email and the full recovery code.');
+  if(p1.length<8)return msg('Use at least 8 characters for the new password.');
+  if(p1!==p2)return msg('The two passwords do not match.');
+  const uid=await uidOf(em),lock=+localStorage.getItem(LK+uid)||0;
+  if(Date.now()<lock)return msg('Too many wrong attempts. Try again in '+Math.ceil((lock-Date.now())/60000)+' minute(s).');
+  const o=getAcct(uid);
+  if(!o)return msg('No account for this email on this device. If you have a backup file, use Restore from a backup file first.');
+  if(!o.rw)return msg('This account has no recovery code. Sign in with your password to create one.');
+  const bad=()=>{const f=(+localStorage.getItem(FK+uid)||0)+1;if(f>=MAXF){localStorage.removeItem(FK+uid);localStorage.setItem(LK+uid,String(Date.now()+COOL));return msg('Too many wrong attempts. Locked for 15 minutes.')}localStorage.setItem(FK+uid,String(f));msg('That recovery code is not right. '+(MAXF-f)+' attempt'+(MAXF-f==1?'':'s')+' left.')};
+  let old;try{old=await unwrap(code,o.rw)}catch(e){return bad()}
+  if(await hash(old,unhex(o.s))!==o.h)return bad();
+  /* open the records with the old passphrase first; change nothing until that works */
+  S.uid=uid;let recs=null;
+  try{const x=await idb('get');if(x&&x.iv){S.key=await dk(old,o.e);recs=await dec(x)}}catch(e){S.uid=null;S.key=null;return msg('The saved records could not be opened, so nothing was changed.')}
+  const np=pp(em,p1),salt=rnd(16),n={s:salt,h:await hash(np,unhex(salt)),e:rnd(16)};
+  n.rw=await wrap(code,np);
+  if(recs){S.key=await dk(np,n.e);const iv=crypto.getRandomValues(new Uint8Array(12)),c=await crypto.subtle.encrypt({name:'AES-GCM',iv},S.key,new TextEncoder().encode(JSON.stringify(recs)));await idb('put',{iv,c})}
+  setAcct(uid,n);localStorage.removeItem(FK+uid);localStorage.removeItem(LK+uid);
+  await enter(uid,em,p1,n);
+  try{toast('Password changed')}catch(e){}
+ }catch(e){S.uid=null;msg('Could not reset the password.')}
+};
+
+/* Backup file: the encrypted records plus the account's sign-in details. It can be opened only with the password or recovery code. */
+window.authBackup=async function(){
+ if(!S.uid)return;
+ try{
+  await store();const x=await idb('get'),o=getAcct(S.uid);
+  const f={app:'papertrail',v:1,uid:S.uid,acct:o,state:x&&x.iv?{iv:hex(x.iv),c:hex(x.c)}:null,saved:new Date().toISOString()};
+  const name='PaperTrail backup '+new Date().toISOString().slice(0,10)+'.json';
+  const file=new File([JSON.stringify(f)],name,{type:'application/json'});
+  if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:name});return toast('Backup ready')}catch(e){if(e&&e.name=='AbortError')return}}
+  const a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);toast('Backup saved');
+ }catch(e){alert('Could not make a backup.')}
+};
+window.authRestore=function(){
+ const i=document.createElement('input');i.type='file';i.accept='.json,application/json';
+ i.onchange=async()=>{
+  const fl=i.files[0];if(!fl)return;
+  try{
+   const j=JSON.parse(await fl.text());
+   if(j.app!=='papertrail'||!j.uid||!j.acct||!j.acct.h||!j.acct.s||!j.acct.e)throw 0;
+   if(getAcct(j.uid)&&!confirm('An account for this email is already on this device. Replace its saved records and sign-in with this backup?'))return;
+   if(j.state){S.uid=j.uid;try{await idb('put',{iv:unhex(j.state.iv),c:unhex(j.state.c).buffer})}finally{S.uid=null}}
+   setAcct(j.uid,j.acct);
+   msg('Backup restored. Now sign in with the email and password (or use Forgot password with the recovery code) from when the backup was made.');
+  }catch(e){msg('That file is not a PaperTrail backup.')}
+ };
+ i.click();
+};
 
 window.authUp=async function(){
  try{
@@ -774,9 +902,10 @@ window.authUp=async function(){
   if(p1!==p2)return msg('The two passwords do not match.');
   const uid=await uidOf(em);
   if(localStorage.getItem(AK+uid))return msg('This email already has an account on this device. Tap Sign in.');
-  const salt=rnd(16),o={s:salt,h:await hash(pp(em,p1),unhex(salt)),e:rnd(16)};
+  const salt=rnd(16),o={s:salt,h:await hash(pp(em,p1),unhex(salt)),e:rnd(16)},code=newCode();
+  o.rw=await wrap(code,pp(em,p1));
   localStorage.setItem(AK+uid,JSON.stringify(o));
-  await enter(uid,em,p1,o);
+  showCode(code,()=>enter(uid,em,p1,o),'Save your recovery code');
  }catch(e){msg('Could not create the account on this device.')}
 };
 

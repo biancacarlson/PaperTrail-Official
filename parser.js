@@ -207,7 +207,31 @@ function parse(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(t
     if(ot){set('overtime',String(ot));set('hours',String(+(h-ot).toFixed(2)));delete F.notes;delete found.notes;
      if(sub.length>1){const pr=sub.map(m=>m[1]+' hrs × '+money(m[2])+' = '+money(m[3]));const lo=Math.min(...sub.map(m=>+m[2].replace(/,/g,''))),hi=Math.max(...sub.map(m=>+m[2].replace(/,/g,'')));
       set('notes','Regular: '+pr[0]+'. Overtime: '+pr[pr.length-1]+(Math.abs(hi/lo-1.5)<.01?' (1.5× regular rate)':'')+'.')}}}}
- return {fields:F,items,found,guess}}
+ var shifts=[];
+ if(mode!=='purchase'){
+  const T=/(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m?\.?\s*(?:-|–|—|to)\s*(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m?\.?|(\d{1,2}):(\d{2})\s*(?:-|–|—|to)\s*(\d{1,2}):(\d{2})|(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m?\.?\s*(?:-|–|—|to)\s*(\d{1,2})(?::(\d{2}))?(?!\s*[:\d]|\s*[ap]\.?m)/gi;
+  const to24=(h,m,ap)=>{h=+h;m=+(m||0);if(m>59||h>23)return null;if(ap){if(h<1||h>12)return null;h=h%12+(ap=='p'?12:0)}return h*60+m};
+  const pad=n=>String(n).padStart(2,'0'),hm=v=>pad(Math.floor(v/60))+':'+pad(v%60);
+  let cur='';
+  for(const raw of L){
+   let l=fix(raw);const dm=l.match(DATE);if(dm){cur=dm[1];l=l.replace(DATE,' ')}
+   if(/\b(?:invoice|due|issued|paid|deposit)\b/i.test(l)&&!/\d\s*[ap]\.?m/i.test(l))continue;
+   for(const m of l.matchAll(T)){
+    let s,e;
+    if(m[1]!==undefined){ // both sides have am/pm letters
+     s=to24(m[1],m[2],m[3].toLowerCase());e=to24(m[4],m[5],m[6].toLowerCase())}
+    else if(m[7]!==undefined){ // 24-hour style hh:mm - hh:mm (needs a 24h hint)
+     if(!(+m[7]>=13||+m[9]>=13||/^0\d$/.test(m[7])))continue;s=to24(m[7],m[8]);e=to24(m[9],m[10])}
+    else{ // am/pm on the start side only, e.g. 7am - 3
+     const ap=m[13].toLowerCase();s=to24(m[11],m[12],ap);e=to24(m[14],m[15],ap);
+     if(s!=null&&e!=null&&e<=s)e=to24(m[14],m[15],ap=='a'?'p':'a')}
+    if(s==null||e==null)continue;
+    let d=e-s;if(d<0)d+=1440;if(d<=0||d>16*60)continue;
+    shifts.push({date:cur,start:hm(s),end:hm(e),hours:+(d/60).toFixed(2)})}
+  }
+  if(!shifts.length&&typeof drow!=='undefined'&&drow.length)drow.forEach(l=>{const m=l.match(/^(\d{1,2}\/\d{1,2}\/\d{2,4})\b/),t=l.match(tri);if(m&&t)shifts.push({date:m[1],start:'',end:'',hours:+t[1]})});
+ }
+ return {fields:F,items,found,guess,shifts}}
 function pd(s){s=String(s||'').trim();let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);if(m)return new Date(+m[1],m[2]-1,+m[3]);
  m=s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2}|\d{4})$/);if(m&&+m[1]>=1&&+m[1]<=12&&+m[2]>=1&&+m[2]<=31){let y=+m[3];if(y<100)y+=2000;return new Date(y,m[1]-1,+m[2])}
  const d=new Date(s);return isNaN(d)?null:new Date(d.getFullYear(),d.getMonth(),d.getDate())}
