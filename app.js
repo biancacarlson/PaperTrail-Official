@@ -1,6 +1,6 @@
 'use strict';
 const LS=(k,d)=>{try{return localStorage.getItem(k)||d}catch(e){return d}};
-const $=s=>document.querySelector(s),S={start:'North Park, San Diego, CA 92104',mode:'purchase',rec:null,records:[],sel:[],words:[],idle:15,img:null,z:1,x:0,y:0,tab:'new',sv:{sec:'x',cat:'All',sort:'dnew'}};
+const $=s=>document.querySelector(s),S={start:'North Park, San Diego, CA 92104',mode:'purchase',rec:null,records:[],sel:[],words:[],idle:15,img:null,z:1,x:0,y:0,tab:'new',learn:{m:{},mi:{}},sv:{sec:'x',cat:'All',sort:'dnew',q:''}};
 const est=r=>Parser.net30(r.endDate||r.jobDate);
 const chk=()=>S.rec.location?true:(st('Enter the job location first.'),false);
 const IOS=/iPhone|iPad|iPod/.test(navigator.userAgent);
@@ -8,7 +8,7 @@ const gurl=(r,c)=>(c?'googlechromes://':'https://')+'www.google.com/search?q='+e
 const N=v=>{const n=parseFloat(String(v).replace(/[$,]/g,''));return isNaN(n)?null:n},M=v=>v==null?'Not entered':(v<0?'-$':'$')+Math.abs(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 const PF={purchase:[['date','Date'],['merchant','Merchant'],['location','Location (city, state)'],['number','Receipt/Invoice #'],['tax','Tax'],['extSub','Subtotal $'],['extTotal','Total $']],
 freelance:[['employer','Employer'],['client','Client'],['jobDate','Job date'],['endDate','Event end date'],['location','Job location'],['roundTrip','Round-trip miles'],['hours','Total regular'],['overtime','Total overtime'],['amount','Amount $'],['invoice','Invoice #'],['notes','Notes']]};
-function setMode(m){showWork();S.mode=m;S.rec=newRec();S.pages=[];S.undo=[];S.redo=[];{const dw=$('#docwrap');if(dw)dw.style.display='none'}$('.head h1').textContent=m=='purchase'?'':'New work invoice record';$('#m1').className=m=='purchase'?'on':'';$('#m2').className=m=='freelance'?'on':'';render();renderPages()}
+function setMode(m){showWork();S.mode=m;S.rec=newRec();S.pages=[];S.undo=[];S.redo=[];{const dw=$('#docwrap');if(dw)dw.style.display='none'}$('.head h1').textContent=m=='purchase'?'':'';$('#m1').className=m=='purchase'?'on':'';$('#m2').className=m=='freelance'?'on':'';render();renderPages()}
 const newRec=()=>({mode:S.mode,items:[],src:{},edited:{},loaded:false,doc:false,employer:S.mode=='freelance'?'AVLancer':''});
 function manual(){dismissRestore();S.rec.loaded=true;render()}
 /* ---------- lock (passcode hash via PBKDF2; screen lock only) ---------- */
@@ -16,15 +16,15 @@ const hex=b=>[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join(
 async function hash(p,salt){const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(p),'PBKDF2',false,['deriveBits']);return hex(await crypto.subtle.deriveBits({name:'PBKDF2',salt,iterations:310000,hash:'SHA-256'},k,256))}
 function lockUI(h){const L=$('#lock');L.style.display='block';$('#app').style.display='none';L.innerHTML=h}
 let fails=0;
-function wipe(){S.cleared=null;showRestore();snackHide();S.img=null;S.dim=null;S.records=[];S.words=[];S.sel=[];S.conf=null;S.home=null;['#view','#ocr','#print','#status'].forEach(i=>{const e=$(i);if(e){e.innerHTML='';e.textContent=''}});$('#docwrap').style.display='none';$('#file').value='';$('#copypanel').style.display='none';$('#copyta').value='';setMode(S.mode)}
+function wipe(){S.cleared=null;showRestore();snackHide();S.img=null;S.dim=null;S.records=[];S.learn={m:{},mi:{}};S.words=[];S.sel=[];S.conf=null;S.home=null;['#view','#ocr','#print','#status'].forEach(i=>{const e=$(i);if(e){e.innerHTML='';e.textContent=''}});$('#docwrap').style.display='none';$('#file').value='';$('#copypanel').style.display='none';$('#copyta').value='';setMode(S.mode)}
 var snT;function snackHide(){clearTimeout(snT);const e=$('#snack');if(e)e.style.display='none'}
 function snack(m,fn){let e=$('#snack');if(!e){e=document.createElement('div');e.id='snack';document.body.appendChild(e)}e.innerHTML='<span></span><button></button>';e.firstChild.textContent=m;const b=e.lastChild;b.textContent='Undo';b.style.display=fn?'':'none';if(!fn)e.style.paddingRight='16px';else e.style.paddingRight='';b.onclick=()=>{snackHide();fn&&fn()};e.style.display='flex';clearTimeout(snT);snT=setTimeout(snackHide,10000)}
-function clearAll(){const c={mode:S.mode,rec:S.rec,pages:S.pages,undo:S.undo,redo:S.redo,img:S.img,dim:S.dim,words:S.words,conf:S.conf};const keep=S.records;wipe();S.records=keep;S.cleared=c;showRestore();renderRecs();snack('Record cleared',restoreCleared)}
+function clearAll(){const c={mode:S.mode,rec:S.rec,pages:S.pages,undo:S.undo,redo:S.redo,img:S.img,dim:S.dim,words:S.words,conf:S.conf};const keep=S.records,kl=S.learn;wipe();S.records=keep;S.learn=kl;S.cleared=c;showRestore();renderRecs();snack('Record cleared',restoreCleared)}
 function showRestore(){const b=$('#restore');if(b)b.style.display=S.cleared?'flex':'none'}
 function dismissRestore(){S.cleared=null;showRestore()}
 function restoreCleared(){const c=S.cleared;if(!c)return;if(S.rec&&S.rec.loaded&&!confirm('Replace what is on screen with the cleared record?'))return;S.cleared=null;showWork();
  Object.assign(S,{mode:c.mode,rec:c.rec,pages:c.pages,undo:c.undo,redo:c.redo,img:c.img,dim:c.dim,words:c.words,conf:c.conf,selM:null});
- $('#m1').className=S.mode=='purchase'?'on':'';$('#m2').className=S.mode=='freelance'?'on':'';$('.head h1').textContent=S.mode=='purchase'?'':'New work invoice record';
+ $('#m1').className=S.mode=='purchase'?'on':'';$('#m2').className=S.mode=='freelance'?'on':'';$('.head h1').textContent=S.mode=='purchase'?'':'';
  if(S.mode!='purchase'&&S.img){showDoc(S.img);if(S.words&&S.words.length&&S.dim)drawWords(S.dim[0],S.dim[1])}
  render();renderPages();showRestore()}
 async function lockNow(){clearTimeout(pt);S.key=null;S.loaded=false;S.noStore=false;wipe();$('#lock').style.display='block';showLock()}
@@ -110,7 +110,7 @@ function showDoc(u){showOcr();const v=$('#view');v.style.height='';v.innerHTML='
   ap();if(S.z<=1)fit()};
  if(!window.__dvr){window.__dvr=1;addEventListener('resize',()=>{const l=$('#layer'),w=$('#view');if(l&&w&&S.z<=1&&l.offsetHeight)w.style.height=l.offsetHeight+'px'})}}
 /* ---------- parsing (deterministic) ---------- */
-function parse(t){const r=S.rec,o=Parser.parse(t,r.mode);Object.assign(r,o.fields);r.src=Object.assign(r.src,o.found);if(r.mode!='purchase'&&o.shifts&&o.shifts.length)r.shifts=o.shifts;if(r.mode=='purchase'){r.items=o.items;if(o.guess)r.gname=o.guess;ensureItem(r)}}
+function parse(t){const r=S.rec,o=Parser.parse(t,r.mode);Object.assign(r,o.fields);r.src=Object.assign(r.src,o.found);if(r.mode!='purchase'&&o.shifts&&o.shifts.length)r.shifts=o.shifts;if(r.mode=='purchase'){r.items=o.items;if(o.guess)r.gname=o.guess;ensureItem(r)}applyLearned(r)}
 /* Only a subtotal was readable (no per-item lines): keep the totals reconcilable with one clearly-flagged combined line. */
 function ensureItem(r){if(r.mode=='purchase'&&!r.items.length&&N(r.extSub)>0)r.items.push({n:r.gname||'',q:1,p:N(r.extSub),guess:1,ext:1})}
 /* ---------- form ---------- */
@@ -118,7 +118,7 @@ function render(){const r=S.rec;{const pl=$('#pick');if(pl)pl.textContent=S.mode
  autoCat();const fs=PF[r.mode],sel=$('#addto');sel.innerHTML=fs.map(f=>`<option value="${f[0]}">${f[1]}</option>`).join('')+(r.mode=='purchase'?'<option value="+item">New item</option>':'');
  const lab=(k,l)=>`<label for="f_${k}">${l}${r.edited[k]?' (edited)':''}${miss(k)?' (needs review)':''}${r.low&&r.low[k]&&!r.edited[k]?' - low confidence, check':''}</label>`,
  W=['location','notes','number','client','employer','category'],
- fld=k=>{if(k=='category')return `<div class="f w"><label for="f_category">Category${r.edited.category?' (edited)':''}</label><select id="f_category" onchange="setCat(this.value);render()"><option value="">Select…</option>${CATS.map(c=>`<option${r.category==c?' selected':''}>${c}</option>`).join('')}</select></div>`;const l=(fs.find(f=>f[0]==k)||[])[1];return `<div class="f${W.includes(k)?' w':''}">`+lab(k,l)+(k=='notes'?`<textarea id="f_${k}" class="${String(r[k]??'').trim()?'ext':''}" rows="3" oninput="ed('${k}',this.value)">${esc(r[k])}</textarea>`:(inp=>k=='roundTrip'?`<div class="row" style="margin:0">${inp}<button class="pri" style="flex:0 0 auto" onclick="render()">Recalculate</button></div>`:inp)(`<input autocomplete="off" id="f_${k}" class="${String(r[k]??'').trim()?'ext':''}${miss(k)?' warn':''}" value="${esc(r[k])}" oninput="ed('${k}',this.value)">`))+(k=='roundTrip'?`<div class="srch"><a id="gs" class="btn" target="_blank" rel="noopener noreferrer" href="${esc(gurl(r))}" onclick="return chk()">Search round-trip distance</a></div>`:'')+'</div>'},
+ fld=k=>{if(k=='category')return `<div class="f w"><label for="f_category">Category${r.edited.category?' (edited)':''}</label><select id="f_category" onchange="setCat(this.value);render()"><option value="">Select…</option>${CATS.map(c=>`<option${r.category==c?' selected':''}>${c}</option>`).join('')}</select></div>`;const l=(fs.find(f=>f[0]==k)||[])[1];return `<div class="f${W.includes(k)?' w':''}">`+lab(k,l)+(k=='notes'?`<textarea id="f_${k}" class="${String(r[k]??'').trim()?'ext':''}" rows="3" oninput="ed('${k}',this.value)">${esc(r[k])}</textarea>`:(inp=>k=='roundTrip'?`<div class="row" style="margin:0">${inp}<button class="pri" style="flex:0 0 auto" onclick="render()">Recalculate</button></div>`:inp)(`<input autocomplete="off" id="f_${k}" class="${String(r[k]??'').trim()?'ext':''}${miss(k)?' warn':''}" value="${esc(r[k])}" oninput="ed('${k}',this.value)" onchange="fldDone('${k}')">`))+fixDiv(k)+(k=='roundTrip'?`<div class="srch"><a id="gs" class="btn" target="_blank" rel="noopener noreferrer" href="${esc(gurl(r))}" onclick="return chk()">Search round-trip distance</a></div>`:'')+'</div>'},
  G=r.mode=='purchase'?[['Receipt',['date','merchant','location','number','category']],['Amounts',['tax','extSub','extTotal']]]:[['',['employer','client','invoice']],['',['jobDate','endDate','location']],['Mileage',['roundTrip']],['Hours & pay',['hours','overtime','amount']],['__shifts',[]],['',['notes']]];
  let h=G.map(([t,ks])=>t=='__shifts'?shiftsHtml():`<section class="grp${t=='Amounts'?' amt':''}">${t?`<h3>${t}</h3>`:''}<div class="fg">${ks.map(fld).join('')}</div></section>`).join('');
  if(r.mode=='purchase')h+=itemsHtml();
@@ -148,7 +148,7 @@ function autoCat(){const r=S.rec;if(!r||r.mode!='purchase'||!r.loaded||(r.edited
 function setCat(v){const r=S.rec;r.category=v;r.edited.category=v?1:0;if(!v)autoCat()}
 const LNK='background:transparent;border:0;color:var(--gd);text-decoration:underline;font-weight:600;padding:8px 0;text-align:left';
 const esc=v=>String(v??'').replace(/"/g,'&quot;').replace(/</g,'&lt;'),miss=k=>{const r=S.rec;return r.doc&&!r[k]&&['date','merchant','client','jobDate','location','amount'].includes(k)&&!(k=='location'&&r.mode=='purchase')};
-function ed(k,v){S.rec[k]=v;if(k=='location'){const g=$('#gs'),c=$('#gc');if(g)g.href=gurl(S.rec);if(c)c.href=gurl(S.rec,1)}S.rec.edited[k]=1;const e=$('#f_'+k);if(e){const f=String(v).trim()!=='';e.classList.toggle('ext',f);e.classList.remove('usr');if(f)e.classList.remove('warn')}calc();if(k=='date')refreshActs();if(k=='merchant')autoCat()}
+function ed(k,v){const r0=S.rec;if(k=='merchant'&&!r0.edited.merchant&&!r0.origMerchant)r0.origMerchant=r0.merchant;if(r0.fix&&r0.fix[k]){r0.fix[k]=0;paintFix(k)}S.rec[k]=v;if(k=='location'){const g=$('#gs'),c=$('#gc');if(g)g.href=gurl(S.rec);if(c)c.href=gurl(S.rec,1)}S.rec.edited[k]=1;const e=$('#f_'+k);if(e){const f=String(v).trim()!=='';e.classList.toggle('ext',f);e.classList.remove('usr');if(f)e.classList.remove('warn')}calc();if(k=='date')refreshActs();if(k=='merchant')autoCat()}
 function it(i,k,v){S.rec.items[i][k]=k=='n'?v:N(v)||0;S.rec.items[i].ext=0;S.rec.items[i].guess=0;if(k=='n'){S.rec.items[i].inf=0;S.rec.items[i].chk=0}calc();const e=$('#it_'+i);if(e)e.textContent=M(S.rec.items[i].t);if(k=='n')autoCat()}
 function r_del(i){S.rec.items.splice(i,1);render()}
 /* ---------- calculation ---------- */
@@ -173,7 +173,7 @@ function calc(){const r=S.rec;if(!r)return;try{dupWarn()}catch(e){}const o=compu
  $('#calc').innerHTML=h+'</div>';persist()}
 /* ---------- selection → field ---------- */
 document.addEventListener('selectionchange',updBar);
-function addSel(){const v=(hasSel()?selText():getSelection().toString().replace(/\s+/g,' ').trim()),k=$('#addto').value,r=S.rec;if(k=='+item'){const m=v.match(/(\d+[.,]\d{2})\s*$/);r.items.push({n:v.replace(/\$?\s?\d+[.,]\d{2}\s*$/,'').trim(),q:1,p:m?N(m[1].replace(',','.')):0});render()}else{r[k]=v.replace(/^\$/,'');r.edited[k]=1;render()}getSelection().removeAllRanges();clearSel()}
+function addSel(){const v=(hasSel()?selText():getSelection().toString().replace(/\s+/g,' ').trim()),k=$('#addto').value,r=S.rec;if(k=='+item'){const m=v.match(/(\d+[.,]\d{2})\s*$/);r.items.push({n:v.replace(/\$?\s?\d+[.,]\d{2}\s*$/,'').trim(),q:1,p:m?N(m[1].replace(',','.')):0});render()}else{if(k=='merchant'&&!r.edited.merchant&&!r.origMerchant)r.origMerchant=r.merchant;if(r.fix&&r.fix[k])r.fix[k]=0;r[k]=v.replace(/^\$/,'');r.edited[k]=1;learnRec(r);render()}getSelection().removeAllRanges();clearSel()}
 /* ---------- output ---------- */
 const fm=v=>v==null?null:M(v);
 /* Uniform record layout (same for every log): title, info table, detail table (shaded), totals table.
@@ -250,10 +250,10 @@ async function saveImg(){try{const b=await recsBlob([S.rec]),f=new File([b],inam
  const u=URL.createObjectURL(b);window.open(u,'_blank')}catch(e){if(e&&e.name=='AbortError')return;toast('Could not save image')}}
 function toast(m){$('#status').style.color='#0a0';$('#status').textContent=m;setTimeout(()=>{$('#status').textContent='';$('#status').style.color=''},2500)}
 const noun=()=>S.mode=='purchase'?'Receipt':'Call Sheet';const cpLabel=()=>'Copy '+noun()+' Text';
-let ct;const copyRec=async()=>{if(await copy([S.rec])){const b=$('#cpbtn');clearTimeout(ct);requestAnimationFrame(()=>{b.textContent='Copied'});ct=setTimeout(()=>requestAnimationFrame(()=>{b.textContent=cpLabel()}),2500)}};
-function saveRec(){if(!S.rec||!S.rec.loaded)return;const j=JSON.stringify(S.rec);
- if(S.rec.rid){const k=S.records.findIndex(x=>x.rid===S.rec.rid);if(k>=0){const same=JSON.stringify(S.records[k])===j;if(!same){S.records[k]=JSON.parse(j);S.sv.sec=S.rec.mode=='purchase'?'x':'w';S.sv.cat='All';store()}endEdit();showSaved();return toast(same?'No changes to save':'Changes saved')}}
-if(S.records.some(x=>JSON.stringify(x)===j))return toast('Already saved');if(S.records.some(x=>sameRec(S.rec,x))&&!confirm('You already have this one saved. Save it again anyway?'))return;S.records.push(JSON.parse(j));S.sv.sec=S.rec.mode=='purchase'?'x':'w';S.sv.cat='All';store();showSaved();toast('Added to Saved')}
+let ct;const copyRec=async()=>{learnRec(S.rec);if(await copy([S.rec])){const b=$('#cpbtn');clearTimeout(ct);requestAnimationFrame(()=>{b.textContent='Copied'});ct=setTimeout(()=>requestAnimationFrame(()=>{b.textContent=cpLabel()}),2500)}};
+function saveRec(){if(!S.rec||!S.rec.loaded)return;learnRec(S.rec);const j=JSON.stringify(S.rec);
+ if(S.rec.rid){const k=S.records.findIndex(x=>x.rid===S.rec.rid);if(k>=0){const same=JSON.stringify(S.records[k])===j;if(!same){S.records[k]=JSON.parse(j);S.sv.sec=S.rec.mode=='purchase'?'x':'w';S.sv.cat='All';S.sv.q='';store()}endEdit();showSaved();return toast(same?'No changes to save':'Changes saved')}}
+if(S.records.some(x=>JSON.stringify(x)===j))return toast('Already saved');if(S.records.some(x=>sameRec(S.rec,x))&&!confirm('You already have this one saved. Save it again anyway?'))return;S.records.push(JSON.parse(j));S.sv.sec=S.rec.mode=='purchase'?'x':'w';S.sv.cat='All';S.sv.q='';store();showSaved();toast('Added to Saved')}
 function key(r){const d=Parser.pd(r.date||r.jobDate);return d?+d:Infinity}
 /* expense totals (Expense records only): by month, by year (when more than one), by category */
 function totals(){const m={},y={},c={};let all=0;S.records.filter(r=>r.mode=='purchase').forEach(r=>{const t=compute(r).total||0,d=Parser.pd(r.date),p=n=>String(n).padStart(2,'0'),mk=d?d.getFullYear()+'-'+p(d.getMonth()+1):'0000',yk=d?String(d.getFullYear()):'0000',ck=r.category||'Uncategorized';m[mk]=(m[mk]||0)+t;y[yk]=(y[yk]||0)+t;c[ck]=(c[ck]||0)+t;all+=t});
@@ -264,38 +264,85 @@ function allRecs(){const a=[...S.records].sort((p,q)=>key(p)-key(q));if(S.record
 /* ---------- Saved tab: Expenses and Work invoices, with category filter and sorting ---------- */
 function showWork(){S.tab='new';const w=$('#workview'),v=$('#savedview'),b=$('#m3');if(w)w.style.display='';if(v)v.style.display='none';if(b)b.className=''}
 function showSaved(){S.tab='saved';$('#workview').style.display='none';$('#savedview').style.display='block';$('#m1').className='';$('#m2').className='';$('#m3').className='on';$('.head h1').textContent='Saved';renderRecs();window.scrollTo(0,0)}
-function goMode(m){if(S.tab=='saved'&&S.mode==m){showWork();$('#m1').className=m=='purchase'?'on':'';$('#m2').className=m=='freelance'?'on':'';$('.head h1').textContent=m=='purchase'?'':'New work invoice record';render();renderPages()}else setMode(m)}
+function goMode(m){if(S.tab=='saved'&&S.mode==m){showWork();$('#m1').className=m=='purchase'?'on':'';$('#m2').className=m=='freelance'?'on':'';$('.head h1').textContent=m=='purchase'?'':'';render();renderPages()}else setMode(m)}
 const SORTS=[['dnew','Date (newest first)'],['dold','Date (oldest first)'],['chi','Cost (high to low)'],['clo','Cost (low to high)']];
+/* v80: work invoices sort by date or by location, not by cost */
+const SORTS_W=[['dnew','Date (newest first)'],['dold','Date (oldest first)'],['loc','Location (A to Z)'],['cli','Client (A to Z)']];
+const sortFor=x=>{const L=x?SORTS:SORTS_W;return L.some(o=>o[0]==S.sv.sort)?S.sv.sort:'dnew'};
+const recLoc=r=>String(r.location||'').trim().toLowerCase(),recCli=r=>String(r.client||'').trim().toLowerCase();
 const recAmt=r=>r.mode=='purchase'?compute(r).total:N(r.amount);
 const recDate=r=>{const d=Parser.pd(r.mode=='purchase'?r.date:r.jobDate);return d?+d:null};
 const recCat=r=>r.category||'Uncategorized';
 /* records with no date / no amount always go to the bottom; ties keep the order they were saved in */
-function sortRecs(a,how){const f=how=='chi'||how=='clo'?recAmt:recDate,desc=how=='dnew'||how=='chi';
+function sortRecs(a,how){if(how=='loc'||how=='cli')return a.slice().sort((p,q)=>{const g=how=='cli'?recCli:recLoc,x=g(p[0]),y=g(q[0]);if(!x||!y){if(!x&&!y)return (recDate(q[0])||0)-(recDate(p[0])||0)||q[1]-p[1];return x?-1:1}if(x!==y)return x<y?-1:1;return (recDate(q[0])||0)-(recDate(p[0])||0)||q[1]-p[1]});const f=how=='chi'||how=='clo'?recAmt:recDate,desc=how=='dnew'||how=='chi';
  return a.slice().sort((p,q)=>{const x=f(p[0]),y=f(q[0]);if(x==null||y==null){if(x==null&&y==null)return desc?q[1]-p[1]:p[1]-q[1];return x==null?1:-1}if(x!==y)return desc?y-x:x-y;return desc?q[1]-p[1]:p[1]-q[1]})}
-function svList(){const x=S.sv.sec=='x',all=S.records.map((r,i)=>[r,i]).filter(([r])=>(r.mode=='purchase')==x);
- return sortRecs(x&&S.sv.cat!='All'?all.filter(([r])=>recCat(r)==S.sv.cat):all,S.sv.sort)}
+/* v83: search in Saved. Matches merchant, client and receipt / invoice number. Every word typed must match something; numbers ignore spaces, dashes and #. */
+const svTok=q=>String(q||'').toLowerCase().split(/\s+/).map(t=>t.replace(/^#+/,'')).filter(Boolean);
+function recHay(r){const pur=r.mode=='purchase',txt=[pur?r.merchant:r.client,pur?niceMerch(r.merchant):'',pur?r.number:r.invoice].map(v=>String(v||'').toLowerCase()).join(' ');return{txt,key:nk(txt)}}
+function recMatch(r,toks){if(!toks.length)return true;const h=recHay(r);return toks.every(t=>h.txt.includes(t)||(nk(t).length>0&&h.key.includes(nk(t))))}
+function svList(){const x=S.sv.sec=='x',toks=svTok(S.sv.q),all=S.records.map((r,i)=>[r,i]).filter(([r])=>(r.mode=='purchase')==x&&recMatch(r,toks));
+ return sortRecs(x&&S.sv.cat!='All'?all.filter(([r])=>recCat(r)==S.sv.cat):all,sortFor(x))}
+function svSearching(){return svTok(S.sv.q).length>0}
 function svSec(v){S.sv.sec=v;S.sv.cat='All';renderRecs()}
 function svCat(v){S.sv.cat=v;renderRecs()}
 function svSort(v){S.sv.sort=v;renderRecs()}
-function svCopy(){const l=svList().map(x=>x[0]).sort((p,q)=>key(p)-key(q));if(!l.length)return;if(S.sv.sec=='x'&&S.sv.cat=='All')l.push({mode:'summary'});copy(l)}
+function svFind(v){S.sv.q=v;const b=$('#svbody');if(b)b.innerHTML=svBody();const c=$('#svclr');if(c)c.style.display=v?'':'none'}
+function svClear(){S.sv.q='';const i=$('#svq');if(i){i.value='';i.focus()}svFind('')}
+/* v85: Totals view. Expenses by category, income by client and the mileage deduction, month to date and year to date side by side. */
+function svSeg(){const c=S.sv.sec,b=(k,l)=>'<button class="'+(c==k?'on':'')+'" onclick="svSec(\''+k+'\')">'+l+'</button>';return '<div class="seg">'+b('x','Expenses')+b('w','Work invoices')+b('t','Totals')+'</div>'}
+function periodSums(now){now=now||new Date();const y=now.getFullYear(),mo=now.getMonth(),end=new Date(y,mo,now.getDate(),23,59,59,999).getTime(),lo=[new Date(y,mo,1).getTime(),new Date(y,0,1).getTime()],
+ T={cat:{},cli:{},exp:[0,0],inc:[0,0],ded:[0,0],mi:[0,0],noMi:0,und:0,fut:0,lo,now};
+ S.records.forEach(r=>{const d=recDate(r);if(d==null){T.und++;return}if(d>end){T.fut++;return}if(d<lo[1])return;
+  const on=[d>=lo[0],true];
+  if(r.mode=='purchase'){const t=recAmt(r)||0,k=recCat(r),a=T.cat[k]||(T.cat[k]=[0,0]);on.forEach((f,i)=>{if(f){a[i]+=t;T.exp[i]+=t}})}
+  else{const o=compute(r),v=N(r.amount)||0,nm=String(r.client||'').trim(),k=nk(nm)||'-',a=T.cli[k]||(T.cli[k]={n:nm||'No client',v:[0,0]});
+   if(o.rt==null)T.noMi++;
+   on.forEach((f,i)=>{if(f){a.v[i]+=v;T.inc[i]+=v;T.ded[i]+=o.wear||0;T.mi[i]+=o.rt||0}})}});
+ return T}
+function totalsView(now){const T=periodSums(now),f=v=>+(+v).toFixed(2),sd=d=>d.toLocaleDateString('en-US',{month:'short',day:'numeric'}),
+ rg=i=>{const a=new Date(T.lo[i]);return a.getMonth()==T.now.getMonth()&&a.getDate()==T.now.getDate()?sd(a):sd(a)+' \u2013 '+sd(T.now)},
+ money=v=>v?'<b>'+M(f(v))+'</b>':'<b class="z">\u2013</b>',miles=v=>v?'<b>'+f(v).toLocaleString('en-US',{maximumFractionDigits:1})+' mi</b>':'<b class="z">\u2013</b>',
+ head=t=>'<div class="tr th"><span>'+t+'</span><span>MTD</span><span>YTD</span></div>',
+ row=(l,a,c,fn)=>'<div class="tr'+(c?' '+c:'')+'"><span>'+l+'</span>'+(fn||money)(a[0])+(fn||money)(a[1])+'</div>',
+ cats=Object.entries(T.cat).sort((p,q)=>q[1][1]-p[1][1]),clis=Object.values(T.cli).sort((p,q)=>q.v[1]-p.v[1]),
+ none=t=>'<div class="tr"><span class="z">'+t+'</span></div>',pl=(n,a,b)=>n+' '+(n==1?a:b);
+ let h='<div class="hint">MTD: '+rg(0)+' \u00b7 YTD: '+rg(1)+'</div>';
+ if(!Object.keys(T.cat).length&&!Object.keys(T.cli).length)h+='<div class="empty2">Nothing dated this year yet.</div>';
+ else{
+  h+='<div class="sl">'+head('Expenses by category')+(cats.length?cats.map(([k,a])=>row(esc(k),a)).join('')+row('Total expenses',T.exp,'tot'):none('No expenses this year'))+'</div>';
+  h+='<div class="sl">'+head('Income by client')+(clis.length?clis.map(c=>row(esc(c.n),c.v)).join('')+row('Total income',T.inc,'tot'):none('No work invoices this year'))+'</div>';
+  h+='<div class="sl">'+head('Mileage')+row('Mileage deduction',T.ded,'tot')+row('Miles driven',T.mi,'',miles)+'</div>'}
+ const n=[];if(T.noMi)n.push(pl(T.noMi,'work invoice this year has','work invoices this year have')+' no round-trip miles, so no mileage deduction is counted for '+(T.noMi==1?'it':'them')+'.');
+ const u=[];if(T.und)u.push(T.und+' undated');if(T.fut)u.push(T.fut+' dated after today');if(u.length)n.push('Not counted: '+u.join(', ')+'.');
+ n.push('Expenses use the purchase date and income uses the job date. Income is the Amount Paid on each work invoice.');
+ return h+'<div class="hint">'+n.join(' ')+'</div>'}
+function svOther(){S.sv.sec=S.sv.sec=='x'?'w':'x';S.sv.cat='All';renderRecs()}
+function svCopy(){const l=svList().map(x=>x[0]).sort((p,q)=>key(p)-key(q));if(!l.length)return;if(S.sv.sec=='x'&&S.sv.cat=='All'&&!svSearching())l.push({mode:'summary'});copy(l)}
 function delRec(i){if(!confirm('Delete this saved record?'))return;S.records.splice(i,1);renderRecs();store()}
 function delAllRecs(){if(!confirm('Delete all '+S.records.length+' saved records from this phone?'))return;S.records=[];renderRecs();store()}
+/* v83: the list below the controls is its own piece (svBody) so typing in the search box redraws only the list and the keyboard stays open */
+function svBody(){
+ const x=S.sv.sec=='x',q=svSearching(),list=svList(),tot=+list.reduce((s,[r])=>s+(recAmt(r)||0),0).toFixed(2),T=totals(),trow=(l,v)=>`<div class="srow"><div class="sm">${l}</div><b>${M(v)}</b></div>`,
+ row=([r,i])=>{const pur=r.mode=='purchase',nm=esc((pur?niceMerch(r.merchant):r.client)||(pur?'Receipt':'Work invoice')),sub=[pur?r.date:r.jobDate,pur?r.category:null,r.location].filter(Boolean).map(esc).join(' · ');
+  return `<div class="srow tap" role="button" tabindex="0" onclick="openRec(${i})" onkeydown="if(event.key=='Enter')openRec(${i})"><div class="sm"><div class="s1">${nm}</div>${sub?`<div class="s2">${sub}</div>`:''}</div><b>${M(recAmt(r))}</b><button class="x" onclick="event.stopPropagation();delRec(${i})" aria-label="Delete saved record">✕</button></div>`};
+ let lbl;if(q)lbl=list.length+' match'+(list.length==1?'':'es')+(x&&S.sv.cat!='All'?' in '+S.sv.cat:'');else lbl=x&&S.sv.cat!='All'?list.length+' in '+S.sv.cat:list.length+' '+(x?'expense':'work invoice')+(list.length==1?'':'s');
+ let none='';if(!list.length){if(q){const toks=svTok(S.sv.q),o=S.records.filter(r=>(r.mode=='purchase')!=x&&recMatch(r,toks)).length;none='<div class="empty2">No matches for “'+esc(S.sv.q.trim())+'”.'+(x&&S.sv.cat!='All'?'<br>Try the All category.':'')+(o?'<br><button onclick="svOther()" style="margin-top:10px">Show '+o+' in '+(x?'Work invoices':'Expenses')+'</button>':'')+'</div>'}else none='<div class="empty2">'+(x?'No expenses saved yet.':'No work invoices saved yet.')+'</div>'}
+ return (list.length?'<div class="svsum"><span>'+lbl+'</span><b>'+M(tot)+'</b></div><div class="sl">'+list.map(row).join('')+'</div>':none)
+ +(x&&T.n&&S.sv.cat=='All'&&!q?`<div class="sl"><h4>Expense totals</h4>${T.months.map(([l,v])=>trow(l,v)).join('')}${T.years.length>1?T.years.map(([l,v])=>trow(l+' total',v)).join(''):''}${T.cats.map(([l,v])=>trow(l,v)).join('')}${trow('Total expenses',T.all)}</div>`:'')
+ +(list.length?'<button class="pri" onclick="svCopy()">Copy '+(list.length==1?'this record':'these '+list.length+' records')+'</button>':'')
+ +(list.length?'<button onclick="csvOpen()">Export CSV…</button>':'')
+ +'<button onclick="delAllRecs()">Delete all saved records</button><div class="hint">Saved on this phone only, encrypted with your passcode. Tap a record to open it and download its summary PDF. Receipt images are not kept; use Save as PDF for those.</div>'}
 function renderRecs(){persist();try{dupWarn()}catch(e){}const nb=$('#m3');if(nb)nb.textContent='Saved';const el=$('#savedview');if(!el||S.tab!='saved')return;
- const nx=S.records.filter(r=>r.mode=='purchase').length,nw=S.records.length-nx;
  if(!S.records.length){el.innerHTML='<div class="sv"><div class="empty2">Nothing saved yet.<br>Fill in a record and tap Save record. It will show up here.</div></div>';return}
+ if(S.sv.sec=='t'){el.innerHTML='<div class="sv">'+svSeg()+totalsView()+'</div>';return}
  const x=S.sv.sec=='x',cnt={};S.records.filter(r=>r.mode=='purchase').forEach(r=>{const c=recCat(r);cnt[c]=(cnt[c]||0)+1});
  const cats=[...CATS.filter(c=>cnt[c]),...Object.keys(cnt).filter(c=>!CATS.includes(c)&&c!='Uncategorized'),...(cnt.Uncategorized?['Uncategorized']:[])];
  if(S.sv.cat!='All'&&!cnt[S.sv.cat])S.sv.cat='All';
- const list=svList(),tot=+list.reduce((s,[r])=>s+(recAmt(r)||0),0).toFixed(2),T=totals(),trow=(l,v)=>`<div class="srow"><div class="sm">${l}</div><b>${M(v)}</b></div>`,
- row=([r,i])=>{const pur=r.mode=='purchase',nm=esc((pur?niceMerch(r.merchant):r.client)||(pur?'Receipt':'Work invoice')),sub=[pur?r.date:r.jobDate,pur?r.category:null,r.location].filter(Boolean).map(esc).join(' · ');
-  return `<div class="srow tap" role="button" tabindex="0" onclick="openRec(${i})" onkeydown="if(event.key=='Enter')openRec(${i})"><div class="sm"><div class="s1">${nm}</div>${sub?`<div class="s2">${sub}</div>`:''}</div><b>${M(recAmt(r))}</b><button class="x" onclick="event.stopPropagation();delRec(${i})" aria-label="Delete saved record">✕</button></div>`};
- el.innerHTML='<div class="sv"><div class="seg"><button class="'+(x?'on':'')+'" onclick="svSec(\'x\')">Expenses</button><button class="'+(x?'':'on')+'" onclick="svSec(\'w\')">Work invoices</button></div>'
+ el.innerHTML='<div class="sv">'+svSeg()
+ +'<div class="svs"><input id="svq" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Search merchant, client or receipt #" aria-label="Search saved records" value="'+esc(S.sv.q)+'" oninput="svFind(this.value)"><button id="svclr" type="button" onclick="svClear()" aria-label="Clear search" style="'+(S.sv.q?'':'display:none')+'">✕</button></div>'
  +(x&&cats.length>1?'<div class="chips"><button class="'+(S.sv.cat=='All'?'on':'')+'" onclick="svCat(\'All\')">All</button>'+cats.map(c=>'<button class="'+(S.sv.cat==c?'on':'')+'" onclick="svCat(\''+c+'\')">'+c+'</button>').join('')+'</div>':'')
- +'<div class="srt"><label for="svsort">Sort</label><select id="svsort" onchange="svSort(this.value)">'+SORTS.map(([v,l])=>'<option value="'+v+'"'+(S.sv.sort==v?' selected':'')+'>'+l+'</option>').join('')+'</select></div>'
- +(list.length?'<div class="svsum"><span>'+(x&&S.sv.cat!='All'?list.length+' in '+S.sv.cat:list.length+' '+(x?'expense':'work invoice')+(list.length==1?'':'s'))+'</span><b>'+M(tot)+'</b></div><div class="sl">'+list.map(row).join('')+'</div>':'<div class="empty2">'+(x?'No expenses saved yet.':'No work invoices saved yet.')+'</div>')
- +(x&&T.n&&S.sv.cat=='All'?`<div class="sl"><h4>Expense totals</h4>${T.months.map(([l,v])=>trow(l,v)).join('')}${T.years.length>1?T.years.map(([l,v])=>trow(l+' total',v)).join(''):''}${T.cats.map(([l,v])=>trow(l,v)).join('')}${trow('Total expenses',T.all)}</div>`:'')
- +(list.length?'<button class="pri" onclick="svCopy()">Copy '+(list.length==1?'this record':'these '+list.length+' records')+'</button>':'')
- +'<button onclick="delAllRecs()">Delete all saved records</button><div class="hint">Saved on this phone only, encrypted with your passcode. Tap a record to open it and download its summary PDF. Receipt images are not kept; use Save as PDF for those.</div></div>'}
+ +'<div class="srt"><label for="svsort">Sort</label><select id="svsort" onchange="svSort(this.value)">'+(x?SORTS:SORTS_W).map(([v,l])=>'<option value="'+v+'"'+(sortFor(x)==v?' selected':'')+'>'+l+'</option>').join('')+'</select></div>'
+ +'<div id="svbody" class="sv">'+svBody()+'</div></div>'}
 
 function dl(f){const r=S.rec,o=compute(r);let d,n='record.'+f;if(f=='json')d=JSON.stringify({...r,calculated:o},null,1);else{const rows=r.mode=='purchase'?[['Item','Qty','Unit','Total'],...r.items.filter(i=>!i.off).map(i=>[i.n,i.q,i.p,i.t]),['Subtotal','','',o.sub],...(o.disc?[['Discount','','',-o.disc]]:[]),['Tax','','',N(r.tax)==null?'':o.tax],['Total','','',o.total]]:[['Field','Value'],...text(r).filter(l=>l.includes(': ')).map(l=>l.split(/: (.*)/s).slice(0,2))];d=rows.map(x=>x.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(',')).join('\n')}
  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([d]));a.download=n;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
@@ -314,9 +361,9 @@ async function dk(p,e){const k=await crypto.subtle.importKey('raw',new TextEncod
 async function dec(x){return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:x.iv},S.key,x.c)))}
 let pt;function persist(){}
 /* saved records (text fields only, never the images) are encrypted with the passcode-derived key and kept on this device */
-async function store(){if(!S.key||!S.loaded||S.noStore)return;try{const iv=crypto.getRandomValues(new Uint8Array(12)),c=await crypto.subtle.encrypt({name:'AES-GCM',iv},S.key,new TextEncoder().encode(JSON.stringify(S.records)));await idb('put',{iv,c})}catch(e){}}
+async function store(){if(!S.key||!S.loaded||S.noStore)return;try{const iv=crypto.getRandomValues(new Uint8Array(12)),c=await crypto.subtle.encrypt({name:'AES-GCM',iv},S.key,new TextEncoder().encode(JSON.stringify(learnPack())));await idb('put',{iv,c});window.bkChanged&&window.bkChanged()}catch(e){}}
 async function flush(){}
-async function nuke(){if(!confirm('Delete every saved record from this phone and clear the screen? Your passcode stays.'))return;try{await idb('del')}catch(e){}S.noStore=false;wipe();st('Saved data deleted.')}
+async function nuke(){if(!confirm('Delete every saved record from this phone and clear the screen? Your passcode stays.'))return;try{await idb('del')}catch(e){}S.noStore=false;wipe();st('Saved data deleted.');window.bkRefresh&&window.bkRefresh()}
 
 setMode('purchase');showLock();bump();
 
@@ -381,7 +428,7 @@ async function addShots(files,opts){opts=opts||{};let r=S.rec;if(!r.doc){S.rec=r
    if(cur===0){const td=topRightDate(o.words,o.c.width,o.c.height);if(td){r.date=td;r.src.date=1}}
    P.items.forEach(x=>{const ex=r.items.find(y=>y.s!==cur&&kf(y)===kf(x));if(ex){dup++;if(x.pos)(ex.alts=ex.alts||[]).push(x.pos)}else r.items.push({...x,s:cur})})}
   catch(e){bad++}}
- $('#file').value='';S.undo=[];S.redo=[];ensureItem(r);render();renderPages();try{if(localStorage.getItem('ppClip')&&r.items.some(phVague))setTimeout(()=>idPhotos().catch(()=>{}),400)}catch(e){}
+ $('#file').value='';S.undo=[];S.redo=[];ensureItem(r);applyLearned(r);render();renderPages();try{if(localStorage.getItem('ppClip')&&r.items.some(phVague))setTimeout(()=>idPhotos().catch(()=>{}),400)}catch(e){}
  const n=r.items.length;
  if(bad)st(bad+(opts.pdf?' page':' screenshot')+(bad>1?'s':'')+' could not be read.');else if(opts.pdf&&opts.all>files.length)st('Only the first '+files.length+' of '+opts.all+' pages were read.');else toast(n+' item'+(n==1?'':'s')+' from '+r.shots+(opts.pdf?' page':' screenshot')+(r.shots>1?'s':''))}
 const FLUFF=/\b(?:Resettable|Portable|Compact|Thickened|Texture|Universal|Sports|Durable|Premium|Upgraded|Professional|Multifunctional)\b/gi;
@@ -702,6 +749,50 @@ function idSkip(a){S.idRes.splice(a,1);render()}
 /* v59: tap a saved record to open it and download its summary PDF; warn when the record being prepared is already saved */
 const nk=v=>String(v||'').toLowerCase().replace(/[^a-z0-9]/g,'');
 const recNum=r=>nk(r.mode=='purchase'?r.number:r.invoice),recWho=r=>nk(r.mode=='purchase'?niceMerch(r.merchant):r.client);
+/* v84: remembered fixes. A merchant spelling you correct, and the round-trip miles you enter for a job location, are remembered and applied next time.
+   They are kept inside the same encrypted store as saved records (so backups carry them too) and are never sent anywhere. */
+function learnPack(){const L=S.learn||{m:{},mi:{}};return Object.keys(L.m).length||Object.keys(L.mi).length?{v:2,records:S.records,learn:L}:S.records}
+const lrn=()=>S.learn||(S.learn={m:{},mi:{}});
+function lev(a,b){const m=a.length,n=b.length;if(!m)return n;if(!n)return m;let p=Array.from({length:n+1},(_,j)=>j);for(let i=1;i<=m;i++){const c=[i];for(let j=1;j<=n;j++)c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]==b[j-1]?0:1));p=c}return p[n]}
+/* only a correction that stays close to what was read counts as a spelling fix; a completely different name is a one-off, not a rule */
+function closeEnough(a,b){a=nk(a);b=nk(b);if(!a||!b)return false;if(a==b)return true;const s=a.length<b.length?a:b,l=s===a?b:a;if(s.length>=4&&l.includes(s))return true;return lev(a,b)<=Math.max(2,Math.ceil(Math.max(a.length,b.length)*.34))}
+function learnTrim(o,max){const k=Object.keys(o);if(k.length>max)k.sort((a,b)=>(o[a].ts||0)-(o[b].ts||0)).slice(0,k.length-max).forEach(x=>delete o[x])}
+function learnRec(r){if(!r||!r.loaded||!S.key||S.noStore)return;const L=lrn();let ch=false;
+ if(r.mode=='purchase'){const o=String(r.origMerchant||'').trim(),f=String(r.merchant||'').trim(),k=nk(o);
+  if(k&&f){if(o===f){if(L.m[k]){delete L.m[k];ch=true}}else if(closeEnough(o,f)){const c=L.m[k];if(!c||c.t!==f){L.m[k]={f:o,t:f,ts:Date.now()};ch=true}}}}
+ else{const loc=String(r.location||'').trim(),k=nk(loc),mi=N(r.roundTrip);
+  if(k&&mi!=null&&mi>0){const c=L.mi[k];if(!c||c.v!==mi){L.mi[k]={l:loc,v:mi,ts:Date.now()};ch=true}}}
+ if(ch){learnTrim(L.m,200);learnTrim(L.mi,300);store();learnUI()}}
+function fillMiles(r){const c=lrn().mi[nk(r.location)];r.fix=r.fix||{};
+ if(c&&!r.edited.roundTrip&&(r.fix.roundTrip||String(r.roundTrip??'').trim()==='')){const was=r.roundTrip;r.roundTrip=String(c.v);r.fix.roundTrip=1;return was!==r.roundTrip}
+ if(!c&&r.fix.roundTrip&&!r.edited.roundTrip){r.roundTrip='';r.fix.roundTrip=0;return true}return false}
+function applyLearned(r){if(!r)return;r.fix=r.fix||{};
+ if(r.mode=='purchase'){r.fix.merchant=0;const m=String(r.merchant||'').trim(),c=lrn().m[nk(m)];if(c&&!r.edited.merchant&&m!==c.t){r.origMerchant=m;r.merchant=c.t;r.fix.merchant=1}}
+ else fillMiles(r)}
+/* a field was finished (the change event fires when you leave it, so nothing is learned from half-typed text) */
+function fldDone(k){const r=S.rec;if(!r||!r.loaded)return;
+ if(k=='location'&&r.mode!='purchase'){if(fillMiles(r)){const e=$('#f_roundTrip');if(e){e.value=r.roundTrip??'';e.classList.toggle('ext',String(r.roundTrip??'').trim()!=='')}paintFix('roundTrip');calc()}}
+ if(k=='merchant'||k=='roundTrip')learnRec(r)}
+function fixText(k){const r=S.rec;if(!r||!r.fix||!r.fix[k]||(r.edited&&r.edited[k]))return'';
+ return k=='merchant'?'Fixed from \u201c'+esc(r.origMerchant)+'\u201d using a correction you made before. <a href="#" onclick="undoFix(\'merchant\');return false">Undo</a>':'Filled in from your last job at this location. Check it if the route changed. <a href="#" onclick="undoFix(\'roundTrip\');return false">Clear</a>'}
+function fixDiv(k){if(k!='merchant'&&k!='roundTrip')return'';const t=fixText(k);return '<div class="fixn" id="fx_'+k+'"'+(t?'':' hidden')+'>'+t+'</div>'}
+function paintFix(k){const h=$('#fx_'+k);if(!h)return;const t=fixText(k);h.innerHTML=t;h.hidden=!t}
+function undoFix(k){const r=S.rec;if(!r)return;r.fix=r.fix||{};
+ if(k=='merchant'){const o=r.origMerchant;if(o==null)return;delete lrn().m[nk(o)];r.merchant=o;r.edited.merchant=1;r.fix.merchant=0;store();learnUI();autoCat()}
+ else{r.roundTrip='';r.fix.roundTrip=0}
+ render()}
+function learnUI(){const e=$('#fxcnt');if(!e)return;const L=lrn(),n=Object.keys(L.m).length+Object.keys(L.mi).length;e.textContent=n?' ('+n+')':''}
+function fixOpen(){closeRec();const L=lrn(),by=(a,b)=>(b[1].ts||0)-(a[1].ts||0),ms=Object.entries(L.m).sort(by),ls=Object.entries(L.mi).sort(by),
+ row=(a,b,kind,k)=>'<div class="srow"><div class="sm"><div class="s1">'+a+'</div><div class="s2">'+b+'</div></div><button class="x" onclick="fixDel(\''+kind+'\',\''+k+'\')" aria-label="Forget this">\u2715</button></div>',
+ o=document.createElement('div');o.id='recmodal';o.className='rmo';o.onclick=e=>{if(e.target===o)closeRec()};
+ let h='';
+ if(ms.length)h+='<div class="sl"><h4>Merchant spelling</h4>'+ms.map(([k,c])=>row(esc(c.f)+' \u2192 '+esc(c.t),'Applied when a receipt is read this way','m',k)).join('')+'</div>';
+ if(ls.length)h+='<div class="sl"><h4>Round-trip miles</h4>'+ls.map(([k,c])=>row(esc(c.l),esc(String(c.v))+' mi round trip','mi',k)).join('')+'</div>';
+ if(!h)h='<div class="empty2">Nothing remembered yet.<br>Fix a merchant\u2019s spelling or enter round-trip miles for a job location, and PaperTrail will reuse it next time.</div>';
+ o.innerHTML='<div class="rm" role="dialog" aria-modal="true" aria-label="Remembered fixes"><div class="rmh"><h3>Remembered fixes</h3><button class="x" onclick="closeRec()" aria-label="Close">\u2715</button></div><div class="rmb">'+h+'<div class="hint" style="margin-top:10px">Stored on this phone with your saved records, encrypted. Tap \u2715 to forget one.</div></div><div class="rmf">'+(ms.length||ls.length?'<button onclick="fixAll()">Forget all</button>':'')+'<button class="pri" onclick="closeRec()">Close</button></div></div>';
+ document.body.appendChild(o);document.body.style.overflow='hidden'}
+function fixDel(kind,k){const L=lrn();delete L[kind][k];store();learnUI();fixOpen()}
+function fixAll(){if(!confirm('Forget every remembered fix? Saved records are not changed.'))return;S.learn={m:{},mi:{}};store();learnUI();fixOpen()}
 function sameRec(a,b){if(!a||!b||a.mode!=b.mode)return false;
  const na=recNum(a),nb=recNum(b),wa=recWho(a),wb=recWho(b),who=!wa||!wb||wa==wb||wa.includes(wb)||wb.includes(wa);
  if(na.length>=3&&nb.length>=3)return na==nb&&who;
@@ -739,7 +830,7 @@ document.addEventListener('keydown',e=>{if(e.key=='Escape')closeRec()});
  +'.rmb{overflow-y:auto;flex:1;min-height:0}.rg{background:var(--card);border:1px solid var(--ln);border-radius:14px;padding:4px 14px;margin:0 0 10px}'
  +'.rr{display:flex;justify-content:space-between;gap:12px;padding:7px 0;font-size:14px}.rr+.rr{border-top:1px solid var(--ln)}.rr span{color:var(--mut)}.rr b{text-align:right;overflow-wrap:anywhere}.rr.hl b{background:#fff2a8;padding:0 4px;border-radius:4px}.rr.tt{font-weight:700}'
  +'.rmf{display:flex;gap:10px;margin-top:6px}.rmf button{flex:1}';document.head.appendChild(s)})();
-(function(){const s=document.createElement('style');s.textContent=['.sv{display:flex;flex-direction:column;gap:10px}.sv .sl{margin:0}.sv>button{width:100%}.sv .seg{margin:0}','.chips{display:flex;flex-wrap:wrap;gap:6px}.chips button{padding:6px 12px;border-radius:999px;font-size:13px;font-weight:600;background:#fff;color:var(--mut);border-color:var(--ln)}.chips button.on{background:var(--g);color:#fff;border-color:var(--g)}','.srt{display:flex;align-items:center;gap:10px}.srt label{flex:0 0 auto;margin:0}','.svsum{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:var(--mut);padding:0 2px}.svsum b{color:var(--fg);font-size:17px}','.sm{flex:1;min-width:0}.s1{font-weight:600;overflow-wrap:anywhere}.s2{font-size:12px;color:var(--mut);margin-top:1px}','.empty2{border:2px dashed var(--ln);border-radius:16px;padding:28px 16px;text-align:center;color:var(--mut)}','@media(max-width:900px){.nav button{padding:10px 6px;font-size:14px}}'].join('');document.head.appendChild(s)})();
+(function(){const s=document.createElement('style');s.textContent=['.sv{display:flex;flex-direction:column;gap:10px}.sv .sl{margin:0}.sv>button{width:100%}.sv .seg{margin:0}','.chips{display:flex;flex-wrap:wrap;gap:6px}.chips button{padding:6px 12px;border-radius:999px;font-size:13px;font-weight:600;background:#fff;color:var(--mut);border-color:var(--ln)}.chips button.on{background:var(--g);color:#fff;border-color:var(--g)}','.srt{display:flex;align-items:center;gap:10px}','.svs{position:relative}.svs input{padding-right:44px;-webkit-appearance:none;appearance:none}.svs input::-webkit-search-cancel-button{-webkit-appearance:none;display:none}.svs button{position:absolute;right:2px;top:50%;transform:translateY(-50%);border:0;background:transparent;padding:8px 12px;color:var(--mut);width:auto}.sv>.svs{margin:0}#svbody>button{width:100%}.tr{display:grid;grid-template-columns:minmax(0,1fr) 88px 88px;column-gap:6px;align-items:baseline;padding:9px 0;font-size:14px;overflow-wrap:anywhere}.tr+.tr{border-top:1px solid var(--ln)}.tr>:not(:first-child){text-align:right;white-space:nowrap}.tr b{font-weight:600}.tr .z,.tr b.z{color:var(--mut);font-weight:400}.tr.tot{font-weight:700}.tr.tot b{font-weight:700}.tr.th{border:0;padding:10px 0 2px;font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}.fixn{font-size:12px;color:var(--gd,#2f6b4f);margin-top:4px;line-height:1.4}.fixn[hidden]{display:none}.fixn a{color:inherit;font-weight:700}.srt label{flex:0 0 auto;margin:0}','.svsum{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:var(--mut);padding:0 2px}.svsum b{color:var(--fg);font-size:17px}','.sm{flex:1;min-width:0}.s1{font-weight:600;overflow-wrap:anywhere}.s2{font-size:12px;color:var(--mut);margin-top:1px}','.empty2{border:2px dashed var(--ln);border-radius:16px;padding:28px 16px;text-align:center;color:var(--mut)}','@media(max-width:900px){.nav button{padding:10px 6px;font-size:14px}}'].join('');document.head.appendChild(s)})();
 (function(){const s=document.createElement('style');s.textContent='.sl{background:var(--card);border:1px solid var(--ln);border-radius:14px;padding:6px 14px;margin:10px 0}.sl h4{margin:10px 0 2px;font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}.srow{display:flex;align-items:center;gap:10px;padding:9px 0;font-size:14px}.srow+.srow{border-top:1px solid var(--ln)}.srow span{flex:1;min-width:0}.srow b{white-space:nowrap}.srow .x{flex:0 0 32px;height:32px;padding:0}#f_category{width:100%}input[type=time]{padding-inline:8px;font-size:15px;min-width:0}';document.head.appendChild(s)})();
 
 
@@ -807,9 +898,9 @@ window.authTab=ui;
 window.showLock=function(){S.uid=null;ui('in')};
 
 async function enter(uid,em,pw,o){
- S.uid=uid;S.email=em;S.pp=pp(em,pw);S.key=await dk(S.pp,o.e);S.records=[];S.noStore=false;
- try{const x=await idb('get');if(x&&x.iv){try{S.records=await dec(x)}catch(e){S.noStore=true;S.records=[]}}}catch(e){}
- S.loaded=true;try{localStorage.setItem(LAST,em)}catch(e){}
+ S.uid=uid;S.email=em;S.pp=pp(em,pw);S.key=await dk(S.pp,o.e);S.records=[];S.learn={m:{},mi:{}};S.noStore=false;
+ try{const x=await idb('get');if(x&&x.iv){try{const d=await dec(x);if(Array.isArray(d))S.records=d;else{S.records=d.records||[];S.learn={m:(d.learn&&d.learn.m)||{},mi:(d.learn&&d.learn.mi)||{}}}}catch(e){S.noStore=true;S.records=[]}}}catch(e){}
+ S.loaded=true;try{learnUI()}catch(e){}try{localStorage.setItem(LAST,em)}catch(e){}
  const v=$('#ver');if(v)v.title=em;
  open_();
  try{renderRecs();if(S.noStore)st('Saved records could not be opened.')}catch(e){}
@@ -829,43 +920,54 @@ async function unwrap(code,w){return new TextDecoder().decode(await crypto.subtl
 const getAcct=uid=>{try{return JSON.parse(localStorage.getItem(AK+uid))}catch(e){return null}};
 const setAcct=(uid,o)=>localStorage.setItem(AK+uid,JSON.stringify(o));
 
+function sheetText(code){return 'PaperTrail recovery sheet\n\nAccount email: '+(S.email||'')+'\nRecovery code: '+code+'\nCreated: '+new Date().toLocaleDateString()+'\n\nWhat this is: a spare key. If you forget your PaperTrail password, this code lets you set a new one without losing your saved records.\n\nHow to use it: on the PaperTrail sign-in screen tap "Forgot password?", then enter your email, this code and a new password.\n\nKeep this private. Anyone who has this code and your phone can reset your password.\n'}
 function showCode(code,next,title){
- lockUI('<h2>'+title+'</h2><p style="margin:0 0 12px;font-size:14px;line-height:1.5">If you forget your password, this code is the only way to get your saved invoices back. Save it now: write it down, or copy it into Notes or a password manager. Keep it private.</p>'
+ const B='style="flex:1;min-width:0"';
+ lockUI('<h2>'+title+'</h2>'
+ +'<p style="margin:0 0 10px;font-size:15px;line-height:1.5"><b>Think of this as a spare key.</b> Your invoices are locked with your password, and nothing ever leaves this phone, so PaperTrail cannot reset the password for you. If you forget it, this code lets you set a new one and keep everything.</p>'
  +'<div style="font:600 18px var(--mono);letter-spacing:.04em;background:var(--card);border:1px solid var(--ln);border-radius:12px;padding:16px 10px;text-align:center;user-select:all;-webkit-user-select:all;word-break:break-all">'+code+'</div>'
- +'<div style="display:flex;gap:8px;margin:10px 0"><button type="button" onclick="authCopy()">Copy</button><button type="button" onclick="authShare()">Share / Save</button></div>'
- +'<label style="display:flex;align-items:center;gap:10px;margin:14px 0;font:14px -apple-system,system-ui,sans-serif;letter-spacing:0;text-transform:none;color:var(--fg)"><input type="checkbox" id="rsaved" style="width:auto;margin:0"> I saved my recovery code</label>'
- +'<button class="pri" type="button" onclick="authCodeDone()">Continue</button><div id="lm" class="msg" style="margin-top:10px"></div>');
+ +'<p style="margin:14px 0 6px;font-size:14px;font-weight:600">Step 1: save it somewhere outside this app</p>'
+ +'<div style="display:flex;gap:8px"><button type="button" '+B+' onclick="authSaveFile()">Save as file</button><button type="button" '+B+' onclick="authEmail()">Email to myself</button><button type="button" '+B+' onclick="authCopy()">Copy</button></div>'
+ +'<p style="margin:6px 0 0;font-size:12.5px;line-height:1.4;color:var(--mut)">Save as file lets you pick Files or Notes. A screenshot or a photo of this screen works too.</p>'
+ +'<p style="margin:14px 0 6px;font-size:14px;font-weight:600">Step 2: type it here to check you saved it correctly</p>'
+ +'<input id="rcheck" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX" style="font-family:var(--mono)">'
+ +'<button class="pri" type="button" onclick="authCodeDone()" style="margin-top:6px">Continue</button><div id="lm" class="msg" style="margin-top:10px"></div>');
  window.__rc=code;
- window.authCodeDone=()=>{if(!$('#rsaved').checked)return msg('Tick the box once you have saved the code.');window.__rc=null;next()};
+ window.authCodeDone=()=>{if(cn($('#rcheck').value)!==cn(code))return msg('That does not match yet. Compare it with the code above, or paste what you saved.');window.__rc=null;next()};
 }
-window.authCopy=async function(){try{await navigator.clipboard.writeText(window.__rc);msg('Copied.')}catch(e){try{const r=document.createRange();r.selectNodeContents($('#lock div[style*="mono"]'));const s=getSelection();s.removeAllRanges();s.addRange(r);msg('Selected. Tap Copy in the menu that appears.')}catch(x){msg('Press and hold the code to copy it.')}}};
-window.authShare=async function(){try{if(navigator.share)await navigator.share({title:'PaperTrail recovery code',text:'PaperTrail recovery code'+(S.email?' for '+S.email:'')+': '+window.__rc});else msg('Sharing is not available here. Use Copy.')}catch(e){}};
+window.authCopy=async function(){try{await navigator.clipboard.writeText(window.__rc);msg('Copied. Paste it into Notes or a password manager.')}catch(e){try{const r=document.createRange();r.selectNodeContents($('#lock div[style*="mono"]'));const g=getSelection();g.removeAllRanges();g.addRange(r);msg('Selected. Tap Copy in the menu that appears.')}catch(x){msg('Press and hold the code to copy it.')}}};
+window.authSaveFile=async function(){const t=sheetText(window.__rc),f=new File([t],'PaperTrail recovery sheet.txt',{type:'text/plain'});
+ try{if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:'PaperTrail recovery sheet'});return}}catch(e){if(e&&e.name=='AbortError')return}
+ try{const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=f.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);msg('Saved to your downloads.')}catch(e){msg('Could not save a file here. Use Copy instead.')}};
+window.authEmail=function(){const t=sheetText(window.__rc);location.href='mailto:'+encodeURIComponent(S.email||'')+'?subject='+encodeURIComponent('PaperTrail recovery sheet')+'&body='+encodeURIComponent(t)};
+window.authShare=window.authSaveFile;
 
 /* Settings buttons and the "no recovery code yet" bar, added once someone is signed in */
 function extras(){
  const d=document.querySelector('.side details');
  if(d&&!$('#rcbtn')){
   const mk=(id,txt,fn)=>{const b=document.createElement('button');b.id=id;b.type='button';b.textContent=txt;b.onclick=fn;d.appendChild(b)};
-  mk('rcbtn','Recovery code (create a new one)',()=>window.authMakeCode());
+  mk('rcbtn','Create a new recovery code',()=>window.authMakeCode());
   mk('bkbtn','Download backup',()=>window.authBackup());
  }
  let n=$('#rcbar');
- if(!n){const m=document.querySelector('.main');if(!m)return;n=document.createElement('div');n.id='rcbar';n.style.cssText='display:none;gap:8px;align-items:center;flex-wrap:wrap;background:var(--usr);border:1px solid #ecd3a8;border-radius:12px;padding:10px 12px;margin-bottom:14px';n.innerHTML='<span style="flex:1;min-width:180px">Create a recovery code so you can get back in if you forget your password.</span><button type="button" class="pri" style="flex:0 0 auto">Create</button>';n.children[1].onclick=()=>window.authMakeCode();m.insertBefore(n,m.firstChild)}
+ if(!n){const m=document.querySelector('.main');if(!m)return;n=document.createElement('div');n.id='rcbar';n.style.cssText='display:none;gap:8px;align-items:center;flex-wrap:wrap;background:var(--usr);border:1px solid #ecd3a8;border-radius:12px;padding:10px 12px;margin-bottom:14px';n.innerHTML='<span style="flex:1;min-width:180px">Set up a recovery code (a spare key) so a forgotten password never locks you out of your invoices.</span><button type="button" class="pri" style="flex:0 0 auto">Create</button>';n.children[1].onclick=()=>window.authMakeCode();m.insertBefore(n,m.firstChild)}
  const o=getAcct(S.uid);n.style.display=o&&!o.rw?'flex':'none';
+ try{window.bkRefresh&&window.bkRefresh()}catch(e){}
 }
 window.authMakeCode=async function(){
  if(!S.uid||!S.pp)return;
  const o=getAcct(S.uid);if(!o)return;
  if(o.rw&&!confirm('This replaces your current recovery code. The old one will stop working. Continue?'))return;
  const code=newCode();o.rw=await wrap(code,S.pp);setAcct(S.uid,o);
- showCode(code,()=>{open_();extras()},'Your recovery code');
+ showCode(code,()=>{open_();extras()},'Save your recovery code');
 };
 
 window.authForgot=function(){
  let last='';try{last=localStorage.getItem(LAST)||''}catch(e){}
- lockUI('<h2>Reset password</h2><p style="margin:0 0 10px;font-size:14px;line-height:1.5">Enter your email, your recovery code and a new password. Your saved records stay as they are.</p>'
+ lockUI('<h2>Reset password</h2><p style="margin:0 0 10px;font-size:14px;line-height:1.5">Enter your email, the recovery code you saved, and a new password. Your saved records stay as they are. Tip: you can paste the whole recovery sheet into the code box.</p>'
  +'<input id="em" type="email" inputmode="email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Email" value="'+esc(last)+'">'
- +'<input id="rc" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Recovery code (XXXX-XXXX-...)">'
+ +'<input id="rc" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Recovery code (looks like AB12-CD34-...)">'
  +'<input id="pw" type="password" autocomplete="new-password" placeholder="New password (8+ characters)">'
  +'<input id="pw2" type="password" autocomplete="new-password" placeholder="Confirm new password">'
  +'<button class="pri" type="button" onclick="authReset()">Reset password</button>'
@@ -873,7 +975,7 @@ window.authForgot=function(){
 };
 window.authReset=async function(){
  try{
-  const em=norm($('#em').value),code=cn($('#rc').value),p1=$('#pw').value,p2=$('#pw2').value;
+  const rawc=$('#rc').value,fm=rawc.match(/(?:[A-Z2-9]{4}-){4}[A-Z2-9]{4}/i),em=norm($('#em').value),code=cn(fm?fm[0]:rawc),p1=$('#pw').value,p2=$('#pw2').value;
   if(!em||code.length<20)return msg('Enter your email and the full recovery code.');
   if(p1.length<8)return msg('Use at least 8 characters for the new password.');
   if(p1!==p2)return msg('The two passwords do not match.');
@@ -900,14 +1002,17 @@ window.authReset=async function(){
 /* Backup file: the encrypted records plus the account's sign-in details. It can be opened only with the password or recovery code. */
 window.authBackup=async function(){
  if(!S.uid)return;
+ window.__bkBusy=true;
  try{
   await store();const x=await idb('get'),o=getAcct(S.uid);
   const f={app:'papertrail',v:1,uid:S.uid,acct:o,state:x&&x.iv?{iv:hex(x.iv),c:hex(x.c)}:null,saved:new Date().toISOString()};
   const name='PaperTrail backup '+new Date().toISOString().slice(0,10)+'.json';
   const file=new File([JSON.stringify(f)],name,{type:'application/json'});
-  if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:name});return toast('Backup ready')}catch(e){if(e&&e.name=='AbortError')return}}
-  const a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);toast('Backup saved');
+  const r=await window.deliverFile(file);
+  if(r==='cancel')return;
+  window.bkMark();toast(r==='shared'?'Backup ready':'Backup saved');
  }catch(e){alert('Could not make a backup.')}
+ finally{window.__bkBusy=false}
 };
 window.authRestore=function(){
  const i=document.createElement('input');i.type='file';i.accept='.json,application/json';
@@ -918,7 +1023,7 @@ window.authRestore=function(){
    if(j.app!=='papertrail'||!j.uid||!j.acct||!j.acct.h||!j.acct.s||!j.acct.e)throw 0;
    if(getAcct(j.uid)&&!confirm('An account for this email is already on this device. Replace its saved records and sign-in with this backup?'))return;
    if(j.state){S.uid=j.uid;try{await idb('put',{iv:unhex(j.state.iv),c:unhex(j.state.c).buffer})}finally{S.uid=null}}
-   setAcct(j.uid,j.acct);
+   setAcct(j.uid,j.acct);try{window.bkRestored(j.uid,Date.parse(j.saved))}catch(e){}
    msg('Backup restored. Now sign in with the email and password (or use Forgot password with the recovery code) from when the backup was made.');
   }catch(e){msg('That file is not a PaperTrail backup.')}
  };
@@ -957,4 +1062,145 @@ window.authIn=async function(){
 
 /* the app calls showLock() at load, before this file runs: draw the new screen now */
 if($('#lock')&&$('#lock').style.display!='none')window.showLock();
+})();
+
+/* ---------- v82: backup reminders + CSV export ---------- */
+(function(){
+const BKK='pt_bk:',CHK='pt_chg:',SNK='pt_bksnz:',STALE_DAYS=7,SNOOZE_DAYS=3,DAY=864e5;
+const gl=k=>{try{return +localStorage.getItem(k)||0}catch(e){return 0}};
+const sl=(k,v)=>{try{localStorage.setItem(k,String(v))}catch(e){}};
+const ago=ms=>{const d=Math.floor((Date.now()-ms)/DAY);if(d<1)return 'today';if(d==1)return 'yesterday';if(d<14)return d+' days ago';if(d<60){const w=Math.floor(d/7);return w+' weeks ago'}const m=Math.floor(d/30);return m+' months ago'};
+
+/* Save a file: share sheet where the phone offers one (Save to Files, AirDrop, Mail), otherwise a normal download.
+   Returns 'shared', 'downloaded' or 'cancel'. */
+window.deliverFile=async function(file){
+ if(navigator.canShare&&navigator.canShare({files:[file]})){
+  try{await navigator.share({files:[file],title:file.name});return 'shared'}catch(e){if(e&&e.name==='AbortError')return 'cancel'}
+ }
+ const a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=file.name;document.body.appendChild(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(a.href),4000);return 'downloaded';
+};
+
+/* ----- backup reminder ----- */
+/* Only timestamps are kept (never record contents). A reminder shows when there are saved records and either no backup was ever made,
+   or the last backup is a week or more old AND the records have changed since. */
+function bkNeed(){
+ if(!S.uid||!S.key||!S.records||!S.records.length)return null;
+ if(Date.now()<gl(SNK+S.uid))return null;
+ const bk=gl(BKK+S.uid),chg=gl(CHK+S.uid);
+ if(!bk)return{kind:'never'};
+ if(chg>bk&&Date.now()-bk>=STALE_DAYS*DAY)return{kind:'old',bk};
+ return null;
+}
+function bkRefresh(){
+ const m=document.querySelector('.main');if(!m)return;
+ /* Settings line */
+ const b=$('#bkbtn');
+ if(b){let i=$('#bkinfo');if(!i){i=document.createElement('div');i.id='bkinfo';i.className='hint';i.style.cssText='margin-top:10px';b.parentNode.insertBefore(i,b)}
+  const t=S.uid?gl(BKK+S.uid):0;i.textContent=t?'Last backup: '+ago(t):'No backup yet'}
+ /* reminder bar */
+ let bar=$('#bkbar');
+ if(!bar){
+  bar=document.createElement('div');bar.id='bkbar';
+  bar.style.cssText='display:none;gap:8px;align-items:center;flex-wrap:wrap;background:var(--usr);border:1px solid #ecd3a8;border-radius:12px;padding:10px 12px;margin-bottom:14px';
+  bar.innerHTML='<div style="flex:1;min-width:180px"><b class="bk1"></b><div class="hint bk2" style="margin-top:2px"></div></div>'
+   +'<button type="button" class="pri" style="flex:0 0 auto">Download backup</button>'
+   +'<button type="button" style="flex:0 0 auto;background:transparent;border-color:transparent;color:var(--mut)">Later</button>';
+  bar.children[1].onclick=()=>window.authBackup();
+  bar.children[2].onclick=()=>{if(S.uid)sl(SNK+S.uid,Date.now()+SNOOZE_DAYS*DAY);bkRefresh()};
+  const rc=$('#rcbar');m.insertBefore(bar,rc?rc.nextSibling:m.firstChild);
+ }
+ const n=bkNeed();
+ if(!n){bar.style.display='none';return}
+ bar.querySelector('.bk1').textContent=n.kind=='never'?'No backup yet':'Last backup: '+ago(n.bk);
+ bar.querySelector('.bk2').textContent=n.kind=='never'
+  ?'Your records live only on this phone. A lost phone or cleared Safari data would erase them.'
+  :'You have saved or changed records since then.';
+ bar.style.display='flex';
+}
+window.bkRefresh=bkRefresh;
+window.bkChanged=function(){if(window.__bkBusy||!S.uid)return;sl(CHK+S.uid,Date.now());bkRefresh()};
+window.bkMark=function(){if(!S.uid)return;sl(BKK+S.uid,Date.now());try{localStorage.removeItem(SNK+S.uid)}catch(e){}bkRefresh()};
+window.bkRestored=function(uid,ms){if(uid&&ms)sl(BKK+uid,ms)};
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)try{bkRefresh()}catch(e){}});
+
+/* ----- CSV export (Saved tab) ----- */
+const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const dcell=v=>{const d=Parser.pd(v);return d?iso(d):String(v||'')};
+const n2=v=>v==null||v===''?'':(+v).toFixed(2);
+/* quote for CSV; text that starts with = + - @ is prefixed with ' so a spreadsheet never treats scanned text as a formula */
+const q=(v,txt)=>{let s=v==null?'':String(v);if(txt&&/^[=+\-@\t\r]/.test(s))s="'"+s;return /[",\r\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s};
+const itemName=i=>String(i.n||'Item').replace(/\s*(\.{2,}|\u2026)\s*$/,'').trim();
+const shiftsTxt=r=>(r.shifts||[]).filter(x=>x&&(N(x.hours)!=null||(x.start&&x.end))).map(x=>[shDate(x.date),x.start&&x.end?t12(x.start)+' \u2013 '+t12(x.end):'',N(x.hours)!=null?(+N(x.hours).toFixed(2))+' h':''].filter(Boolean).join(' ')).join('; ');
+const hrs=v=>v==null?'':+v.toFixed(2);
+const X={name:'expenses',
+ head:['Date','Merchant','Location','Category','Receipt/Invoice #','Items','Subtotal','Shipping','Discount','Tax','Total','Personal items removed'],
+ tx:[0,1,2,3,4,5],
+ row:r=>{const o=compute(r);return[dcell(r.date),niceMerch(r.merchant),r.location,r.category,r.number,(r.items||[]).filter(i=>!i.off).map(itemName).join('; '),n2(o.sub),o.ship?n2(o.ship):'',o.disc?n2(o.disc):'',N(r.tax)==null?'':n2(o.tax),n2(o.total),o.removed?n2(o.removed):'']}};
+const W={name:'work invoices',
+ head:['Job date','Event end date','Employer','Client','Location','Invoice #','Regular hours','Overtime hours','Total hours','Shifts','Amount','Round-trip miles','IRS rate per mile','Mileage deduction','Net-30 payout date','Notes'],
+ tx:[0,1,2,3,4,5,9,14,15],
+ row:r=>{const o=compute(r);return[dcell(r.jobDate),dcell(r.endDate),r.employer,r.client,r.location,r.invoice,hrs(N(r.hours)),hrs(N(r.overtime)),o.tot==null?'':n2(o.tot),shiftsTxt(r),N(r.amount)==null?'':n2(N(r.amount)),o.rt==null?'':o.rt,o.rate==null||o.rt==null?'':o.rate,o.wear==null?'':n2(o.wear),est(r)||'',String(r.notes||'').replace(/\s+/g,' ').trim()]}};
+
+const pdate=s=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(s||'');return m?new Date(+m[1],m[2]-1,+m[3]).getTime():null};
+function rangeOf(c){
+ if(c.rng==='all')return null;
+ if(c.rng==='custom')return{lo:pdate(c.from),hi:pdate(c.to),custom:true};
+ const y=+c.rng;return{lo:new Date(y,0,1).getTime(),hi:new Date(y,11,31).getTime()};
+}
+/* what is on the Saved tab right now (Expenses or Work invoices, plus the category chip), narrowed by the chosen dates, oldest first */
+function csvPick(){
+ const x=S.sv.sec==='x',T=x?X:W,list=svList().map(a=>a[0]),R=rangeOf(S.csv);let skipped=0,bad=false;
+ if(R&&R.custom&&R.lo!=null&&R.hi!=null&&R.lo>R.hi)bad=true;
+ const out=[];
+ if(!bad)list.forEach(r=>{if(!R){out.push(r);return}const d=recDate(r);if(d==null){skipped++;return}if(R.lo!=null&&d<R.lo)return;if(R.hi!=null&&d>R.hi)return;out.push(r)});
+ out.sort((p,r)=>(recDate(p)??Infinity)-(recDate(r)??Infinity));
+ return{x,T,list,out,skipped,bad,R,wait:!!(R&&R.custom&&R.lo==null&&R.hi==null)};
+}
+function csvName(T){
+ const c=S.csv;let part;
+ if(c.rng==='all')part='all dates';
+ else if(c.rng==='custom')part=c.from&&c.to?c.from+' to '+c.to:c.from?'from '+c.from:'to '+c.to;
+ else part=c.rng;
+ const cat=T===X&&S.sv.cat!=='All'?' - '+S.sv.cat:'';
+ return ('PaperTrail '+T.name+cat+' '+part+'.csv').replace(/[\/\\:*?"<>|]/g,'-');
+}
+function csvUpdate(){
+ const c=S.csv,sel=$('#csvr'),f=$('#csvf'),t=$('#csvt');
+ if(sel)c.rng=sel.value;if(f)c.from=f.value;if(t)c.to=t.value;
+ const cu=$('#csvc');if(cu)cu.style.display=c.rng==='custom'?'':'none';
+ const p=csvPick(),n=p.out.length,tot=+p.out.reduce((s,r)=>s+(recAmt(r)||0),0).toFixed(2),word=p.x?'expense':'work invoice';
+ let h;
+ if(p.bad)h='The start date is after the end date.';
+ else if(p.wait)h='Pick a start date, an end date, or both.';
+ else if(!n)h='Nothing saved in this range.';
+ else h='<b>'+n+' '+word+(n==1?'':'s')+'</b> \u00b7 '+M(tot);
+ if(p.skipped)h+='<div class="hint" style="margin-top:4px">'+p.skipped+(p.skipped==1?' record has':' records have')+' no date and '+(p.skipped==1?'is':'are')+' left out. Choose All dates to include '+(p.skipped==1?'it':'them')+'.</div>';
+ $('#csvsum').innerHTML=h;
+ $('#csvgo').disabled=p.bad||p.wait||!n;
+}
+window.csvSet=csvUpdate;
+window.csvOpen=function(){
+ if(!S.csv)S.csv={rng:'all',from:'',to:''};
+ const x=S.sv.sec==='x',all=S.records.filter(r=>(r.mode=='purchase')==x),ys=[...new Set(all.map(recDate).filter(d=>d!=null).map(d=>new Date(d).getFullYear()))].sort((a,b)=>b-a);
+ if(S.csv.rng!=='all'&&S.csv.rng!=='custom'&&!ys.includes(+S.csv.rng))S.csv.rng='all';
+ closeRec();
+ const c=S.csv,o=document.createElement('div');o.id='recmodal';o.className='rmo';o.onclick=e=>{if(e.target===o)closeRec()};
+ const opts='<option value="all">All dates</option>'+ys.map(y=>'<option value="'+y+'"'+(c.rng==y?' selected':'')+'>'+y+'</option>').join('')+'<option value="custom"'+(c.rng==='custom'?' selected':'')+'>Custom range\u2026</option>';
+ const what=x?'Expenses'+(S.sv.cat!=='All'?' \u00b7 '+esc(S.sv.cat):''):'Work invoices';
+ o.innerHTML='<div class="rm" role="dialog" aria-modal="true" aria-label="Export CSV"><div class="rmh"><h3>Export CSV</h3><button class="x" onclick="closeRec()" aria-label="Close">\u2715</button></div>'
+  +'<div class="rmb"><div style="display:flex;flex-direction:column;gap:12px">'
+  +'<div class="hint">'+what+(x&&S.sv.cat!=='All'?' (change the category on the Saved tab)':'')+(svSearching()?' matching \u201c'+esc(S.sv.q.trim())+'\u201d (clear the search on the Saved tab for everything)':'')+'. Opens in Excel, Numbers or Google Sheets.</div>'
+  +'<div><label for="csvr">Dates'+(x?'':' (job date)')+'</label><select id="csvr" onchange="csvSet()">'+opts+'</select></div>'
+  +'<div id="csvc" class="row" style="margin:0;'+(c.rng==='custom'?'':'display:none')+'"><div><label for="csvf">From</label><input id="csvf" type="date" value="'+esc(c.from)+'" onchange="csvSet()"></div><div><label for="csvt">To</label><input id="csvt" type="date" value="'+esc(c.to)+'" onchange="csvSet()"></div></div>'
+  +'<div id="csvsum" style="font-size:15px"></div></div></div>'
+  +'<div class="rmf"><button id="csvgo" class="pri" onclick="csvGo()">Download CSV</button><button onclick="closeRec()">Cancel</button></div></div>';
+ document.body.appendChild(o);document.body.style.overflow='hidden';csvUpdate();
+};
+window.csvGo=async function(){
+ const p=csvPick();if(p.bad||p.wait||!p.out.length)return;
+ const T=p.T,lines=[T.head.map(h=>q(h)).join(','),...p.out.map(r=>T.row(r).map((v,i)=>q(v,T.tx.includes(i))).join(','))];
+ const file=new File(['\uFEFF'+lines.join('\r\n')+'\r\n'],csvName(T),{type:'text/csv'});
+ try{const r=await window.deliverFile(file);if(r==='cancel')return;closeRec();toast(r==='shared'?'CSV ready':'CSV saved')}catch(e){alert('Could not make the CSV file.')}
+};
 })();
