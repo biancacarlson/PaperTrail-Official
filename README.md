@@ -1,48 +1,83 @@
 # PaperTrail
-A mobile-first tool for turning receipts, invoices and other freelance expense documents into clean, usable records.
+A mobile-first tool that turns receipts, invoices and other freelance paperwork into clean records.
 
-PaperTrail runs in your browser. Upload a receipt, invoice, screenshot or photo, review the fields, and copy the finished record into an ongoing Google Doc.
+It runs in your browser. Upload a receipt, invoice, screenshot or photo, check the fields, then save a PDF or copy the record into an ongoing Google Doc.
 
-## What it does
-- Reads uploaded receipts and invoices and fills in key fields: date, business or client, location, hours, and amount
-- Purchases: the date is taken from the top right of the receipt when one is printed there, the store's city and state are filled in when the receipt shows them, and the category is guessed from the items (gloves, tools and safety items are Gear; consumables are Supplies). Upload several screenshots at once, tap the circle on any personal item to exclude it, and the subtotal, tax and total update automatically. As soon as any item is left out (unchecked or covered by a black bar), an "After removed items" card under the item list shows the same Subtotal, Tax and Total that the saved PDF summary shows. The receipt number is read from labels such as Receipt #, Invoice #, Order #, TRN, TR#, TC#, Check or Ref, and when a register receipt prints a bare number near the bottom (usually under the barcode, e.g. `0214 03 40317 0928 26`) with no label, that number is used as the receipt number. On Work Invoices, a lone `#1042` or `INV-2026-0042` is recognized as the invoice number too. When the receipt prints T/F flags after prices, tax is only reduced for taxable items (leaving out the eggs does not change the tax)
-- Purchase PDF: redact anything personal by dragging down over it (full-width bars by default, with dots to resize), highlight what matters (date, order number, subtotal, tax and total are highlighted automatically), then tap **Save as PDF**. One file is saved: the receipt pages with the summary under the last page. It is named `[purchase date] Receipt and Summary`. Undo, Redo and Clear all marks are available while marking up (Clear all on the record can also be undone). A black bar over an item's row also leaves that item out of the subtotal, tax and total (remove the bar and it counts again). Tap words on the receipt to pick them (they turn amber), then choose a field in the bar at the bottom and tap **Add**; text under a black bar can't be picked. Redactions are burned into the image, so they can't be undone from the saved file. **Copy Receipt Image** puts the marked-up receipt on the clipboard to paste into a doc.
-- **Invoice viewer (Work Invoice tab):** the uploaded invoice is shown at full height, so dragging over it scrolls the page. Pinch with two fingers, or tap **Enlarge**, to zoom in; while zoomed, one finger pans the image, and **Reset zoom** (or pinching back out) returns to normal scrolling. Tapping a word still picks it
-- Lets you review and edit every field before copying
-- **Save record** files the record in the **Saved** tab: Expenses in one list, Work invoices in the other. Expenses can be filtered by category (Gear only, Meals only, ...) and sorted by date (default, newest first) or by cost, high to low or low to high
-- **Remembered fixes:** when you correct a merchant's spelling (say `HOME DEPO` to `Home Depot`), PaperTrail remembers it and applies the fix the next time a receipt is read that way; a note under the field says what was changed and has an **Undo** link (undoing also forgets that fix). Only corrections that stay close to what was read are remembered, so replacing a wrong guess with a completely different name is treated as a one-off. For Work Invoices, the **Round-trip miles** you enter are remembered per job location and filled in the next time that location shows up (a note says so, with a **Clear** link; typing your own number always wins, and changing to a location with nothing remembered clears a filled-in number). Fixes are learned when you leave the field, tap Save record, or tap Copy, never from half-typed text. **Settings > Remembered fixes** lists everything remembered, lets you forget one or all, and nothing about saved records changes
-- **Totals (Saved tab):** the **Totals** button next to Expenses and Work invoices shows expenses by category, income by client and the total mileage deduction in one view, with month to date (MTD) and year to date (YTD) columns side by side. The date ranges are shown at the top and use today's date on your phone. Expenses are counted by purchase date and income by job date (the Amount Paid on each work invoice); records with no date, or dated after today, are left out and the count is shown. Work invoices with no round-trip miles get no mileage deduction, and the view says how many
-- **Search in Saved:** a search box at the top of the **Saved** tab finds a record by merchant, client or receipt / invoice number instead of scrolling. Type part of a name or number; every word you type has to match, numbers ignore spaces, dashes and `#`, and the list, count and total update as you type. Tap ✕ to clear. Copy and Export CSV apply to what the search shows. If nothing matches in the list you are on but something does in the other one, a button jumps there
-- **Open a saved record:** tap any row in the **Saved** tab to open a pop-up with the full record and a **Download PDF** button. The PDF is the one-page summary (Expense Summary or Invoice Summary); receipt images are never stored, so they are not in it. The ✕ on the row still deletes
-- **Duplicate warning:** if the record you are preparing matches one already in Saved, a red **Already saved** notice appears above the form with a **View** button. It matches on the receipt or invoice number (same store or client, ignoring spaces and dashes), or, when there is no number, on the same store or client, date and total. Tapping **Save record** on a likely duplicate asks before saving it again
-- **Backup reminders:** when you have saved records and no backup yet (or your last backup is a week or more old and records have changed since), a bar at the top shows e.g. "Last backup: 3 weeks ago" with a one-tap **Download backup** button and a **Later** button (snoozes 3 days). Settings also shows the last backup time. Only timestamps are stored for this, never record contents. Restoring a backup file sets the last backup time to when that file was made
-- **Export CSV:** on the **Saved** tab, tap **Export CSV...** to download a spreadsheet of the Expenses or Work invoices list you are viewing (the category chip applies). Choose All dates, a single year, or a custom From/To range. Rows are oldest first, with plain numbers and ISO dates. Records with no date are left out when a date filter is on. Text that starts with = + - @ is prefixed with an apostrophe so spreadsheets never run it as a formula
-- Totals regular and overtime hours. **Shifts:** the Work Invoice form has a Shifts section with one row per shift (date, start, end, hours); a split shift is two rows on the same date. Times in the invoice (like 7:00 AM - 11:00 AM) or per-day hour rows are filled in automatically when found. Saved records and the PDF show each shift and a split-shift day total
-- Calculates wear and tear from the IRS business mileage rate for the job date
-- Calculates the Net 30 payout date from the event end date. **Add to Calendar** creates an event on that date with the amount in the title (e.g. `Net-30 payout $1,250.00 - Client`), and the notes list the amount, client, invoice #, job and end dates, location and hours. The alert shows the amount too
+## Quick start
+1. Choose **Expense** or **Work Invoice**.
+2. Add your document (or tap **Enter manually instead**).
+3. Review the fields. Fix anything that looks wrong.
+4. Tap **Save as PDF**, or **Save record** to keep it in the **Saved** tab.
 
-## Mileage
-PaperTrail does not look up driving distance. Tap **Search in Safari** or **Search in Chrome** to open a Google search in a separate tab, then type the round-trip miles into **Round-trip miles**.
+## Expenses
+**Reading the receipt**
+- Fills in date, merchant, city/state, receipt number, tax, subtotal and total
+- Date comes from the top right of the receipt when printed there
+- Receipt number is read from labels like Receipt #, Invoice #, Order #, TRN, TR#, TC#, Check or Ref. A bare number near the bottom (e.g. under the barcode) is used when there is no label
+- Category is guessed from the items: gloves, tools and safety gear are Gear; consumables are Supplies
+- Upload several screenshots at once
 
-IRS business rate used for wear and tear:
-- Jan 1 - Jun 30, 2026: $0.725/mile
-- Jul 1 - Dec 31, 2026: $0.76/mile
+**Leaving out personal items**
+- Tap the circle beside an item to exclude it. A black bar over an item's row does the same (remove the bar and it counts again)
+- The **Work-related total** card then shows the subtotal, tax and total that appear in the saved PDF summary
+- If the receipt prints T/F flags after prices, tax only drops for taxable items (leaving out the eggs does not change the tax)
+
+**Purchase PDF**
+- **Redact:** drag down over anything personal (full-width bars; use the dots to resize)
+- **Highlight:** date, order number, subtotal, tax and total are highlighted automatically
+- **Pick text:** tap words on the receipt (they turn amber), choose a field in the bottom bar, tap **Add**. Text under a black bar can't be picked
+- **Undo / Redo / Clear all** work while marking up. Clear all on the record can also be undone
+- **Save as PDF** saves one file: the receipt pages with the summary under the last page, named `[purchase date] Receipt and Summary`
+- Redactions are burned into the image and can't be undone from the saved file
+- **Copy Receipt Image** puts the marked-up receipt on the clipboard
+
+## Work invoices
+- Reads employer, client, job dates, location, hours and amount. Times like `7:00 AM - 11:00 AM` or per-day hour rows fill in automatically. A lone `#1042` or `INV-2026-0042` is read as the invoice number
+- **Shifts:** one row per shift (date, start, end, hours). A split shift is two rows on the same date. Regular and overtime hours are totaled, and saved records and PDFs show each shift plus a split-day total
+- **Wear and tear:** calculated from the IRS business mileage rate for the job date
+- **Net 30:** payout date is calculated from the event end date. **Add to Calendar** creates an event with the amount in the title (e.g. `Net-30 payout $1,250.00 - Client`), and the notes list amount, client, invoice #, job and end dates, location and hours
+- **Invoice viewer:** shown at full height, so dragging scrolls the page. Pinch or tap **Enlarge** to zoom; while zoomed, one finger pans. **Reset zoom** (or pinching out) goes back. Tapping a word still picks it
+
+**Mileage:** PaperTrail does not look up distance. Tap **Search in Safari** or **Search in Chrome**, then type the result into **Round-trip miles**.
+
+| Period | IRS rate |
+|---|---|
+| Jan 1 - Jun 30, 2026 | $0.725 / mile |
+| Jul 1 - Dec 31, 2026 | $0.76 / mile |
+
+## Saved tab
+- **Save record** files Expenses and Work invoices in separate lists
+- **Filter and sort:** expenses by category (Gear only, Meals only, ...), and by date (newest first by default) or cost
+- **Search:** find a record by merchant, client or receipt / invoice number. Every word must match; numbers ignore spaces, dashes and `#`. Tap ✕ to clear. If nothing matches here but something does in the other list, a button jumps there
+- **Open a record:** tap a row for the full record and a **Download PDF** button (the one-page Expense or Invoice Summary; receipt images are never stored). The ✕ on the row deletes it
+- **Totals:** expenses by category, income by client and total mileage deduction, with month-to-date and year-to-date side by side. Expenses count by purchase date and income by job date. Records with no date, or dated after today, are left out and the count is shown. Invoices with no round-trip miles get no mileage deduction, and the view says how many
+- **Export CSV:** download the list you are viewing (the category chip applies). Choose all dates, one year, or a custom range. Rows are oldest first with plain numbers and ISO dates. Undated records are left out when a date filter is on. Text starting with `=` `+` `-` `@` gets an apostrophe so spreadsheets never run it as a formula
+
+## Safety nets
+- **Duplicate warning:** a red **Already saved** notice with a **View** button appears if the record matches a saved one (same store or client and receipt/invoice number, or with no number, the same store or client, date and total). Saving a likely duplicate asks first
+- **Backup reminders:** if you have records and no backup yet (or the last one is a week or more old and records changed), a bar offers **Download backup** or **Later** (snoozes 3 days). Only timestamps are stored for this. Restoring a backup resets the last-backup time to when that file was made
+- **Remembered fixes:** correct a merchant spelling (say `HOME DEPO` to `Home Depot`) and PaperTrail applies it next time, with a note and an **Undo** link. Only small corrections are remembered; a completely different name is treated as a one-off. Round-trip miles are remembered per job location (typing your own number always wins). Fixes are learned when you leave the field, tap Save record or tap Copy, never from half-typed text. **Settings > Remembered fixes** lists them and lets you forget one or all; saved records never change
 
 ## Privacy
-- Your photo or PDF is read on your phone and is not uploaded to a server.
-- The reading tools (OCR and PDF) load from public servers (cdnjs, jsDelivr).
-- The "Identify unclear items from their photos" feature downloads an image model once (from jsDelivr and Hugging Face) and runs it on your phone. Your receipt images are not sent anywhere.
-- The job address is sent to Google only when you tap a search button.
-- Accounts (email + password) are created and stored on the device where you make them; nothing is sent to a server. Saved records are encrypted (AES-GCM, key derived from your email and password with PBKDF2) in the browser's IndexedDB, separately for each account. When you create an account you get a recovery code; with it (and your email) you can set a new password without losing saved records. Settings > Download backup saves an encrypted backup file, and Restore from a backup file on the sign-in screen loads it on any browser or on the Home Screen app. Without the password or the recovery code, the records cannot be opened. Records do not sync between devices. After 5 wrong passwords an account is locked for 15 minutes; that lockout is a browser-side screen lock, and the encryption is what protects the stored data. Receipt images are never stored, only the text fields. Remembered fixes (merchant spellings and miles per location) are kept inside the same encrypted store and are included in backups. Settings > Delete all saved records removes them.
+- Photos and PDFs are read on your phone and never uploaded
+- OCR and PDF tools load from public servers (cdnjs, jsDelivr)
+- **Identify unclear items from their photos** downloads an image model once (jsDelivr, Hugging Face) and runs it on your phone. Images are not sent anywhere
+- The job address goes to Google only when you tap a search button
+- Accounts (email + password) are created and stored on your device; nothing goes to a server
+- Saved records are encrypted (AES-GCM, key from your email and password via PBKDF2) in the browser's IndexedDB, separately per account. Receipt images are never stored, only text fields
+- On sign-up you get a recovery code. With it and your email you can set a new password without losing records. Without the password or the code, records can't be opened
+- **Settings > Download backup** saves an encrypted file; **Restore from a backup file** on the sign-in screen loads it on any browser or the Home Screen app. Remembered fixes are included. Records do not sync between devices
+- After 5 wrong passwords an account is locked for 15 minutes. That lock is a browser-side screen lock; the encryption is what protects the data
+- **Settings > Delete all saved records** removes everything
 
 ## Deploy
-1. Upload the project files to your GitHub repo.
-2. Settings > Pages > Deploy from a branch.
-3. Branch `main`, folder `/docs`, then Save.
-4. Open the Pages URL once it finishes deploying.
+1. Upload the project files to your GitHub repo
+2. Settings > Pages > Deploy from a branch
+3. Branch `main`, folder `/docs`, then Save
+4. Open the Pages URL once it finishes deploying
 
 ## Important
-PaperTrail is a recordkeeping tool, not tax, accounting or legal advice, and it does not guarantee accuracy. Read the full [DISCLAIMER](DISCLAIMER.md). IRS mileage rates are built into the code and must be checked each year against irs.gov.
+PaperTrail is a recordkeeping tool, not tax, accounting or legal advice, and it does not guarantee accuracy. Read the full [DISCLAIMER](DISCLAIMER.md). IRS mileage rates are built into the code; check them each year at irs.gov.
 
 ## License
-MIT, see `LICENSE`. The software is provided as is, without warranty.
+MIT, see `LICENSE`. Provided as is, without warranty.

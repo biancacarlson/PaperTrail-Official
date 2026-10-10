@@ -160,8 +160,8 @@ function compute(r){const o={};if(r.mode=='purchase'){const A=r.items;A.forEach(
  if(r.tax===undefined||r.tax==='')o.warn.push('Tax not entered; total excludes tax.');if((r.shots||(S.pages&&S.pages.length))&&(r.number==null||r.number===''))o.warn.push('Receipt number not found. Tap it on the receipt, choose Receipt/Invoice # in the bar at the bottom, then tap Add.')}
  else{const rt=N(r.roundTrip),hr=N(r.hours),ot=N(r.overtime);o.rt=rt;o.tot=hr==null&&ot==null?null:+((hr||0)+(ot||0)).toFixed(2);o.rate=Parser.irs(r.jobDate);o.wear=rt!=null&&o.rate!=null?+(rt*o.rate).toFixed(2):null}return o}
 /* v57: once any item is left out (unchecked, or covered by a black bar), show the same Subtotal / Tax / Total the saved PDF summary shows. Nothing is shown while every item counts. */
-function purTot(r,o){if(r.mode!='purchase'||!o.nOff)return '';const row=(l,v,sub)=>'<div class="crow"><div class="cl">'+l+'</div><div class="cv">'+v+(sub?'<small>'+sub+'</small>':'')+'</div></div>';
- return '<div class="cal2"><h3>After removed items</h3>'+row('Subtotal',M(o.sub))+(o.ship?row('Shipping',M(o.ship)):'')+(o.disc?row('Discount','-'+M(o.disc)):'')+(N(r.tax)!=null?row('Tax',M(o.tax),N(r.tax)?'adjusted to work items':''):'')+row('Total',M(o.total))+'</div>'}
+function purTot(r,o){if(r.mode!='purchase'||!o.nOff)return '';const row=(l,v,sub,c)=>'<div class="crow'+(c?' '+c:'')+'"><div class="cl">'+l+'</div><div class="cv">'+v+(sub?'<small>'+sub+'</small>':'')+'</div></div>';
+ return '<div class="cal2"><h3>Work-related total</h3>'+row('Subtotal',M(o.sub))+(o.ship?row('Shipping',M(o.ship)):'')+(o.disc?row('Discount','-'+M(o.disc)):'')+(N(r.tax)!=null?row('Tax',M(o.tax),N(r.tax)?'adjusted to work items':''):'')+row('Total',M(o.total),o.removed>0?'after removing '+M(o.removed)+' of personal items':'','tot')+'</div>'}
 function calc(){const r=S.rec;if(!r)return;try{dupWarn()}catch(e){}const o=compute(r);if(r.mode=='purchase'||S.mode=='purchase'){$('#calc').innerHTML=purTot(r,o);persist();return}
  const row=(l,v,sub)=>'<div class="crow"><div class="cl">'+l+'</div><div class="cv">'+v+(sub?'<small>'+sub+'</small>':'')+'</div></div>',
   us=d=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d||''));return m?m[2]+'/'+m[3]+'/'+m[1]:d};
@@ -437,7 +437,7 @@ function tidyName(n){let t=String(n||'').replace(/\bCombination\b/gi,'Combo').re
  const m=t.match(/^(\d+pc )(.+) Set$/i);if(m)t=m[1]+'Set of '+m[2];
  return t}
 function itemsHtml(){const r=S.rec,on=r.items.filter(i=>!i.off).length;r.items.forEach(it=>{it.n=tidyName(it.n)});
- const card=(it,i)=>`<div class="ic${it.off?' off':''}"><button class="ck" onclick="tog(${i})" aria-label="Include or exclude item">${it.off?'':'✓'}</button><div class="ib"><label class="nl">Item name</label><textarea class="in" rows="2" placeholder="Item name" oninput="it(${i},'n',this.value)">${esc(it.n)}</textarea>${it.inf?'<div class="inf">Receipt title was cut off. Completed based on available context.</div>':''}${it.chk?'<div class="inf">This line was hard to read. It was added so the items match the receipt subtotal. Please check the name.</div>':''}<div class="il"><div class="mf"><label>Qty</label><input class="q" type="number" inputmode="numeric" value="${it.q}" oninput="it(${i},'q',this.value)"></div><span class="mx">×</span><div class="mf"><label>Price</label><input class="p" type="number" inputmode="decimal" step="0.01" value="${it.p}" oninput="it(${i},'p',this.value)"></div><div class="tt"><label>Total</label><b id="it_${i}">${M(+((it.q||0)*(it.p||0)).toFixed(2))}</b></div></div></div><button class="x" onclick="r_del(${i})" aria-label="Delete item">✕</button></div>`;
+ const card=(it,i)=>`<div class="ic${it.off?' off':''}${i==0?' f1':''}"><button class="ck" onclick="tog(${i})" aria-label="Include or exclude item">${it.off?'':'✓'}</button><div class="ib"><textarea class="in" rows="2" placeholder="Item name" oninput="it(${i},'n',this.value)">${esc(it.n)}</textarea>${it.inf?'<div class="inf">Receipt title was cut off. Completed based on available context.</div>':''}${it.chk?'<div class="inf">This line was hard to read. It was added so the items match the receipt subtotal. Please check the name.</div>':''}<div class="il"><div class="mf"><label>Qty</label><input class="q" type="number" inputmode="numeric" value="${it.q}" oninput="it(${i},'q',this.value)"></div><span class="mx">×</span><div class="mf"><label>Price</label><input class="p" type="number" inputmode="decimal" step="0.01" value="${it.p}" oninput="it(${i},'p',this.value)"></div><div class="tt"><label>Total</label><b id="it_${i}">${M(+((it.q||0)*(it.p||0)).toFixed(2))}</b></div></div></div><button class="x" onclick="r_del(${i})" aria-label="Delete item">✕</button></div>`;
  return '<section class="grp"><div class="ih"><h3>Items</h3>'+(r.items.length?'<span class="chip">'+on+' of '+r.items.length+' work-related</span>':'')+'</div>'
  +(r.items.length?'<p class="ihint">Remove personal items by tapping on the checkmark beside it.</p>':'<div class="empty">No items could be read from this receipt. Add them below, or use Identify unclear items.</div>')
  +r.items.map(card).join('')
@@ -1204,3 +1204,24 @@ window.csvGo=async function(){
  try{const r=await window.deliverFile(file);if(r==='cancel')return;closeRec();toast(r==='shared'?'CSV ready':'CSV saved')}catch(e){alert('Could not make the CSV file.')}
 };
 })();
+
+/* v86: cleaner item list + totals card (look only) */
+(function(){const s=document.createElement('style');s.textContent=[
+'.ic .nl{display:none!important}',
+'.ic .ib textarea.in{field-sizing:content}',
+'.ic{gap:12px;padding:14px;margin-bottom:12px;box-shadow:0 1px 2px rgba(35,47,58,.05)}',
+'.ic.off{opacity:.65;box-shadow:none}',
+'.ic .ib textarea.in{min-height:0!important;padding:8px 32px 8px 10px!important;font-size:15.5px!important;font-weight:600}',
+'.ic .il{margin-top:8px;padding-top:10px;border-top:1px solid var(--ln)}',
+'.ic:not(.f1) .il label{display:none}',
+'.ic .tt b{padding-bottom:9px;font-size:16px}',
+'.ihint{margin:0 0 12px!important}',
+'.cal2{background:var(--card)}',
+'.cal2 .crow{padding:9px 0!important;border-top:0!important;align-items:baseline}',
+'.cal2 .cl{padding-top:0!important}',
+'.cal2 .cv{font-size:16px!important;font-weight:600}',
+'.cal2 .crow.tot{margin-top:8px;padding:14px 16px!important;background:var(--g);color:#fff;border-radius:12px}',
+'.cal2 .crow.tot .cl{color:rgba(255,255,255,.85)}',
+'.cal2 .crow.tot .cv{font-size:26px!important;font-weight:800;letter-spacing:-.03em}',
+'.cal2 .crow.tot .cv small{color:rgba(255,255,255,.85);letter-spacing:0}'
+].join('');document.head.appendChild(s)})();
