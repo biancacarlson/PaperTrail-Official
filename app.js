@@ -399,7 +399,7 @@ let W6=null;
 async function ocrP(cv){const run=async()=>{try{if(!W6)W6=await Tesseract.createWorker('eng');await W6.setParameters({tessedit_pageseg_mode:'6'});return (await W6.recognize(cv)).data}catch(e){try{W6&&await W6.terminate()}catch(_){}W6=null;return (await Tesseract.recognize(cv,'eng')).data}};
  return Promise.race([run(),new Promise((_,j)=>setTimeout(()=>j(0),90000))])}
 async function readImg(f,opts){opts=opts||{};const src=typeof f=='function'?await f():f,b=src instanceof HTMLCanvasElement?src:await createImageBitmap(src),sc=Math.min(1,2800/Math.max(b.width,b.height)),c=document.createElement('canvas');c.width=b.width*sc;c.height=b.height*sc;c.getContext('2d').drawImage(b,0,0,c.width,c.height);if(src instanceof HTMLCanvasElement){src.width=src.height=0}
- let best={t:'',n:-1,w:[],c:null};
+ let best={t:'',n:-1,w:[],c:null};const alts=[];
  if(opts.pdf){const d=await ocrP(c),P0=Parser.parse(d.text,'purchase');best={t:d.text,n:P0.items.length+Object.keys(P0.found).length,w:(d.words||[]).filter(w=>w.text.trim()&&w.bbox),c:d.confidence};
   /* pages of items: read again with light-gray text turned black, so 'After credit applied' lines are not lost */
   if(P0.items.length){try{best.alt=(await ocrP(prep(c))).text}catch(e){}}
@@ -408,19 +408,49 @@ async function readImg(f,opts){opts=opts||{};const src=typeof f=='function'?awai
     A read whose items add up to the receipt's subtotal ends the search; otherwise the read with the most items/fields is kept. */
  {const tmo=pr=>Promise.race([pr,new Promise((_,j)=>setTimeout(()=>j(0),90000))]),
   passes=[()=>tmo(Tesseract.recognize(c,'eng')).then(r=>r.data),()=>ocrP(c),()=>ocrP(prep(c))];
-  for(let k=0;k<passes.length;k++){try{const d=await passes[k](),t=d.text,p=Parser.parse(t,'purchase'),n=p.items.length+Object.keys(p.found).length+(p.recon&&p.recon.ok?20:0);
+  for(let k=0;k<passes.length;k++){try{const d=await passes[k](),t=d.text,p=Parser.parse(t,'purchase'),n=p.items.length+Object.keys(p.found).length+(p.recon&&p.recon.ok?20:0);alts.push(t);
    if(n>best.n)best={t,n,w:(d.words||[]).filter(w=>w.text.trim()&&w.bbox),c:d.confidence};
    if(p.recon&&p.recon.ok)break;if(!(p.recon&&p.recon.target!=null)&&p.items.length>=6&&k>=1)break}catch(e){}}}
  try{const pp=Parser.parse(best.t,'purchase');if(!pp.fields.number&&pp.items.length&&!/amazon|temu|\d{3}-\d{7}-\d{7}/i.test(best.t)){const z=Math.min(2,2600/Math.max(c.width,c.height));
   if(z>1.15){const c2=document.createElement('canvas');c2.width=Math.round(c.width*z);c2.height=Math.round(c.height*z);const x2=c2.getContext('2d');x2.imageSmoothingQuality='high';x2.drawImage(c,0,0,c2.width,c2.height);
    const r=await Promise.race([Tesseract.recognize(c2,'eng'),new Promise((_,j)=>setTimeout(()=>j(0),60000))]);
    if(Parser.parse(r.data.text,'purchase').fields.number){best.t=r.data.text;best.w=(r.data.words||[]).filter(w=>w.text.trim()&&w.bbox).map(w=>({...w,bbox:{x0:w.bbox.x0/z,y0:w.bbox.y0/z,x1:w.bbox.x1/z,y1:w.bbox.y1/z}}));best.c=r.data.confidence}}}}catch(e){}
- return{c,text:best.t,words:best.w,conf:best.c,url:c.toDataURL('image/jpeg',.85)}}
+ /* v88: photos of paper receipts. When the normal reads leave the key fields empty, clean the photo (uneven light, crumples) and read it in bands. */
+ try{const sc0=r=>r.items.length+Object.keys(r.found).length+(r.recon&&r.recon.ok?20:0),weak=r=>!r.items.length||!(r.fields.extSub!=null||r.fields.extTotal!=null)||!r.found.date,pp=Parser.parse(best.t,'purchase',alts);
+  if(weak(pp)&&!/amazon|temu|\d{3}-\d{7}-\d{7}/i.test(best.t)){st('Cleaning up the photo and reading it again…');const bd=await bandRead(c);
+   if(bd&&bd.t.trim()){const q=Parser.parse(bd.t,'purchase',alts.concat(best.t));if(sc0(q)>=sc0(pp)||!best.w.length){alts.push(best.t);best={t:bd.t,n:sc0(q),w:bd.w,c:bd.c}}else alts.push(bd.t)}}}catch(e){}
+ try{const bn=await barcodeNo(c);if(bn){best.t=best.t.replace(/\s+$/,'')+'\n'+bn.text;
+   best.w=best.w.filter(w=>{const m=w.bbox;if(!m)return true;const cx=(m.x0+m.x1)/2,cy=(m.y0+m.y1)/2;return !(cx>=bn.box.x0&&cx<=bn.box.x1&&cy>=bn.box.y0&&cy<=bn.box.y1)});
+   best.w.push({text:bn.text,confidence:bn.ok?90:50,bbox:{x0:bn.box.x0,y0:bn.box.y0,x1:bn.box.x1,y1:bn.box.y1}})}}catch(e){}
+ return{c,text:best.t,words:best.w,conf:best.c,alts,url:c.toDataURL('image/jpeg',.85)}}
+/* ---------- v88: clean photo, banded read, barcode number ---------- */
+function cleanCanvas(c,z){const w=Math.round(c.width*z),h=Math.round(c.height*z),o=document.createElement('canvas');o.width=w;o.height=h;const x=o.getContext('2d');x.imageSmoothingQuality='high';x.drawImage(c,0,0,w,h);
+ const id=x.getImageData(0,0,w,h),g=Scan.gray(id.data,w,h),d=Scan.darkMask(g,w,h,.8,14),p=id.data;for(let i=0,j=0;i<d.length;i++,j+=4){p[j]=p[j+1]=p[j+2]=d[i]?0:255;p[j+3]=255}x.putImageData(id,0,0);return o}
+/* crumpled paper curves its lines; short horizontal bands stay close to straight, so each band reads better than the whole page */
+async function bandRead(c){const z=Math.max(1,Math.min(2.2,1250/c.width)),cc=cleanCanvas(c,z),w=cc.width,h=cc.height,bh=Math.round(w*.44),ov=Math.round(w*.09),nz=q=>q.toLowerCase().replace(/[^a-z0-9]/g,''),lines=[],words=[];let y=0,cs=[];
+ for(;;){const bb=Math.min(h,y+bh),last=bb>=h,seg=document.createElement('canvas');seg.width=w+40;seg.height=bb-y+40;const x=seg.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,seg.width,seg.height);x.drawImage(cc,0,y,w,bb-y,20,20,w,bb-y);
+  let d=null;try{d=await ocrP(seg)}catch(e){}seg.width=seg.height=0;
+  if(d){const prev=new Set(lines.slice(-10).map(nz));String(d.text||'').split('\n').forEach(l=>{if(l.trim()&&(!prev.has(nz(l))||nz(l).length<4))lines.push(l)});
+   const lo=y+(y?ov/2:0),hi=bb-(last?0:ov/2);(d.words||[]).forEach(wd=>{if(!wd.text.trim()||!wd.bbox)return;const b=wd.bbox,cy=(b.y0+b.y1)/2-20+y;if(cy<lo||cy>hi)return;
+    words.push({text:wd.text,confidence:wd.confidence,bbox:{x0:(b.x0-20)/z,x1:(b.x1-20)/z,y0:(b.y0-20+y)/z,y1:(b.y1-20+y)/z}})});if(d.confidence!=null)cs.push(d.confidence)}
+  if(last)break;y+=bh-ov}
+ cc.width=cc.height=0;return{t:lines.join('\n'),w:words,c:cs.length?cs.reduce((a,b)=>a+b,0)/cs.length:null}}
+let WD=null;
+/* number printed under a barcode: find the bars, straighten the arc, read digits only */
+async function barcodeNo(c){const w=c.width,h=c.height;if(w<300||h<300)return null;const id=c.getContext('2d').getImageData(0,0,w,h),g=Scan.gray(id.data,w,h),d=Scan.darkMask(g,w,h),B=Scan.findBarcode(d,w,h);if(!B)return null;const L=Scan.digitLine(d,w,h,B);if(!L)return null;
+ if(!WD)WD=await Tesseract.createWorker('eng');await WD.setParameters({tessedit_char_whitelist:'0123456789-',tessedit_pageseg_mode:'7'});
+ const rd=async im=>{const k=Math.max(1,Math.min(4,3/L.s)),bw=Math.round(im.w*k),bh=Math.round(im.h*k),cv=document.createElement('canvas'),src=document.createElement('canvas');src.width=im.w;src.height=im.h;const sx=src.getContext('2d'),idd=sx.createImageData(im.w,im.h);
+  for(let i=0,j=0;i<im.data.length;i++,j+=4){idd.data[j]=idd.data[j+1]=idd.data[j+2]=im.data[i];idd.data[j+3]=255}sx.putImageData(idd,0,0);
+  cv.width=bw+80;cv.height=bh+60;const x=cv.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,cv.width,cv.height);x.imageSmoothingQuality='high';x.drawImage(src,40,30,bw,bh);
+  const r=await Promise.race([WD.recognize(cv),new Promise((_,j)=>setTimeout(()=>j(0),30000))]);src.width=cv.width=0;return r.data.text};
+ let full='',head='';try{full=await rd(L.full);head=await rd(L.head)}catch(e){}
+ try{await WD.setParameters({tessedit_char_whitelist:'',tessedit_pageseg_mode:'3'})}catch(e){}
+ const R=Scan.reconcile(full,head,L.glyphs);if(R.text.replace(/\D/g,'').length<8)return null;return{text:R.text,ok:R.ok,box:L.box}}
 function handleFiles(fl){const a=[...(fl||[])];if(!a.length)return;dismissRestore();if(S.mode!='purchase'||a.some(f=>!/^image\//.test(f.type)))return handle(a[0]);return addShots(a)}
 async function addShots(files,opts){opts=opts||{};let r=S.rec;if(!r.doc){S.rec=r=newRec();r.loaded=true;r.doc=true;S.sel=[];S.words=[];S.pages=[];S.undo=[];S.redo=[]}r.shots=r.shots||0;let dup=0,bad=0;
  const kf=x=>String(x.n).toLowerCase().replace(/[^a-z0-9]/g,'')+'|'+x.p;
  for(let i=0;i<files.length;i++){st((opts.pdf?'Reading page ':'Reading screenshot ')+(i+1)+' of '+files.length+'… (first run downloads language data)');
-  try{const o=await readImg(files[i],opts),P=Parser.parse(o.text,'purchase'),cur=r.shots++;
+  try{const o=await readImg(files[i],opts),P=Parser.parse(o.text,'purchase',o.alts),cur=r.shots++;
    if(o.alt){try{const Q=Parser.parse(o.alt,'purchase');if(Q.items.length==P.items.length)P.items.forEach((x,k)=>{const y=Q.items[k];if(y&&y.lp!=null)x.p=y.p})}catch(e){}}S.pages.push({id:++PGID,words:o.words,c:o.c,url:o.url,w:o.c.width,h:o.c.height,marks:autoHL(o.words,o.c.width,o.c.height,seenHL())});locate(S.pages[S.pages.length-1],P.items);
    if(cur===0){S.img=o.url;S.dim=[o.c.width,o.c.height];S.words=o.words;S.conf=o.conf;showDoc(o.url);drawWords(o.c.width,o.c.height)}
    Object.keys(P.fields).forEach(k=>{if(k=='merchant'?(P.found.mk||!r.merchant):(r[k]==null||r[k]===''))r[k]=P.fields[k]});
