@@ -415,23 +415,34 @@ async function readImg(f,opts){opts=opts||{};const src=typeof f=='function'?awai
   if(z>1.15){const c2=document.createElement('canvas');c2.width=Math.round(c.width*z);c2.height=Math.round(c.height*z);const x2=c2.getContext('2d');x2.imageSmoothingQuality='high';x2.drawImage(c,0,0,c2.width,c2.height);
    const r=await Promise.race([Tesseract.recognize(c2,'eng'),new Promise((_,j)=>setTimeout(()=>j(0),60000))]);
    if(Parser.parse(r.data.text,'purchase').fields.number){best.t=r.data.text;best.w=(r.data.words||[]).filter(w=>w.text.trim()&&w.bbox).map(w=>({...w,bbox:{x0:w.bbox.x0/z,y0:w.bbox.y0/z,x1:w.bbox.x1/z,y1:w.bbox.y1/z}}));best.c=r.data.confidence}}}}catch(e){}
- /* v88: photos of paper receipts. When the normal reads leave the key fields empty, clean the photo (uneven light, crumples) and read it in bands. */
- try{const sc0=r=>r.items.length+Object.keys(r.found).length+(r.recon&&r.recon.ok?20:0),weak=r=>!r.items.length||!(r.fields.extSub!=null||r.fields.extTotal!=null)||!r.found.date,pp=Parser.parse(best.t,'purchase',alts);
-  if(weak(pp)&&!/amazon|temu|\d{3}-\d{7}-\d{7}/i.test(best.t)){st('Cleaning up the photo and reading it again…');const bd=await bandRead(c);
-   if(bd&&bd.t.trim()){const q=Parser.parse(bd.t,'purchase',alts.concat(best.t));if(sc0(q)>=sc0(pp)||!best.w.length){alts.push(best.t);best={t:bd.t,n:sc0(q),w:bd.w,c:bd.c}}else alts.push(bd.t)}}}catch(e){}
+ /* v88/v89: photos of paper receipts. When the normal reads leave the key fields empty or the items do not add up, clean the photo (uneven light, crumples) and read it in bands:
+    first with a soft cleanup that keeps the letter edges, then, only if that is still weak, with the hard black/white cut. */
+ try{const sc0=r=>r.items.length+Object.keys(r.found).length+(r.recon&&r.recon.ok?20:0),weak=r=>!r.items.length||!(r.fields.extSub!=null||r.fields.extTotal!=null)||!r.found.date||(r.recon&&r.recon.target!=null&&!r.recon.ok),pp=Parser.parse(best.t,'purchase',alts);
+  if(weak(pp)&&!/amazon|temu|\d{3}-\d{7}-\d{7}/i.test(best.t)){st('Cleaning up the photo and reading it again…');let cur=pp;
+   for(const soft of [true,false]){const bd=await bandRead(c,soft);
+    if(bd&&bd.t.trim()){const q=Parser.parse(bd.t,'purchase',alts.concat(best.t));if(sc0(q)>=sc0(cur)||!best.w.length){alts.push(best.t);best={t:bd.t,n:sc0(q),w:bd.w,c:bd.c};cur=q}else alts.push(bd.t)}
+    if(!weak(cur))break}}}catch(e){}
  try{const bn=await barcodeNo(c);if(bn){best.t=best.t.replace(/\s+$/,'')+'\n'+bn.text;
    best.w=best.w.filter(w=>{const m=w.bbox;if(!m)return true;const cx=(m.x0+m.x1)/2,cy=(m.y0+m.y1)/2;return !(cx>=bn.box.x0&&cx<=bn.box.x1&&cy>=bn.box.y0&&cy<=bn.box.y1)});
    best.w.push({text:bn.text,confidence:bn.ok?90:50,bbox:{x0:bn.box.x0,y0:bn.box.y0,x1:bn.box.x1,y1:bn.box.y1}})}}catch(e){}
  return{c,text:best.t,words:best.w,conf:best.c,alts,url:c.toDataURL('image/jpeg',.85)}}
 /* ---------- v88: clean photo, banded read, barcode number ---------- */
-function cleanCanvas(c,z){const w=Math.round(c.width*z),h=Math.round(c.height*z),o=document.createElement('canvas');o.width=w;o.height=h;const x=o.getContext('2d');x.imageSmoothingQuality='high';x.drawImage(c,0,0,w,h);
- const id=x.getImageData(0,0,w,h),g=Scan.gray(id.data,w,h),d=Scan.darkMask(g,w,h,.8,14),p=id.data;for(let i=0,j=0;i<d.length;i++,j+=4){p[j]=p[j+1]=p[j+2]=d[i]?0:255;p[j+3]=255}x.putImageData(id,0,0);return o}
-/* crumpled paper curves its lines; short horizontal bands stay close to straight, so each band reads better than the whole page */
-async function bandRead(c){const z=Math.max(1,Math.min(2.2,1250/c.width)),cc=cleanCanvas(c,z),w=cc.width,h=cc.height,bh=Math.round(w*.44),ov=Math.round(w*.09),nz=q=>q.toLowerCase().replace(/[^a-z0-9]/g,''),lines=[],words=[];let y=0,cs=[];
+function cleanCanvas(c,z,soft){const w=Math.round(c.width*z),h=Math.round(c.height*z),o=document.createElement('canvas');o.width=w;o.height=h;const x=o.getContext('2d');x.imageSmoothingQuality='high';x.drawImage(c,0,0,w,h);
+ const id=x.getImageData(0,0,w,h),g=Scan.gray(id.data,w,h),p=id.data;
+ /* soft: v89 keeps the gray edges of the letters (small print survives); hard: black/white cut, better for faint thermal paper and barcodes */
+ if(soft){const f=Scan.flatten(g,w,h);for(let i=0,j=0;i<f.length;i++,j+=4){p[j]=p[j+1]=p[j+2]=f[i];p[j+3]=255}}
+ else{const d=Scan.darkMask(g,w,h,.8,14);for(let i=0,j=0;i<d.length;i++,j+=4){p[j]=p[j+1]=p[j+2]=d[i]?0:255;p[j+3]=255}}
+ x.putImageData(id,0,0);return o}
+/* crumpled paper curves its lines; short horizontal bands stay close to straight, so each band reads better than the whole page.
+   Each band owns the lines whose middle falls inside it (overlap is split in half), so a line read twice is never added twice. */
+async function bandRead(c,soft){const z=soft?Math.max(1,Math.min(2.4,1700/c.width)):Math.max(1,Math.min(2.2,1250/c.width)),cc=cleanCanvas(c,z,soft),w=cc.width,h=cc.height,bh=Math.round(w*(soft?.3:.44)),ov=Math.round(w*(soft?.06:.09)),nz=q=>q.toLowerCase().replace(/[^a-z0-9]/g,''),lines=[],words=[];let y=0,cs=[];
  for(;;){const bb=Math.min(h,y+bh),last=bb>=h,seg=document.createElement('canvas');seg.width=w+40;seg.height=bb-y+40;const x=seg.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,seg.width,seg.height);x.drawImage(cc,0,y,w,bb-y,20,20,w,bb-y);
   let d=null;try{d=await ocrP(seg)}catch(e){}seg.width=seg.height=0;
-  if(d){const prev=new Set(lines.slice(-10).map(nz));String(d.text||'').split('\n').forEach(l=>{if(l.trim()&&(!prev.has(nz(l))||nz(l).length<4))lines.push(l)});
-   const lo=y+(y?ov/2:0),hi=bb-(last?0:ov/2);(d.words||[]).forEach(wd=>{if(!wd.text.trim()||!wd.bbox)return;const b=wd.bbox,cy=(b.y0+b.y1)/2-20+y;if(cy<lo||cy>hi)return;
+  const lo=y+(y?ov/2:0),hi=bb-(last?0:ov/2);
+  if(d){const dl=(d.lines||[]).filter(l=>l.bbox&&String(l.text||'').trim());
+   if(dl.length)dl.forEach(l=>{const cy=(l.bbox.y0+l.bbox.y1)/2-20+y;if(cy>=lo&&cy<hi)lines.push(String(l.text).replace(/\n+$/,''))});
+   else{const prev=new Set(lines.slice(-10).map(nz));String(d.text||'').split('\n').forEach(l=>{if(l.trim()&&(!prev.has(nz(l))||nz(l).length<4))lines.push(l)})}
+   (d.words||[]).forEach(wd=>{if(!wd.text.trim()||!wd.bbox)return;const b=wd.bbox,cy=(b.y0+b.y1)/2-20+y;if(cy<lo||cy>hi)return;
     words.push({text:wd.text,confidence:wd.confidence,bbox:{x0:(b.x0-20)/z,x1:(b.x1-20)/z,y0:(b.y0-20+y)/z,y1:(b.y1-20+y)/z}})});if(d.confidence!=null)cs.push(d.confidence)}
   if(last)break;y+=bh-ov}
  cc.width=cc.height=0;return{t:lines.join('\n'),w:words,c:cs.length?cs.reduce((a,b)=>a+b,0)/cs.length:null}}

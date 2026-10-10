@@ -14,6 +14,11 @@ function localMean(g,w,h,r){const W1=w+1,I=new Uint32Array(W1*(h+1));
 /* dark mask: 1 where a pixel is clearly darker than its surroundings */
 function darkMask(g,w,h,k,rd){k=k||.87;const r=Math.max(10,Math.round(w/(rd||28))),m=localMean(g,w,h,r),d=new Uint8Array(w*h);
  for(let i=0;i<d.length;i++)d[i]=g[i]<m[i]*k?1:0;return d}
+/* v89: soft version of darkMask. Subtracts the local brightness (shadows, curl, uneven light) but keeps the gray edges of letters,
+   which the OCR needs: a hard black/white cut thins small print until 3s, 8s and 0s look alike. Returns a gray array. */
+function flatten(g,w,h,r,gain){r=r||Math.max(10,Math.round(w/24));gain=gain||2.4;const m=localMean(g,w,h,r),o=new Uint8ClampedArray(w*h);
+ for(let i=0;i<o.length;i++){const bg=Math.max(m[i],1),rel=g[i]/bg;/* 1 = same as surroundings, <1 = darker (ink) */o[i]=255-Math.max(0,Math.min(255,(1-rel)*255*gain))}
+ return o}
 /* RGBA in -> RGBA out (black on white) */
 function clean(rgba,w,h){const g=gray(rgba,w,h),d=darkMask(g,w,h),o=new Uint8ClampedArray(rgba.length);
  for(let i=0,j=0;i<d.length;i++,j+=4){const v=d[i]?0:255;o[j]=o[j+1]=o[j+2]=v;o[j+3]=255}return o}
@@ -60,4 +65,4 @@ function reconcile(full,head,glyphs){let f=String(full||'').replace(/[^0-9\-]/g,
  if(p.length===hn&&f.length===glyphs)f=p+f.slice(hn);
  else if(p.length>=3&&!f.startsWith(p)&&f.startsWith(p.slice(1))&&f.length<glyphs)f=p[0]+f;
  return{text:f,ok:f.length===glyphs}}
-root.Scan={gray,darkMask,clean,findBarcode,digitLine,reconcile,localMean};if(typeof module!=='undefined')module.exports=root.Scan})(typeof globalThis!=='undefined'?globalThis:this);
+root.Scan={gray,darkMask,flatten,clean,findBarcode,digitLine,reconcile,localMean};if(typeof module!=='undefined')module.exports=root.Scan})(typeof globalThis!=='undefined'?globalThis:this);

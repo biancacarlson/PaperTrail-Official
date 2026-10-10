@@ -16,6 +16,7 @@ It runs in your browser. Upload a receipt, invoice, screenshot or photo, check t
 - Receipt number is read from labels like Receipt #, Invoice #, Order #, TRN, TR#, TC#, Check or Ref. A bare number near the bottom (e.g. under the barcode) is used when there is no label
 - Category is guessed from the items: gloves, tools and safety gear are Gear; consumables are Supplies
 - Upload several screenshots at once
+- **Photos of paper receipts:** if the first reads leave the date, items or totals empty (or the items do not add up), the photo is flattened for shadows and curl and read again in bands. A date has to be a real, recent date. If only the subtotal is readable, one flagged line is added at that price so you can check its name
 
 **Leaving out personal items**
 - Tap the circle beside an item to exclude it. A black bar over an item's row does the same (remove the bar and it counts again)
