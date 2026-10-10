@@ -302,19 +302,19 @@ function periodSums(now){now=now||new Date();const y=now.getFullYear(),mo=now.ge
 function totalsView(now){const T=periodSums(now),f=v=>+(+v).toFixed(2),sd=d=>d.toLocaleDateString('en-US',{month:'short',day:'numeric'}),
  rg=i=>{const a=new Date(T.lo[i]);return a.getMonth()==T.now.getMonth()&&a.getDate()==T.now.getDate()?sd(a):sd(a)+' \u2013 '+sd(T.now)},
  money=v=>v?'<b>'+M(f(v))+'</b>':'<b class="z">\u2013</b>',miles=v=>v?'<b>'+f(v).toLocaleString('en-US',{maximumFractionDigits:1})+' mi</b>':'<b class="z">\u2013</b>',
- head=t=>'<div class="tr th"><span>'+t+'</span><span>MTD</span><span>YTD</span></div>',
+ head=t=>'<div class="th1">'+t+'</div>',
  row=(l,a,c,fn)=>'<div class="tr'+(c?' '+c:'')+'"><span>'+l+'</span>'+(fn||money)(a[0])+(fn||money)(a[1])+'</div>',
  cats=Object.entries(T.cat).sort((p,q)=>q[1][1]-p[1][1]),clis=Object.values(T.cli).sort((p,q)=>q.v[1]-p.v[1]),
  none=t=>'<div class="tr"><span class="z">'+t+'</span></div>',pl=(n,a,b)=>n+' '+(n==1?a:b);
- let h='<div class="hint">MTD: '+rg(0)+' \u00b7 YTD: '+rg(1)+'</div>';
+ let h='<div class="tcols"><span></span><span>MTD<small>'+rg(0)+'</small></span><span>YTD<small>'+rg(1)+'</small></span></div>';
  if(!Object.keys(T.cat).length&&!Object.keys(T.cli).length)h+='<div class="empty2">Nothing dated this year yet.</div>';
  else{
   h+='<div class="sl">'+head('Expenses by category')+(cats.length?cats.map(([k,a])=>row(esc(k),a)).join('')+row('Total expenses',T.exp,'tot'):none('No expenses this year'))+'</div>';
   h+='<div class="sl">'+head('Income by client')+(clis.length?clis.map(c=>row(esc(c.n),c.v)).join('')+row('Total income',T.inc,'tot'):none('No work invoices this year'))+'</div>';
   h+='<div class="sl">'+head('Mileage')+row('Mileage deduction',T.ded,'tot')+row('Miles driven',T.mi,'',miles)+'</div>'}
- const n=[];if(T.noMi)n.push(pl(T.noMi,'work invoice this year has','work invoices this year have')+' no round-trip miles, so no mileage deduction is counted for '+(T.noMi==1?'it':'them')+'.');
+ const n=[];if(T.noMi)n.push(pl(T.noMi,'work invoice this year has','work invoices this year have')+' no round-trip miles, so no mileage deduction is counted.');
  const u=[];if(T.und)u.push(T.und+' undated');if(T.fut)u.push(T.fut+' dated after today');if(u.length)n.push('Not counted: '+u.join(', ')+'.');
- n.push('Expenses use the purchase date and income uses the job date. Income is the Amount Paid on each work invoice.');
+ n.push('Expenses count by purchase date, income by job date (Amount Paid).');
  return h+'<div class="hint">'+n.join(' ')+'</div>'}
 function svOther(){S.sv.sec=S.sv.sec=='x'?'w':'x';S.sv.cat='All';renderRecs()}
 function svCopy(){const l=svList().map(x=>x[0]).sort((p,q)=>key(p)-key(q));if(!l.length)return;if(S.sv.sec=='x'&&S.sv.cat=='All'&&!svSearching())l.push({mode:'summary'});copy(l)}
@@ -1224,4 +1224,18 @@ window.csvGo=async function(){
 '.cal2 .crow.tot .cl{color:rgba(255,255,255,.85)}',
 '.cal2 .crow.tot .cv{font-size:26px!important;font-weight:800;letter-spacing:-.03em}',
 '.cal2 .crow.tot .cv small{color:rgba(255,255,255,.85);letter-spacing:0}'
+].join('');document.head.appendChild(s)})();
+
+/* v87: calmer Totals tab (look only) */
+(function(){const s=document.createElement('style');s.textContent=[
+'.sl .tr,.tcols{display:grid;grid-template-columns:minmax(0,1fr) 84px 92px;gap:6px;align-items:baseline}',
+'.tcols{padding:2px 15px 0;margin:2px 0 -4px;text-align:right;font:600 11px var(--mono);letter-spacing:.1em;color:var(--mut)}',
+'.tcols small{display:block;font:400 10.5px -apple-system,system-ui,sans-serif;letter-spacing:0;margin-top:1px;white-space:nowrap}',
+'.th1{font:600 11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--mut);padding:10px 0 4px}',
+'.sl .tr{padding:7px 0!important;border:0!important;font-size:14px;text-align:right}',
+'.sl .tr>span:first-child{text-align:left;font-weight:500}',
+'.sl .tr b{font-weight:600;font-size:14px}.sl .tr b.z{color:#c3c6c2;font-weight:400}',
+'.sl .tr.tot{margin:6px -8px 6px;padding:9px 8px!important;background:var(--ext);border-radius:10px}',
+'.sl .tr.tot b,.sl .tr.tot>span:first-child{font-weight:700;color:var(--gd)}',
+'.sl{padding:4px 14px 6px}'
 ].join('');document.head.appendChild(s)})();
