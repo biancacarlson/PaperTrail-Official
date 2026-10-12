@@ -1,7 +1,7 @@
 'use strict';
 /* v89 self-update: the iPhone Home Screen app keeps its own cached copy of the page and ignores no-cache hints. On launch, ask the server (bypassing the cache) which version is current;
    if it is newer than this file, re-download every file once and reload. Runs from parser.js so even an old cached index.html picks it up. Once per session, so it can never loop. */
-(function(){var V=89;try{if(typeof window==='undefined'||!window.fetch||!navigator.onLine||sessionStorage.getItem('pt_upd'))return;
+(function(){var V=91;try{if(typeof window==='undefined'||!window.fetch||!navigator.onLine||sessionStorage.getItem('pt_upd'))return;
  fetch('index.html',{cache:'reload'}).then(function(r){return r.text()}).then(function(h){var m=h.match(/parser\.js\?v=(\d+)/);if(!m||+m[1]<=V)return;
   try{sessionStorage.setItem('pt_upd','1')}catch(e){}
   return Promise.all(['parser.js','scan.js','app.js'].map(function(f){return fetch(f+'?v='+m[1],{cache:'reload'})})).then(function(){location.reload()})}).catch(function(){})}catch(e){}})();
@@ -84,6 +84,44 @@ function lines(t){const L=t.replace(/\r/g,'').replace(/\t/g,'   ').replace(/\u00
    seg.forEach(x=>out.push(x));continue}
   out.push(L[i])}
  return out}
+
+/* ---------- v90: call sheets / estimates laid out as tables (header row, values under it) ---------- */
+/* dates with a damaged separator: "10:15 2026", "10.10 2026", "10. 10-2026", "10:11:2026" -> M/D/YYYY. The year must be recent, so phone numbers and times never match. */
+const FDS='(?<![\\d:])(\\d{1,2})\\s?[\\/.:\\-\\u00b0]\\s?(\\d{1,2})\\s?[\\/.:\\-\\u00b0 ]\\s?(20\\d\\d)(?!\\d)';
+function fdates(l){const Y=new Date().getFullYear(),out=[];for(const m of String(l).matchAll(new RegExp(FDS,'g'))){const mo=+m[1],d=+m[2],y=+m[3];if(mo>=1&&mo<=12&&d>=1&&d<=31&&y>=Y-3&&y<=Y+1)out.push(String(mo).padStart(2,'0')+'/'+String(d).padStart(2,'0')+'/'+y)}return out}
+const noFd=l=>String(l).replace(new RegExp(FDS,'g'),' ');
+const tail=(L,i,n)=>{const o=[];for(let j=i;j<Math.min(L.length,i+n)&&!(j>i&&/additional\s*info/i.test(L[j]));j++)o.push(L[j]);return o};
+/* Event Start / Event End: the OCR can interleave the header row with its values, so take the dates near it and sort them (earlier = start) */
+function evDates(L){const hi=L.findIndex(l=>/event\s*start|event\s*end|start\s*date|end\s*date/i.test(l));if(hi<0)return null;
+ const ds=[];tail(L,hi,10).forEach(l=>fdates(l).forEach(d=>ds.push(d)));if(!ds.length)return null;
+ const u=[...new Set(ds)].sort((a,b)=>pd(a)-pd(b));return{start:u[0],end:u.length>1?u[u.length-1]:null}}
+/* the number printed under the "Invoice Number" column: the longest letters+digits token (the event number AVL9749 is shorter and sits in the same row) */
+function evInvoice(L){const hi=L.findIndex(l=>/invoice\s*number/i.test(l));if(hi<0)return null;let best=null;
+ tail(L,hi,10).forEach(l=>l.split(/\s+/).forEach(t=>{const c=fix(t.replace(/[^A-Za-z0-9\-]/g,''));if(c.length>=8&&/[A-Za-z]/.test(c)&&/\d/.test(c)&&/^[A-Z0-9\-]+$/.test(c)&&(!best||c.length>best.length))best=c}));return best}
+/* "2100 Costa Del Mar Rd. Carlsbad. CA 92009" (periods where the commas were) -> "2100 Costa Del Mar Rd, Carlsbad, CA 92009" */
+function fixAddr(s){s=String(s).replace(/\s+/g,' ').trim();
+ if(new RegExp(',\\s*[^,]+,\\s*(?:'+ST+')\\s+\\d{5}').test(s))return s.replace(/\s*,\s*/g,', ');
+ const m=s.match(new RegExp('^(.*?)[.,;]?\\s+('+ST+')[.,]?\\s+(\\d{5}(?:-\\d{4})?)\\W*$'));if(!m)return s;
+ const tk=m[1].split(' '),city=[];
+ while(tk.length>1&&city.length<3){const w=tk[tk.length-1].replace(/[.,;]+$/,'');if(!/^[A-Z][A-Za-z'\-]+$/.test(w)||STREETW.test(w))break;city.unshift(w);tk.pop()}
+ if(!city.length)return s;return tk.join(' ').replace(/[.,;\s]+$/,'')+', '+city.join(' ')+', '+m[2]+' '+m[3]}
+function evLocation(L){const k=L.findIndex(l=>/^\W*event\s*location\b/i.test(l));if(k<0)return null;
+ let s=L[k].replace(/^\W*event\s*location\s*[:\-]?\s*/i,'').trim();
+ if(!s||HDR.test(s)){s='';for(let j=k+1;j<Math.min(L.length,k+3);j++)if(/\d{2,5}\s+[A-Za-z]/.test(L[j])&&!HDR.test(L[j])){s=L[j];break}}
+ return s?fixAddr(s):null}
+/* position row of a call sheet: "10/10/2026 - 10/11/2026" (the dates she works) under the Date / Position / Hours / Rate / Amount header */
+function posRange(L){const h=L.findIndex(l=>/^\W*date\W+position/i.test(l)||/^\W*position\W*$/i.test(l));if(h<0)return null;
+ for(let i=h+1;i<L.length;i++){const f=fdates(L[i]);if(f.length>=2)return[f[0],f[1]];
+  if(f.length==1&&/^\s*[-\u2013\u2014]/.test(noFd(L[i]).replace(/^\s+/,''))){for(let j=i+1;j<Math.min(L.length,i+9);j++){const g=fdates(L[j]);if(g.length)return[f[0],g[0]]}return[f[0],null]}}
+ return null}
+/* "Regular Time  5  $35.00  $175.00" rows (hours, rate, amount). When the OCR dropped the hours or split the row over lines, hours = amount / rate. */
+function timeRows(L){const out=[],M=/^\W*\$?\s?([\d,]+\.\d{2})\W*$/,K=/^\W*(re\w{3,}|ov\w{3,}|ot|double|dbl)\b/i;
+ for(let i=0;i<L.length;i++){const l=fix(L[i]);if(!K.test(l)||!/time/i.test(l))continue;
+  const m=l.match(/^\W*(re\w{3,}|ov\w{3,}|ot|double|dbl)\b[^\d$]*?(\d+(?:\.\d+)?)\s+\$\s?([\d,]+\.\d{2})\s+\$\s?([\d,]+\.\d{2})\s*$/i);
+  if(m){out.push({ot:!/^re/i.test(m[1]),h:+m[2],r:+m[3].replace(/,/g,''),a:+m[4].replace(/,/g,'')});continue}
+  if(/^\W*[A-Za-z ]+time\W*$/i.test(l)){const mv=[];for(let j=i+1;j<Math.min(L.length,i+4)&&mv.length<2;j++){const x=fix(L[j]).match(M);if(x)mv.push(+x[1].replace(/,/g,''));else if(mv.length)break}
+   if(mv.length==2&&mv[0]>0){const h=+(mv[1]/mv[0]).toFixed(2);if(h>0&&h<=24*14)out.push({ot:!/^re/i.test(l.trim()),h,r:mv[0],a:mv[1]})}}}
+ return out}
 const ONLYP=/^-?\$?\s?\d{1,6}[.,]\d{2}$/,QTY=/\d+\s*[x@]\s*\$?\d+[.,]\d{2}$/;
 /* OCR sometimes emits a price column after all the labels: pair loose prices with price-less labels, in order, only when counts match. */
 
@@ -99,7 +137,9 @@ function pairColumns(L){
  const lab=[];for(let i=f-1;i>0&&lab.length<k;i--){if(isLab(L[i],i))lab.unshift(i);else if(lab.length&&!ONLYP.test(L[i]))break}
  if(lab.length!==k)return L;
  const out=L.slice();lab.forEach((i,n)=>{out[i]=L[i]+' '+L[f+n]});for(let i=f;i<e;i++)out[i]=null;return out.filter(x=>x!=null)}
-function label(L,re){for(let i=0;i<L.length;i++){const m=L[i].match(re);if(m){const v=(m[1]||'').trim();if(v)return v;if(L[i+1])return L[i+1]}}return null}
+/* v90: a label with nothing after it takes the next line as its value only when that line is not itself a label / column header ("Client" followed by "Event Location" has no value) */
+const HDR=/^\W*(?:event|invoice|number|date|name|start|end|position|hours?|rate|amount|additional|onsite|labor|estimate|to|client|location)\b/i;
+function label(L,re){for(let i=0;i<L.length;i++){const m=L[i].match(re);if(m){const v=(m[1]||'').trim();if(v)return v;if(L[i+1]&&!HDR.test(L[i+1]))return L[i+1]}}return null}
 function dateNear(L,re){for(const fz of [false,true])for(const l of L)if(re.test(l)){const m=findDate(l,fz);if(m)return m}return null}
 const firstDate=L=>{for(const fz of [false,true])for(const l of L){const m=findDate(l,fz);if(m)return m}return null};
 /* Unlabeled document numbers. Register receipts print a bare number under the barcode (store + register + transaction + date, e.g. "0214 03 40317 0928 26"): it is the receipt number even though no label says so. Only the last lines are searched; phones, dates, prices, card/auth lines and item UPCs are skipped. */
@@ -281,7 +321,7 @@ function parse1(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(
   var ev=w=>{for(let i=0;i<L.length;i++)if(new RegExp('event\\s*'+w+'\\s*date','i').test(L[i])){for(let j=i;j<Math.min(L.length,i+4);j++){const d=dts(L[j]);if(d.length)return w=='start'?d[0]:d[d.length>1?1:0]}}return null};
   var tri=/(\d+(?:\.\d+)?)\s+\$\s?([\d,]+\.\d{2})\s+\$\s?([\d,]+\.\d{2})\s*$/,drow=L.filter(l=>/^\d{1,2}\/\d{1,2}\/\d{2,4}\b/.test(l)&&tri.test(l));
   {const c=label(L,/^(?:bill(?:ed)?\s*to|client(?:\s*name)?|customer|company)\s*[:\-]?\s*(.*)$/i);if(c&&!DATE.test(c)&&!/^\$?[\d,.]+$/.test(c))set('client',c.split(/\s{3,}/)[0])}
-  set('invoice',inv&&inv[1]);
+  set('invoice',evInvoice(L)||(inv&&inv[1]));
   set('jobDate',dateNear(L,/(job|service|work|shift|event|date of service)\s*date|date of service|worked/i));
   if(!F.jobDate){const l=L.find(l=>DATE.test(l)&&!/invoice|payment|paid|due|issued|deposit/i.test(l));if(l)F.jobDate=l.match(DATE)[1]}
   set('location',label(L,/^(?:site|job\s*site|location|venue|address|job location)\s*[:\-]\s*(.*)$/i));
@@ -297,6 +337,11 @@ function parse1(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(
    for(const l of L){const m=l.match(/(?<!\w\s)\bDate\s+(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})/);if(m){set('closeDate',m[1]);break}}if(!F.closeDate){const d=dateNear(L,/invoice\s*date|date\s*issued|issued/i);if(d)set('closeDate',d)}
    const loc=label(L,/^(?:event\s*location|job\s*location|service\s*location|work\s*location|job\s*site|site|venue|location|address)\s*[:\-]?\s*(.*)$/i);if(loc&&!/^\$?[\d,.]+$/.test(loc))set('location',loc.split(/\s{3,}/)[0]);
    if(F.location&&!HASST.test(F.location)){const k=L.findIndex(l=>/^(?:event\s*location|job\s*location|service\s*location|work\s*location|job\s*site|site|venue|location|address)\b/i.test(l)),cs=k>=0?cityState(L.slice(k,k+4)):null;if(cs)F.location=F.location+', '+cs}
+   {/* v90: table-style call sheets */
+    const ed2=evDates(L),pr=posRange(L);
+    if(ed2){set('jobDate',ed2.start);if(ed2.end)set('endDate',ed2.end)}
+    if(pr){set('jobDate',pr[0]);if(pr[1]&&pr[1]!==pr[0])set('endDate',pr[1])}/* the dates she works beat the whole event's span */
+    const el=evLocation(L);if(el)set('location',el)}
    const nv=re=>{for(const raw of L){const m=fix(raw).match(re);if(m)return m}return null};
    {const m=nv(/^(?:(round[\s-]*trip|one[\s-]*way)(?:\s*(?:miles?|mileage|distance))?|mileage|miles|distance)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(?:mi\b|miles?\b)?(.*)$/i);if(m){let v=+m[2];if(/one/i.test(m[1]||'')||/one[\s-]*way/i.test(m[3]||''))v=v*2;set('roundTrip',String(+v.toFixed(2)))}}
    if(drow.length){const r=drow.map(l=>l.match(tri)),h=r.reduce((a,m)=>a+ +m[1],0),amt=r.reduce((a,m)=>a+ +m[3].replace(/,/g,''),0),low=Math.min(...r.map(m=>+m[2].replace(/,/g,'')));
@@ -306,14 +351,21 @@ function parse1(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(
     if(ot){set('overtime',String(ot));set('hours',String(+(h-ot).toFixed(2)));delete F.notes;delete found.notes;
      if(sub.length>1){const pr=sub.map(m=>m[1]+' hrs × '+money(m[2])+' = '+money(m[3]));const lo=Math.min(...sub.map(m=>+m[2].replace(/,/g,''))),hi=Math.max(...sub.map(m=>+m[2].replace(/,/g,'')));
       set('notes','Regular: '+pr[0]+'. Overtime: '+pr[pr.length-1]+(Math.abs(hi/lo-1.5)<.01?' (1.5× regular rate)':'')+'.')}}}}
+ if(mode!=='purchase'&&!(typeof drow!=='undefined'&&drow.length)){const tr2=timeRows(L);
+  if(tr2.length){const reg=tr2.filter(r=>!r.ot),ot2=tr2.filter(r=>r.ot),sm=(a,k)=>+a.reduce((t,r)=>t+r[k],0).toFixed(2);
+   if(reg.length)set('hours',String(sm(reg,'h')));if(ot2.length)set('overtime',String(sm(ot2,'h')));
+   if(!found.amount)set('amount',sm(tr2,'a').toFixed(2));
+   if(/\bestimate\b/i.test(text)&&/\best\.?\s*\$?\d/i.test(text)&&!F.notes)set('notes','Invoice is an estimate ("est."): hours and pay may change when final.')}}
  var shifts=[];
  if(mode!=='purchase'){
   const T=/(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m?\.?\s*(?:-|–|—|to)\s*(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m?\.?|(\d{1,2}):(\d{2})\s*(?:-|–|—|to)\s*(\d{1,2}):(\d{2})|(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m?\.?\s*(?:-|–|—|to)\s*(\d{1,2})(?::(\d{2}))?(?!\s*[:\d]|\s*[ap]\.?m)/gi;
   const to24=(h,m,ap)=>{h=+h;m=+(m||0);if(m>59||h>23)return null;if(ap){if(h<1||h>12)return null;h=h%12+(ap=='p'?12:0)}return h*60+m};
   const pad=n=>String(n).padStart(2,'0'),hm=v=>pad(Math.floor(v/60))+':'+pad(v%60);
-  let cur='';
+  let cur='',hold=false;
   for(const raw of L){
-   let l=fix(raw);const dm=l.match(DATE);if(dm){cur=dm[1];l=l.replace(DATE,' ')}
+   let l=fix(raw);const fd=fdates(l);
+   if(fd.length){if(hold)hold=false;else cur=fd[0];if(fd.length==1&&/^\s*[-\u2013\u2014]/.test(noFd(l).replace(/^\s+/,'')))hold=true;l=noFd(l)}/* a range ("10/10 - 10/11") keeps its first date: the shift starts that day */
+   else{const dm=l.match(DATE),yr=dm&&+((dm[1].match(/(\d{4})\s*$/)||[])[1]||0),Y0=new Date().getFullYear();if(dm){if(!yr||(yr>=Y0-3&&yr<=Y0+1))cur=dm[1];l=l.replace(DATE,' ')}}/* a misread year (2028) never becomes the shift date */
    if(/\b(?:invoice|due|issued|paid|deposit)\b/i.test(l)&&!/\d\s*[ap]\.?m/i.test(l))continue;
    for(const m of l.matchAll(T)){
     let s,e;
@@ -330,6 +382,7 @@ function parse1(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(
   }
   if(!shifts.length&&typeof drow!=='undefined'&&drow.length)drow.forEach(l=>{const m=l.match(/^(\d{1,2}\/\d{1,2}\/\d{2,4})\b/),t=l.match(tri);if(m&&t)shifts.push({date:m[1],start:'',end:'',hours:+t[1]})});
  }
+ if(mode!=='purchase'&&!F.hours&&shifts.length){const h=+shifts.reduce((a,s)=>a+s.hours,0).toFixed(2);if(h>0){F.hours=String(h);found.hours=1}}
  return {fields:F,items,found,guess,shifts,L,recon:(typeof recon!=='undefined'?recon:null)}}
 /* Other reads of the same photo (different cleanup / layout) fill what the best read missed. Items and amounts stay with the best read. */
 function parse(text,mode,alts){const R=parse1(text,mode);if(mode!=='purchase'||!alts||!alts.length)return R;
