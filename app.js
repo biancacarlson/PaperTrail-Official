@@ -1297,8 +1297,8 @@ window.csvGo=async function(){
 '.sl{padding:4px 14px 6px}'
 ].join('');document.head.appendChild(s)})();
 
-/* ---------- v93: calculator. A small round button opens a compact pad in the corner; the page behind stays usable. Works like the iPhone calculator
-   (each operator is applied as soon as the next one is pressed, = repeats the last step, C then AC, +/- and %). Nothing is stored. ---------- */
+/* ---------- v93: calculator. A small round button opens a compact pad in the corner; the page behind stays usable. It shows everything you type
+   (350 + 350) with a live answer above it, and the backspace key (or a swipe across the display) removes one character at a time. Nothing is stored. ---------- */
 (function(){
  const css=document.createElement('style');
  css.textContent='#calcfab{position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:45;width:48px;height:48px;min-height:0;padding:0;border-radius:50%;background:var(--g);color:#fff;border:0;box-shadow:0 2px 10px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center}'
@@ -1308,7 +1308,8 @@ window.csvGo=async function(){
  +'#calcbox .cc{display:flex;justify-content:space-between;align-items:center;color:#8e8e93;font-size:12px;padding:0 2px}#calcbox .cb{display:flex;gap:6px}'
  +'#calcbox .cc button{min-height:0;height:26px;padding:0 10px;margin:0;width:auto;font-size:12px;border-radius:13px;border:0;background:#333;color:#fff}'
  +'#calcbox .cw{display:flex;align-items:center}#calcbox .cr{flex:1;min-width:0;touch-action:none}#calcbox .cc button.bk,#calcbox .cw button.bk{min-height:0;height:32px;width:34px;padding:0;margin:0;border:0;background:transparent;color:#8e8e93;font-size:20px;flex:0 0 34px}'
- +'#calcbox .cr{color:#fff;text-align:right;font:300 44px/1.1 -apple-system,"SF Pro Display",system-ui,sans-serif;padding:8px 4px 10px;min-height:62px;white-space:nowrap;overflow:hidden}'
+ +'#calcbox .ce{color:#8e8e93;text-align:right;font:400 15px/1.2 -apple-system,system-ui,sans-serif;min-height:19px;padding:6px 4px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+ +'#calcbox .cr{color:#fff;text-align:right;font:300 44px/1.12 -apple-system,"SF Pro Display",system-ui,sans-serif;padding:2px 4px 10px;min-height:58px;white-space:normal;word-break:break-all;overflow:hidden}'
  +'#calcbox .ck{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}'
  +'#calcbox .ck button{min-height:0;height:50px;width:100%;padding:0;margin:0;border:0;border-radius:25px;font:400 22px -apple-system,system-ui,sans-serif;background:#333;color:#fff;-webkit-tap-highlight-color:transparent}'
  +'#calcbox .ck button:active{filter:brightness(1.35)}'
@@ -1316,45 +1317,49 @@ window.csvGo=async function(){
  +'#calcbox .ck .z{grid-column:span 2;text-align:left;padding-left:20px}'
  +'#app{padding-bottom:calc(70px + env(safe-area-inset-bottom,0px))}';
  document.head.appendChild(css);
- /* state: cur = what is on the display (a string while typing), acc / op = pending step, fresh = next digit starts a new number */
- let cur='0',acc=null,op=null,fresh=false,eqd=false,lastOp=null,lastB=0,typed=false;
- const SYM={'+':'+','-':'\u2212','*':'\u00d7','/':'\u00f7'};
- const ap=(a,o,b)=>o=='+'?a+b:o=='-'?a-b:o=='*'?a*b:b===0?NaN:a/b;
- const num=()=>parseFloat(cur);
- function shown(){if(cur==='Error')return cur;if(typed&&!fresh){const neg=cur[0]=='-',t=neg?cur.slice(1):cur,d=t.indexOf('.'),ip=d<0?t:t.slice(0,d);return (neg?'-':'')+(+ip).toLocaleString('en-US')+(d<0?'':t.slice(d))}
-  const n=num();if(!isFinite(n))return 'Error';const a=Math.abs(n);if(a>=1e9||(a>0&&a<1e-6))return n.toExponential(4).replace(/\.?0+e/,'e');return (+n.toPrecision(9)).toLocaleString('en-US',{maximumFractionDigits:8})}
- const setRes=n=>{cur=isFinite(n)?String(+n.toPrecision(12)):'Error'};
- function paint(){const b=document.getElementById('calcbox');if(!b)return;const r=b.querySelector('.cr'),t=shown();r.textContent=t;r.style.fontSize=t.length>11?'26px':t.length>9?'32px':t.length>7?'38px':'44px';
-  b.querySelectorAll('.op').forEach(x=>x.classList.toggle('act',!!op&&fresh&&x.dataset.k===op));const c=b.querySelector('[data-k="C"]');if(c)c.textContent=typed&&cur!=='0'?'C':'AC'}
+ /* ex = what has been typed, shown as typed; done = ex is a finished answer (a digit starts a new sum, an operator carries on from it) */
+ let ex='',done=false,last='';
+ const SYM={'+':'+','-':'\u2212','*':'\u00d7','/':'\u00f7'},NUM=/\d*\.?\d+|\d+\./g;
+ function calc(s){s=String(s).replace(/\s+/g,'').replace(/[+\-*/.]+$/,'');if(!s||!/^[0-9+\-*/.]+$/.test(s))return null;let i=0,bad=false;
+  const expr=()=>{let v=term();while(s[i]=='+'||s[i]=='-'){const o=s[i++],r=term();v=o=='+'?v+r:v-r}return v},
+   term=()=>{let v=fac();while(s[i]=='*'||s[i]=='/'){const o=s[i++],r=fac();v=o=='*'?v*r:v/r}return v},
+   fac=()=>{if(s[i]=='-'){i++;return -fac()}if(s[i]=='+'){i++;return fac()}const m=s.slice(i).match(/^(?:\d+\.?\d*|\.\d+)/);if(!m){bad=true;return 0}i+=m[0].length;return parseFloat(m[0])};
+  const v=expr();return bad||i<s.length||!isFinite(v)?null:v}
+ const numStr=n=>{if(!isFinite(n))return 'Error';const t=String(+n.toPrecision(12));return /e/i.test(t)?'Error':t};
+ const comma=m=>{const d=m.indexOf('.'),ip=d<0?m:m.slice(0,d),f=d<0?'':m.slice(d);return (ip===''?'0':(+ip).toLocaleString('en-US'))+f};
+ function pretty(t){let o='',prevOp=true;String(t).replace(/(\d*\.?\d+|\d+\.)|([+\-*/])|(.)/g,(m,n,op,x)=>{if(n!==undefined){o+=comma(n);prevOp=false}else if(op){o+=prevOp?SYM[op]:' '+SYM[op]+' ';prevOp=true}else o+=x;return m});return o}
+ const hasOp=()=>/[0-9.][+\-*/]/.test(ex);
+ const answer=()=>{if(done)return ex==='Error'?'':ex;if(!hasOp())return '';const v=calc(ex);return v==null?'':numStr(v)};
+ function paint(){const b=document.getElementById('calcbox');if(!b)return;const r=b.querySelector('.cr'),e=b.querySelector('.ce'),t=ex?pretty(ex):'0';
+  r.textContent=t;r.style.fontSize=t.length>22?'22px':t.length>16?'28px':t.length>11?'34px':t.length>8?'38px':'44px';
+  e.textContent=done&&last?pretty(last)+' =':(!done&&hasOp()&&calc(ex)!=null?'= '+pretty(numStr(calc(ex))):'')}
  function key(k){
-  if(cur==='Error'&&k!='C'){if(/^[0-9.]$/.test(k)){cur='0';acc=null;op=null;fresh=false;eqd=false;lastOp=null;typed=false}else{paint();return}}
-  if(!k){paint();return}
-  if(k=='bs'){if(typed&&!fresh){cur=cur.slice(0,-1);if(cur===''||cur==='-')cur='0'}}
-  else if(k=='C'){if(typed&&cur!=='0'&&cur!=='Error'){cur='0';typed=false;fresh=!!op}else{cur='0';acc=null;op=null;fresh=false;eqd=false;lastOp=null;typed=false}}
-  else if(k=='N'){if(cur!=='0'){cur=cur[0]=='-'?cur.slice(1):'-'+cur}else if(!fresh){cur='-0'}}
-  else if(k=='%'){const v=num();if(op&&(op=='+'||op=='-')&&acc!=null)setRes(acc*v/100);else setRes(v/100);typed=false;fresh=false;if(!op)eqd=true}
-  else if('+-*/'.includes(k)){
-   if(op&&!fresh){const v=ap(acc,op,num());setRes(v);acc=isFinite(v)?v:null}else if(acc==null||eqd||!op){acc=num()}
-   if(cur==='Error'){op=null;fresh=false}else{op=k;fresh=true;eqd=false;typed=false}}
-  else if(k=='='){
-   if(op){const b=num(),v=ap(acc,op,b);lastOp=op;lastB=b;acc=null;op=null;setRes(v);fresh=true;eqd=true;typed=false}
-   else if(lastOp&&eqd){setRes(ap(num(),lastOp,lastB));fresh=true;typed=false}}
-  else{ /* digit or point */
-   if(eqd&&!op){acc=null;lastOp=null;eqd=false;cur='0';fresh=false}
-   if(fresh||!typed&&cur==='0'||cur==='0'||cur==='-0'){const neg=cur==='-0'&&!fresh;cur=(neg?'-':'')+(k=='.'?'0.':k)}
-   else{const digits=cur.replace(/[-.]/g,'').length;if(k=='.'){if(cur.includes('.'))return}else if(digits>=9)return;cur+=k}
-   fresh=false;typed=true}
+  if(ex==='Error'){if(k=='C'||k=='bs'||/^[0-9.]$/.test(k)){ex='';done=false;last='';if(k=='C'||k=='bs'){paint();return}}else{paint();return}}
+  if(k=='C'){ex='';done=false;last=''}
+  else if(k=='bs'){ex=ex.slice(0,-1);done=false;last=''}
+  else if(k=='='){if(!ex||done)return;const v=calc(ex);if(v==null){ex='Error';last=''}else{last=ex.replace(/[+\-*/.]+$/,'');ex=numStr(v)}done=true}
+  else if(k=='N'){let i=ex.length;while(i>0&&/[0-9.]/.test(ex[i-1]))i--;if(i===ex.length)return;const p=ex[i-1],q=ex[i-2];
+   if(p==='-'&&(i===1||/[+\-*/]/.test(q)))ex=ex.slice(0,i-1)+ex.slice(i);else if(p==='-')ex=ex.slice(0,i-1)+'+'+ex.slice(i);else if(p==='+')ex=ex.slice(0,i-1)+'-'+ex.slice(i);else ex=ex.slice(0,i)+'-'+ex.slice(i);done=false;last=''}
+  else if(k=='%'){const m=ex.match(/(\d*\.?\d+|\d+\.)$/);if(!m)return;const n=numStr(parseFloat(m[1])/100);if(n==='Error')return;ex=ex.slice(0,ex.length-m[1].length)+n;done=false;last=''}
+  else if('+-*/'.includes(k)){done=false;last='';
+   if(!ex){if(k!='-')return}else if(/[+\-*/]$/.test(ex)&&!(k=='-'&&/[*/]$/.test(ex))){ex=ex.replace(/[+\-*/]+$/,'');if(!ex&&k!='-')return}
+   ex+=k}
+  else{if(done){ex='';done=false;last=''}
+   const tail=ex.match(/(\d*\.?\d*)$/)[1];
+   if(k=='.'){if(tail.includes('.'))return;ex+=tail===''?'0.':'.'}
+   else{if(tail.replace('.','').length>=12)return;if(tail==='0')ex=ex.slice(0,-1)+k;else ex+=k}}
   paint()}
+ window.__calcAnswer=answer;
  function build(){
   const f=document.createElement('button');f.id='calcfab';f.type='button';f.setAttribute('aria-label','Calculator');
   f.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2.5" width="14" height="19" rx="2.5"/><rect x="8" y="5.5" width="8" height="3.5" rx=".8"/><path d="M8.5 13h.01M12 13h.01M15.5 13h.01M8.5 16.5h.01M12 16.5h.01M15.5 16.5h.01"/></svg>';
   const b=document.createElement('div');b.id='calcbox';b.setAttribute('role','dialog');b.setAttribute('aria-label','Calculator');
   const K=[['C','fn','AC'],['N','fn','\u00b1'],['%','fn','%'],['/','op',SYM['/']],['7'],['8'],['9'],['*','op',SYM['*']],['4'],['5'],['6'],['-','op',SYM['-']],['1'],['2'],['3'],['+','op',SYM['+']],['0','z'],['.'],['=','op','=']];
-  b.innerHTML='<div class="cc"><span>Calculator</span><span class="cb"><button type="button" data-k="copy">Copy</button><button type="button" data-k="min" aria-label="Minimize calculator" style="width:34px;font-weight:700">\u2014</button></span></div><div class="cw"><button type="button" class="bk" data-k="bs" aria-label="Delete last digit">\u232b</button><div class="cr">0</div></div><div class="ck">'
+  b.innerHTML='<div class="cc"><span>Calculator</span><span class="cb"><button type="button" data-k="copy">Copy</button><button type="button" data-k="min" aria-label="Minimize calculator" style="width:34px;font-weight:700">\u2014</button></span></div><div class="ce"></div><div class="cw"><button type="button" class="bk" data-k="bs" aria-label="Delete last digit">\u232b</button><div class="cr">0</div></div><div class="ck">'
    +K.map(([k,c,t])=>'<button type="button" class="'+(c||'')+'" data-k="'+k+'">'+(t||k)+'</button>').join('')+'</div>';
   b.addEventListener('click',e=>{const t=e.target.closest('button');if(!t)return;const k=t.dataset.k;
    if(k=='min'){b.classList.remove('on');f.setAttribute('aria-expanded','false');return}
-   if(k=='copy'){const v=shown().replace(/,/g,'');if(v&&v!=='Error'&&navigator.clipboard)navigator.clipboard.writeText(v).then(()=>{t.textContent='Copied';setTimeout(()=>t.textContent='Copy',1200)}).catch(()=>{});return}
+   if(k=='copy'){const v=window.__calcAnswer();if(v&&navigator.clipboard)navigator.clipboard.writeText(v).then(()=>{t.textContent='Copied';setTimeout(()=>t.textContent='Copy',1200)}).catch(()=>{});return}
    key(k)});
   {let sx=null,sy=0;const d=b.querySelector('.cr');
    d.addEventListener('pointerdown',e=>{sx=e.clientX;sy=e.clientY});
@@ -1368,7 +1373,7 @@ window.csvGo=async function(){
 
 /* ---------- v96: the version badge is set here, from the code that is actually running, so it can never disagree with app.js even if index.html on the server is out of date.
    Home Screen self-update: on every launch the app asks the server for the newest app.js (bypassing the cache); if it carries a newer version, the page reloads once from a fresh address. Records stay in the same storage. ---------- */
-const PT_VER='v1';
+const PT_VER='v2';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_VER};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
