@@ -1307,6 +1307,7 @@ window.csvGo=async function(){
  +'#calcbox.on{display:block}'
  +'#calcbox .cc{display:flex;justify-content:space-between;align-items:center;color:#8e8e93;font-size:12px;padding:0 2px}#calcbox .cb{display:flex;gap:6px}'
  +'#calcbox .cc button{min-height:0;height:26px;padding:0 10px;margin:0;width:auto;font-size:12px;border-radius:13px;border:0;background:#333;color:#fff}'
+ +'#calcbox .cw{display:flex;align-items:center}#calcbox .cr{flex:1;min-width:0;touch-action:none}#calcbox .cc button.bk,#calcbox .cw button.bk{min-height:0;height:32px;width:34px;padding:0;margin:0;border:0;background:transparent;color:#8e8e93;font-size:20px;flex:0 0 34px}'
  +'#calcbox .cr{color:#fff;text-align:right;font:300 44px/1.1 -apple-system,"SF Pro Display",system-ui,sans-serif;padding:8px 4px 10px;min-height:62px;white-space:nowrap;overflow:hidden}'
  +'#calcbox .ck{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}'
  +'#calcbox .ck button{min-height:0;height:50px;width:100%;padding:0;margin:0;border:0;border-radius:25px;font:400 22px -apple-system,system-ui,sans-serif;background:#333;color:#fff;-webkit-tap-highlight-color:transparent}'
@@ -1328,7 +1329,8 @@ window.csvGo=async function(){
  function key(k){
   if(cur==='Error'&&k!='C'){if(/^[0-9.]$/.test(k)){cur='0';acc=null;op=null;fresh=false;eqd=false;lastOp=null;typed=false}else{paint();return}}
   if(!k){paint();return}
-  if(k=='C'){if(typed&&cur!=='0'&&cur!=='Error'){cur='0';typed=false;fresh=!!op}else{cur='0';acc=null;op=null;fresh=false;eqd=false;lastOp=null;typed=false}}
+  if(k=='bs'){if(typed&&!fresh){cur=cur.slice(0,-1);if(cur===''||cur==='-')cur='0'}}
+  else if(k=='C'){if(typed&&cur!=='0'&&cur!=='Error'){cur='0';typed=false;fresh=!!op}else{cur='0';acc=null;op=null;fresh=false;eqd=false;lastOp=null;typed=false}}
   else if(k=='N'){if(cur!=='0'){cur=cur[0]=='-'?cur.slice(1):'-'+cur}else if(!fresh){cur='-0'}}
   else if(k=='%'){const v=num();if(op&&(op=='+'||op=='-')&&acc!=null)setRes(acc*v/100);else setRes(v/100);typed=false;fresh=false;if(!op)eqd=true}
   else if('+-*/'.includes(k)){
@@ -1348,12 +1350,16 @@ window.csvGo=async function(){
   f.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2.5" width="14" height="19" rx="2.5"/><rect x="8" y="5.5" width="8" height="3.5" rx=".8"/><path d="M8.5 13h.01M12 13h.01M15.5 13h.01M8.5 16.5h.01M12 16.5h.01M15.5 16.5h.01"/></svg>';
   const b=document.createElement('div');b.id='calcbox';b.setAttribute('role','dialog');b.setAttribute('aria-label','Calculator');
   const K=[['C','fn','AC'],['N','fn','\u00b1'],['%','fn','%'],['/','op',SYM['/']],['7'],['8'],['9'],['*','op',SYM['*']],['4'],['5'],['6'],['-','op',SYM['-']],['1'],['2'],['3'],['+','op',SYM['+']],['0','z'],['.'],['=','op','=']];
-  b.innerHTML='<div class="cc"><span>Calculator</span><span class="cb"><button type="button" data-k="copy">Copy</button><button type="button" data-k="min" aria-label="Minimize calculator" style="width:34px;font-weight:700">\u2014</button></span></div><div class="cr">0</div><div class="ck">'
+  b.innerHTML='<div class="cc"><span>Calculator</span><span class="cb"><button type="button" data-k="copy">Copy</button><button type="button" data-k="min" aria-label="Minimize calculator" style="width:34px;font-weight:700">\u2014</button></span></div><div class="cw"><button type="button" class="bk" data-k="bs" aria-label="Delete last digit">\u232b</button><div class="cr">0</div></div><div class="ck">'
    +K.map(([k,c,t])=>'<button type="button" class="'+(c||'')+'" data-k="'+k+'">'+(t||k)+'</button>').join('')+'</div>';
   b.addEventListener('click',e=>{const t=e.target.closest('button');if(!t)return;const k=t.dataset.k;
    if(k=='min'){b.classList.remove('on');f.setAttribute('aria-expanded','false');return}
    if(k=='copy'){const v=shown().replace(/,/g,'');if(v&&v!=='Error'&&navigator.clipboard)navigator.clipboard.writeText(v).then(()=>{t.textContent='Copied';setTimeout(()=>t.textContent='Copy',1200)}).catch(()=>{});return}
    key(k)});
+  {let sx=null,sy=0;const d=b.querySelector('.cr');
+   d.addEventListener('pointerdown',e=>{sx=e.clientX;sy=e.clientY});
+   d.addEventListener('pointerup',e=>{if(sx==null)return;const dx=e.clientX-sx,dy=e.clientY-sy;sx=null;if(Math.abs(dx)>24&&Math.abs(dx)>Math.abs(dy)*1.5)key('bs')});
+   d.addEventListener('pointercancel',()=>{sx=null})}
   f.onclick=()=>{b.classList.toggle('on');f.setAttribute('aria-expanded',b.classList.contains('on'))};
   document.body.appendChild(b);document.body.appendChild(f);paint()}
  if(document.body)build();else document.addEventListener('DOMContentLoaded',build);
@@ -1362,7 +1368,7 @@ window.csvGo=async function(){
 
 /* ---------- v96: the version badge is set here, from the code that is actually running, so it can never disagree with app.js even if index.html on the server is out of date.
    Home Screen self-update: on every launch the app asks the server for the newest app.js (bypassing the cache); if it carries a newer version, the page reloads once from a fresh address. Records stay in the same storage. ---------- */
-const PT_VER='v100';
+const PT_VER='v1';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_VER};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
