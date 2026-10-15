@@ -328,16 +328,20 @@ function svCopy(){const l=svList().map(x=>x[0]).sort((p,q)=>key(p)-key(q));if(!l
 function delRec(i){if(!confirm('Delete this saved record?'))return;S.records.splice(i,1);renderRecs();store()}
 function delAllRecs(){if(!confirm('Delete all '+S.records.length+' saved records from this phone?'))return;S.records=[];renderRecs();store()}
 /* v83: the list below the controls is its own piece (svBody) so typing in the search box redraws only the list and the keyboard stays open */
-/* v93: Saved rows alternate white / light grey by week (Sunday to Saturday) when sorted by date; this week is white, last week grey, and so on. */
+/* v97: Work invoices sorted by date are grouped under a small heading per week (Sunday to Saturday) with how many were done that week. Expenses are not grouped. */
 const wkStart=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate()-d.getDay());
-function wkBand(r){const t=recDate(r);if(t==null)return 0;const a=wkStart(new Date()),b=wkStart(new Date(t));return Math.abs(Math.round((a-b)/6048e5))%2}
+function wkKey(r){const t=recDate(r);return t==null?'none':+wkStart(new Date(t))}
+function wkTitle(k){if(k==='none')return 'No date';const a=new Date(k),b=new Date(a.getFullYear(),a.getMonth(),a.getDate()+6),f=(d,m)=>d.toLocaleDateString('en-US',m?{month:'short',day:'numeric'}:{day:'numeric'}),cur=+wkStart(new Date())===k;
+ return (cur?'This week \u00b7 ':'')+f(a,1)+' \u2013 '+f(b,a.getMonth()!==b.getMonth())}
+function grpRows(list,row,on){if(!on)return list.map(row).join('');const n={};list.forEach(([r])=>{const k=wkKey(r);n[k]=(n[k]||0)+1});let last,h='';
+ list.forEach(e=>{const k=wkKey(e[0]);if(k!==last){h+='<h4>'+wkTitle(k==='none'?k:+k)+' \u00b7 '+n[k]+(n[k]==1?' invoice':' invoices')+'</h4>';last=k}h+=row(e)});return h}
 function svBody(){
- const x=S.sv.sec=='x',banded=/^d/.test(sortFor(x)),q=svSearching(),list=svList(),tot=+list.reduce((s,[r])=>s+(recAmt(r)||0),0).toFixed(2),T=totals(),trow=(l,v)=>`<div class="srow"><div class="sm">${l}</div><b>${M(v)}</b></div>`,
+ const x=S.sv.sec=='x',grp=!x&&/^d/.test(sortFor(x)),q=svSearching(),list=svList(),tot=+list.reduce((s,[r])=>s+(recAmt(r)||0),0).toFixed(2),T=totals(),trow=(l,v)=>`<div class="srow"><div class="sm">${l}</div><b>${M(v)}</b></div>`,
  row=([r,i])=>{const pur=r.mode=='purchase',nm=esc((pur?niceMerch(r.merchant):r.client)||(pur?'Receipt':'Work invoice')),sub=[pur?r.date:r.jobDate,pur?r.category:null,r.location].filter(Boolean).map(esc).join(' · ');
-  return `<div class="srow tap${banded?' wk'+wkBand(r):''}" role="button" tabindex="0" onclick="openRec(${i})" onkeydown="if(event.key=='Enter')openRec(${i})"><div class="sm"><div class="s1">${nm}</div>${sub?`<div class="s2">${sub}</div>`:''}</div><b>${M(recAmt(r))}</b><button class="x" onclick="event.stopPropagation();delRec(${i})" aria-label="Delete saved record">✕</button></div>`};
+  return `<div class="srow tap" role="button" tabindex="0" onclick="openRec(${i})" onkeydown="if(event.key=='Enter')openRec(${i})"><div class="sm"><div class="s1">${nm}</div>${sub?`<div class="s2">${sub}</div>`:''}</div><b>${M(recAmt(r))}</b></div>`};
  let lbl;if(q)lbl=list.length+' match'+(list.length==1?'':'es')+(x&&S.sv.cat!='All'?' in '+S.sv.cat:'');else lbl=x&&S.sv.cat!='All'?list.length+' in '+S.sv.cat:list.length+' '+(x?'expense':'work invoice')+(list.length==1?'':'s');
  let none='';if(!list.length){if(q){const toks=svTok(S.sv.q),o=S.records.filter(r=>(r.mode=='purchase')!=x&&recMatch(r,toks)).length;none='<div class="empty2">No matches for “'+esc(S.sv.q.trim())+'”.'+(x&&S.sv.cat!='All'?'<br>Try the All category.':'')+(o?'<br><button onclick="svOther()" style="margin-top:10px">Show '+o+' in '+(x?'Work invoices':'Expenses')+'</button>':'')+'</div>'}else none='<div class="empty2">'+(x?'No expenses saved yet.':'No work invoices saved yet.')+'</div>'}
- return (list.length?'<div class="svsum"><span>'+lbl+'</span><b>'+M(tot)+'</b></div><div class="sl'+(banded?' wkl':'')+'">'+list.map(row).join('')+'</div>':none)
+ return (list.length?'<div class="svsum"><span>'+lbl+'</span><b>'+M(tot)+'</b></div><div class="sl">'+grpRows(list,row,grp)+'</div>':none)
  +(x&&T.n&&S.sv.cat=='All'&&!q?`<div class="sl"><h4>Expense totals</h4>${T.months.map(([l,v])=>trow(l,v)).join('')}${T.years.length>1?T.years.map(([l,v])=>trow(l+' total',v)).join(''):''}${T.cats.map(([l,v])=>trow(l,v)).join('')}${trow('Total expenses',T.all)}</div>`:'')
  +(list.length?'<button class="pri" onclick="svCopy()">Copy '+(list.length==1?'this record':'these '+list.length+' records')+'</button>':'')
  +(list.length?'<button onclick="csvOpen()">Export CSV…</button>':'')
@@ -858,8 +862,9 @@ function dupWarn(){const el=$('#dupwarn');if(!el)return;const r=S.rec,m=r&&r.loa
 function openRec(i){const r=S.records[i];if(!r)return;closeRec();const{t,G}=rows(r),
  h=G.map(g=>'<div class="rg">'+g.rows.map(([l,v,hl])=>`<div class="rr${hl?' hl':''}${g.k=='tot'?' tt':''}"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join('')+'</div>').join(''),
  o=document.createElement('div');o.id='recmodal';o.className='rmo';o.onclick=e=>{if(e.target===o)closeRec()};
- o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${h}</div><div class="rmf"><button class="pri" onclick="dlRec(${i})">Download PDF</button><button onclick="editRec(${i})">Edit</button><button onclick="closeRec()">Close</button></div></div>`;
+ o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${h}</div><div class="rmf"><button class="pri" onclick="dlRec(${i})">Download PDF</button><button onclick="editRec(${i})">Edit</button><button onclick="delOpen(${i})" style="color:#b3261e">Delete</button><button onclick="closeRec()">Close</button></div></div>`;
  document.body.appendChild(o);document.body.style.overflow='hidden'}
+function delOpen(i){if(!S.records[i])return;if(!confirm('Delete this saved record? This cannot be undone.'))return;S.records.splice(i,1);closeRec();renderRecs();store()}
 function closeRec(){const o=$('#recmodal');if(o)o.remove();document.body.style.overflow=''}
 function dlRec(i){const r=S.records[i];if(r)saveCombo(r)}
 /* v78: open a saved record back in the form. Saving then updates that same record instead of adding a copy. */
@@ -873,7 +878,6 @@ function editRec(i){const r=S.records[i];if(!r)return;
  render();renderPages();window.scrollTo(0,0)}
 document.addEventListener('keydown',e=>{if(e.key=='Escape')closeRec()});
 (function(){const s=document.createElement('style');s.textContent='#view{height:auto;min-height:120px;touch-action:pan-y}#layer{touch-action:auto!important}.zbtn{position:absolute;top:8px;right:8px;z-index:3;padding:6px 12px;font-size:13px;font-weight:700;border-radius:999px;background:rgba(255,255,255,.92);box-shadow:0 1px 4px rgba(0,0,0,.25)}'
- +'.sl.wkl{overflow:hidden}.sl.wkl .srow{margin:0 -14px;padding-left:14px;padding-right:14px}.sl.wkl .srow.wk1{background:#eceeef}'
  +'.srow.tap{cursor:pointer}.srow.tap:active{background:rgba(0,0,0,.04)}'
  +'.dup{display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:10px 12px;border:1px solid #e0a59b;background:var(--warn);border-radius:12px;font-size:14px}.dup>div{flex:1;min-width:0}.dup b{display:block}.dup span{display:block;font-size:13px;overflow-wrap:anywhere}.dup button{flex:0 0 auto;padding:8px 14px;font-weight:700}'
  +'.rmo{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center}'
@@ -881,7 +885,7 @@ document.addEventListener('keydown',e=>{if(e.key=='Escape')closeRec()});
  +'.rmh{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}.rmh h3{margin:0}.rmh .x{width:34px;height:34px;padding:0}'
  +'.rmb{overflow-y:auto;flex:1;min-height:0}.rg{background:var(--card);border:1px solid var(--ln);border-radius:14px;padding:4px 14px;margin:0 0 10px}'
  +'.rr{display:flex;justify-content:space-between;gap:12px;padding:7px 0;font-size:14px}.rr+.rr{border-top:1px solid var(--ln)}.rr span{color:var(--mut)}.rr b{text-align:right;overflow-wrap:anywhere}.rr.hl b{background:#fff2a8;padding:0 4px;border-radius:4px}.rr.tt{font-weight:700}'
- +'.rmf{display:flex;gap:10px;margin-top:6px}.rmf button{flex:1}';document.head.appendChild(s)})();
+ +'.rmf{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}.rmf button{flex:1 1 40%}';document.head.appendChild(s)})();
 (function(){const s=document.createElement('style');s.textContent=['.sv{display:flex;flex-direction:column;gap:10px}.sv .sl{margin:0}.sv>button{width:100%}.sv .seg{margin:0}','.chips{display:flex;flex-wrap:wrap;gap:6px}.chips button{padding:6px 12px;border-radius:999px;font-size:13px;font-weight:600;background:#fff;color:var(--mut);border-color:var(--ln)}.chips button.on{background:var(--g);color:#fff;border-color:var(--g)}','.srt{display:flex;align-items:center;gap:10px}','.svs{position:relative}.svs input{padding-right:44px;-webkit-appearance:none;appearance:none}.svs input::-webkit-search-cancel-button{-webkit-appearance:none;display:none}.svs button{position:absolute;right:2px;top:50%;transform:translateY(-50%);border:0;background:transparent;padding:8px 12px;color:var(--mut);width:auto}.sv>.svs{margin:0}#svbody>button{width:100%}.tr{display:grid;grid-template-columns:minmax(0,1fr) 88px 88px;column-gap:6px;align-items:baseline;padding:9px 0;font-size:14px;overflow-wrap:anywhere}.tr+.tr{border-top:1px solid var(--ln)}.tr>:not(:first-child){text-align:right;white-space:nowrap}.tr b{font-weight:600}.tr .z,.tr b.z{color:var(--mut);font-weight:400}.tr.tot{font-weight:700}.tr.tot b{font-weight:700}.tr.th{border:0;padding:10px 0 2px;font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}.fixn{font-size:12px;color:var(--gd,#2f6b4f);margin-top:4px;line-height:1.4}.fixn[hidden]{display:none}.fixn a{color:inherit;font-weight:700}.srt label{flex:0 0 auto;margin:0}','.svsum{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:var(--mut);padding:0 2px}.svsum b{color:var(--fg);font-size:17px}','.sm{flex:1;min-width:0}.s1{font-weight:600;overflow-wrap:anywhere}.s2{font-size:12px;color:var(--mut);margin-top:1px}','.empty2{border:2px dashed var(--ln);border-radius:16px;padding:28px 16px;text-align:center;color:var(--mut)}','@media(max-width:900px){.nav button{padding:10px 6px;font-size:14px}}'].join('');document.head.appendChild(s)})();
 (function(){const s=document.createElement('style');s.textContent='.sl{background:var(--card);border:1px solid var(--ln);border-radius:14px;padding:6px 14px;margin:10px 0}.sl h4{margin:10px 0 2px;font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}.srow{display:flex;align-items:center;gap:10px;padding:9px 0;font-size:14px}.srow+.srow{border-top:1px solid var(--ln)}.srow span{flex:1;min-width:0}.srow b{white-space:nowrap}.srow .x{flex:0 0 32px;height:32px;padding:0}#f_category{width:100%}input[type=time]{padding-inline:8px;font-size:15px;min-width:0}';document.head.appendChild(s)})();
 
@@ -1303,18 +1307,24 @@ window.csvGo=async function(){
  +'#calcbox .ck{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px}'
  +'#calcbox .ck button{min-height:44px;height:44px;padding:0;font-size:19px;font-weight:600;border-radius:10px;margin:0;width:auto}'
  +'#calcbox .ck .op{background:var(--ext);color:var(--gd)}#calcbox .ck .eq{background:var(--g);color:#fff;border-color:var(--g)}'
- +'#calcbox .cc{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:12px;color:var(--mut)}#calcbox .cc button{min-height:0;height:26px;padding:0 10px;font-size:12px;border-radius:8px;width:auto;margin:0}'
+ +'#calcbox .cc{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:12px;color:var(--mut)}#calcbox .cb{display:flex;gap:6px}#calcbox .cc button{min-height:0;height:26px;padding:0 10px;font-size:12px;border-radius:8px;width:auto;margin:0}'
  +'#app{padding-bottom:calc(70px + env(safe-area-inset-bottom,0px))}';
  document.head.appendChild(css);
  let ex='',res='',done=false;
  const OPS={'/':'÷','*':'×','-':'−','+':'+'},pretty=s=>s.replace(/[/*\-+]/g,c=>' '+OPS[c]+' ').replace(/\s+/g,' ').trim();
  const fmt=n=>{if(!isFinite(n))return 'Error';n=+n.toPrecision(12);return n.toLocaleString('en-US',{maximumFractionDigits:6})};
- function calcNow(s){s=s.replace(/[+\-*/.]+$/,'');if(!s||!/^[0-9+\-*/.() ]+$/.test(s)||/[+\-*/]{3,}|\.\d*\./.test(s))return null;try{const v=Function('"use strict";return ('+s+')')();return typeof v=='number'&&isFinite(v)?v:null}catch(e){return null}}
+ function calcNow(s){s=String(s).replace(/\s+/g,'').replace(/[+\-*/.]+$/,'');if(!s||!/^[0-9+\-*/.()]+$/.test(s))return null;let i=0,bad=false;
+  const expr=()=>{let v=term();while(s[i]=='+'||s[i]=='-'){const o=s[i++],r=term();v=o=='+'?v+r:v-r}return v},
+   term=()=>{let v=fac();while(s[i]=='*'||s[i]=='/'){const o=s[i++],r=fac();v=o=='*'?v*r:v/r}return v},
+   fac=()=>{if(s[i]=='-'){i++;return -fac()}if(s[i]=='+'){i++;return fac()}
+    if(s[i]=='('){i++;const v=expr();if(s[i]==')')i++;else if(i<s.length)bad=true;return v}
+    const m=s.slice(i).match(/^(?:\d+\.?\d*|\.\d+)/);if(!m){bad=true;return 0}i+=m[0].length;return parseFloat(m[0])};
+  const v=expr();return bad||i<s.length||!isFinite(v)?null:v}
  function paint(){const b=document.getElementById('calcbox');if(!b)return;b.querySelector('.ce').textContent=pretty(ex);const v=calcNow(ex);b.querySelector('.cr').textContent=done?res:(ex&&v!=null&&/[+\-*/]/.test(ex.replace(/^-/,''))?'= '+fmt(v):(ex?'':'0'))}
  function key(k){
   if(k=='C'){ex='';res='';done=false}
   else if(k=='<'){if(done){ex='';done=false}else ex=ex.slice(0,-1)}
-  else if(k=='='){const v=calcNow(ex);if(v!=null){res=fmt(v);ex=String(+v.toPrecision(12));done=true}}
+  else if(k=='='){if(!ex)return;const v=calcNow(ex);if(v!=null){res=fmt(v);ex=String(+v.toPrecision(12))}else res='Error';done=true}
   else{const isOp='+-*/'.includes(k);
    if(done&&!isOp){ex='';}done=false;
    if(isOp){if(!ex){if(k!='-')return}else if(/[+\-*/]$/.test(ex)&&!(k=='-'&&/[*/]$/.test(ex)))ex=ex.replace(/[+\-*/]+$/,'')}
@@ -1326,9 +1336,9 @@ window.csvGo=async function(){
   f.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2.5" width="14" height="19" rx="2.5"/><rect x="8" y="5.5" width="8" height="3.5" rx=".8"/><path d="M8.5 13h.01M12 13h.01M15.5 13h.01M8.5 16.5h.01M12 16.5h.01M15.5 16.5h.01"/></svg>';
   const b=document.createElement('div');b.id='calcbox';b.setAttribute('role','dialog');b.setAttribute('aria-label','Calculator');
   const rows=[['C','<','/','*'],['7','8','9','-'],['4','5','6','+'],['1','2','3','='],['0','.','(',')']];
-  b.innerHTML='<div class="cc"><span>Quick math</span><button type="button" data-k="copy">Copy</button></div><div class="cd"><div class="ce"></div><div class="cr">0</div></div><div class="ck">'
+  b.innerHTML='<div class="cc"><span>Quick math</span><span class="cb"><button type="button" data-k="copy">Copy</button><button type="button" data-k="min" aria-label="Minimize calculator" style="font-weight:700;width:34px">\u2014</button></span></div><div class="cd"><div class="ce"></div><div class="cr">0</div></div><div class="ck">'
    +rows.map(r=>r.map(k=>{const cls='/*-+'.includes(k)?'op':k=='='?'eq':'';const t=k=='<'?'⌫':OPS[k]||k;return '<button type="button" class="'+cls+'" data-k="'+k+'">'+t+'</button>'}).join('')).join('')+'</div>';
-  b.addEventListener('click',e=>{const t=e.target.closest('button');if(!t)return;const k=t.dataset.k;if(k=='copy'){const v=done?res:(calcNow(ex)!=null?fmt(calcNow(ex)):'');if(v&&navigator.clipboard)navigator.clipboard.writeText(v.replace(/,/g,'')).then(()=>{t.textContent='Copied';setTimeout(()=>t.textContent='Copy',1200)}).catch(()=>{});return}key(k)});
+  b.addEventListener('click',e=>{const t=e.target.closest('button');if(!t)return;const k=t.dataset.k;if(k=='min'){b.classList.remove('on');f.setAttribute('aria-expanded','false');return}if(k=='copy'){const v=done?res:(calcNow(ex)!=null?fmt(calcNow(ex)):'');if(v&&navigator.clipboard)navigator.clipboard.writeText(v.replace(/,/g,'')).then(()=>{t.textContent='Copied';setTimeout(()=>t.textContent='Copy',1200)}).catch(()=>{});return}key(k)});
   f.onclick=()=>{b.classList.toggle('on');f.setAttribute('aria-expanded',b.classList.contains('on'))};
   document.body.appendChild(b);document.body.appendChild(f)}
  if(document.body)build();else document.addEventListener('DOMContentLoaded',build);
@@ -1337,7 +1347,7 @@ window.csvGo=async function(){
 
 /* ---------- v96: the version badge is set here, from the code that is actually running, so it can never disagree with app.js even if index.html on the server is out of date.
    Home Screen self-update: on every launch the app asks the server for the newest app.js (bypassing the cache); if it carries a newer version, the page reloads once from a fresh address. Records stay in the same storage. ---------- */
-const PT_VER='v96';
+const PT_VER='v99';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_VER};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
