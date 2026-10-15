@@ -345,7 +345,7 @@ function parse1(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(
    const nv=re=>{for(const raw of L){const m=fix(raw).match(re);if(m)return m}return null};
    {const m=nv(/^(?:(round[\s-]*trip|one[\s-]*way)(?:\s*(?:miles?|mileage|distance))?|mileage|miles|distance)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(?:mi\b|miles?\b)?(.*)$/i);if(m){let v=+m[2];if(/one/i.test(m[1]||'')||/one[\s-]*way/i.test(m[3]||''))v=v*2;set('roundTrip',String(+v.toFixed(2)))}}
    if(drow.length){const r=drow.map(l=>l.match(tri)),h=r.reduce((a,m)=>a+ +m[1],0),amt=r.reduce((a,m)=>a+ +m[3].replace(/,/g,''),0),low=Math.min(...r.map(m=>+m[2].replace(/,/g,'')));
-    set('hours',String(h));if(!found.amount)set('amount',amt.toFixed(2));
+    set('hours',String(h));if(!found.amount||(!(+String(F.amount).replace(/,/g,'')>0)&&amt>0))set('amount',amt.toFixed(2));
     const ot=L.filter(l=>!/^\d{1,2}\/\d{1,2}\/\d{2,4}/.test(l)&&tri.test(l)).map(l=>l.match(tri)).filter(m=>+m[2].replace(/,/g,'')>low+.01).reduce((a,m)=>a+ +m[1],0);
     const sub=L.filter(l=>!/^\d{1,2}\/\d{1,2}\/\d{2,4}/.test(l)&&tri.test(l)).map(l=>l.match(tri)),money=v=>'$'+(+v.replace(/,/g,'')).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
     if(ot){set('overtime',String(ot));set('hours',String(+(h-ot).toFixed(2)));delete F.notes;delete found.notes;
@@ -354,8 +354,10 @@ function parse1(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(
  if(mode!=='purchase'&&!(typeof drow!=='undefined'&&drow.length)){const tr2=timeRows(L);
   if(tr2.length){const reg=tr2.filter(r=>!r.ot),ot2=tr2.filter(r=>r.ot),sm=(a,k)=>+a.reduce((t,r)=>t+r[k],0).toFixed(2);
    if(reg.length)set('hours',String(sm(reg,'h')));if(ot2.length)set('overtime',String(sm(ot2,'h')));
-   if(!found.amount)set('amount',sm(tr2,'a').toFixed(2));
-   if(/\bestimate\b/i.test(text)&&/\best\.?\s*\$?\d/i.test(text)&&!F.notes)set('notes','Invoice is an estimate ("est."): hours and pay may change when final.')}}
+   const sum=sm(tr2,'a'),zero=found.amount&&!(+String(F.amount).replace(/,/g,'')>0);
+   if(!found.amount||(zero&&sum>0))set('amount',sum.toFixed(2));
+   if(/\bestimate\b/i.test(text)&&/\best\.?\s*\$?\d/i.test(text)&&!F.notes)set('notes','Invoice is an estimate ("est."): hours and pay may change when final.');
+   if(zero&&sum>0)F.notes=(F.notes?F.notes+' ':'')+'Printed total was $0.00, so the amount is the sum of the line items.'}}
  var shifts=[];
  if(mode!=='purchase'){
   const T=/(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m?\.?\s*(?:-|–|—|to)\s*(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m?\.?|(\d{1,2}):(\d{2})\s*(?:-|–|—|to)\s*(\d{1,2}):(\d{2})|(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m?\.?\s*(?:-|–|—|to)\s*(\d{1,2})(?::(\d{2}))?(?!\s*[:\d]|\s*[ap]\.?m)/gi;
@@ -395,7 +397,7 @@ function parse(text,mode,alts){const R=parse1(text,mode);if(mode!=='purchase'||!
 function pd(s){s=String(s||'').trim();let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);if(m)return new Date(+m[1],m[2]-1,+m[3]);
  m=s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2}|\d{4})$/);if(m&&+m[1]>=1&&+m[1]<=12&&+m[2]>=1&&+m[2]<=31){let y=+m[3];if(y<100)y+=2000;return new Date(y,m[1]-1,+m[2])}
  const d=new Date(s);return isNaN(d)?null:new Date(d.getFullYear(),d.getMonth(),d.getDate())}
-function net30(s,days){const d=pd(s);if(!d)return null;d.setDate(d.getDate()+(days||30));const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())}
+function net30(s,days){const d=pd(s);if(!d)return null;if(!days){const y=d.getFullYear(),m=d.getMonth(),last=new Date(y,m+2,0).getDate();d.setFullYear(y,m+1,Math.min(d.getDate(),last))}else d.setDate(d.getDate()+days);const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())}
 function irs(s){const d=pd(s);if(!d)return null;const y=d.getFullYear();if(y==2025)return 0.70;if(y==2026)return d>=new Date(2026,6,1)?0.76:0.725;return null}
 const dateIn=s=>findDate(s||'');
 const api={parse,pd,net30,irs,dateIn,cityState};if(typeof module!=='undefined')module.exports=api;root.Parser=api})(typeof globalThis!=='undefined'?globalThis:this);

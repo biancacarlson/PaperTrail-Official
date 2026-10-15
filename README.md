@@ -36,7 +36,7 @@ It runs in your browser. Upload a receipt, invoice, screenshot or photo, check t
 - Reads employer, client, job dates, location, hours and amount. Times like `7:00 AM - 11:00 AM` or per-day hour rows fill in automatically. A lone `#1042` or `INV-2026-0042` is read as the invoice number
 - **Shifts:** one row per shift (date, start, end, hours). A split shift is two rows on the same date. Regular and overtime hours are totaled, and saved records and PDFs show each shift plus a split-day total
 - **Wear and tear:** calculated from the IRS business mileage rate for the job date
-- **Net 30:** payout date is calculated from the event end date. **Add to Calendar** creates an event with the amount in the title (e.g. `Net-30 payout $1,250.00 - Client`), and the notes list amount, client, invoice #, job and end dates, location and hours
+- **Net 30:** payout date is the same date one month after the event end date (10/21 becomes 11/21). **Add to Calendar** creates an event with the amount in the title (e.g. `Net-30 payout $1,250.00 - Client`), and the notes list amount, client, invoice #, job and end dates, location and hours
 - **Invoice viewer:** shown at full height, so dragging scrolls the page. Pinch or tap **Enlarge** to zoom; while zoomed, one finger pans. **Reset zoom** (or pinching out) goes back. Tapping a word still picks it
 
 **Mileage:** PaperTrail does not look up distance. Tap **Search in Safari** or **Search in Chrome**, then type the result into **Round-trip miles**.
@@ -82,3 +82,6 @@ PaperTrail is a recordkeeping tool, not tax, accounting or legal advice, and it 
 
 ## License
 MIT, see `LICENSE`. Provided as is, without warranty.
+
+- **Calculator:** the round calculator button in the corner opens a small pad for quick math while you check a job. It stores nothing.
+- **$0 estimates:** when an invoice prints a $0.00 total but lists billed lines (hours x rate), the amount is the sum of those lines.
