@@ -86,3 +86,4 @@ MIT, see `LICENSE`. Provided as is, without warranty.
 - **Calculator:** the round calculator button in the corner opens a small pad for quick math while you check a job. It stores nothing.
 - **$0 estimates:** when an invoice prints a $0.00 total but lists billed lines (hours x rate), the amount is the sum of those lines.
 - **Updates on the Home Screen app:** each launch checks the server for a newer app.js and reloads once to pick it up. A copy installed before v95 needs the new files uploaded and one manual refresh to get this (force-quit and reopen after the new files are live).
+- **Version badge:** v-1, v-2, v-3 and so on. Each release bumps four things together: `PT_BUILD` (a plain number that only goes up) and `PT_LABEL` at the end of `docs/app.js`, `V` at the top of `docs/parser.js`, and the three `?v=` numbers in `docs/index.html` (plus the badge text there). The Home Screen app updates itself by comparing the build number.

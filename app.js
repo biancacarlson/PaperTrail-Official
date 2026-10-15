@@ -1377,18 +1377,24 @@ window.csvGo=async function(){
  document.addEventListener('keydown',e=>{const b=document.getElementById('calcbox');if(e.key=='Escape'&&b)b.classList.remove('on')});
 })();
 
-/* ---------- v96: the version badge is set here, from the code that is actually running, so it can never disagree with app.js even if index.html on the server is out of date.
-   Home Screen self-update: on every launch the app asks the server for the newest app.js (bypassing the cache); if it carries a newer version, the page reloads once from a fresh address. Records stay in the same storage. ---------- */
-const PT_VER='vv1';
+/* ---------- Version + Home Screen self-update.
+   PT_BUILD is a plain number that only ever goes up (200, 201, 202...). PT_LABEL is what shows on screen (v-1, v-2...). Bump both, plus parser.js (V) and the ?v= numbers in index.html, on every release.
+   On launch the app asks the server for the newest app.js (bypassing the cache); if its build is higher, the page reloads once from a fresh address. Records stay in the same storage.
+   The two comment lines below are for older installed copies, which look for these exact patterns:
+   const PT_VER='v200'
+   const PT_VER='vv200'
+   ---------- */
+const PT_BUILD=200;
+const PT_LABEL='v-1';
 (function(){
- const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_VER};
+ const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
  async function check(){
   try{
    if(sessionStorage.getItem('pt-upd')==='1')return;
    const r=await fetch('app.js?chk='+Date.now(),{cache:'no-store'});if(!r.ok)return;
-   const m=(await r.text()).match(/const PT_VER='vv(\d+)'/);
-   if(m&&+m[1]>parseInt(PT_VER.slice(2))){
+   const m=(await r.text()).match(/const PT_BUILD=(\d+)/);
+   if(m&&+m[1]>PT_BUILD){
     sessionStorage.setItem('pt-upd','1');
     const u=new URL(location.href);u.searchParams.set('u',Date.now());location.replace(u.toString())}
   }catch(e){}}
