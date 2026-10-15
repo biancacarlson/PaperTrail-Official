@@ -85,4 +85,4 @@ MIT, see `LICENSE`. Provided as is, without warranty.
 
 - **Calculator:** the round calculator button in the corner opens a small pad for quick math while you check a job. It stores nothing.
 - **$0 estimates:** when an invoice prints a $0.00 total but lists billed lines (hours x rate), the amount is the sum of those lines.
-- **Updates on the Home Screen app:** each launch checks for a newer version and reloads once to pick it up. A copy installed before v95 needs one manual refresh to get this (force-quit and reopen after the new files are live).
+- **Updates on the Home Screen app:** each launch checks the server for a newer app.js and reloads once to pick it up. A copy installed before v95 needs the new files uploaded and one manual refresh to get this (force-quit and reopen after the new files are live).

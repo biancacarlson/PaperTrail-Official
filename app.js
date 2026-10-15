@@ -1335,17 +1335,18 @@ window.csvGo=async function(){
  document.addEventListener('keydown',e=>{const b=document.getElementById('calcbox');if(e.key=='Escape'&&b)b.classList.remove('on')});
 })();
 
-/* ---------- v95: self-update for the Home Screen app. iOS keeps old copies of index.html and the scripts for a long time. On every launch the app asks the server for the newest index.html
-   (bypassing the cache); if its version badge is newer than this one, the page reloads once from a fresh address so the new files load. Nothing is lost: records stay in the same storage. ---------- */
+/* ---------- v96: the version badge is set here, from the code that is actually running, so it can never disagree with app.js even if index.html on the server is out of date.
+   Home Screen self-update: on every launch the app asks the server for the newest app.js (bypassing the cache); if it carries a newer version, the page reloads once from a fresh address. Records stay in the same storage. ---------- */
+const PT_VER='v96';
 (function(){
- const cur=()=>{const e=document.getElementById('ver');return e?e.textContent.trim():''};
+ const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_VER};
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
  async function check(){
   try{
    if(sessionStorage.getItem('pt-upd')==='1')return;
-   const v=cur();if(!v)return;
-   const r=await fetch('index.html?chk='+Date.now(),{cache:'no-store'});if(!r.ok)return;
-   const m=(await r.text()).match(/id="ver">\s*(v\d+)\s*</);
-   if(m&&m[1]!==v&&parseInt(m[1].slice(1))>parseInt(v.slice(1))){
+   const r=await fetch('app.js?chk='+Date.now(),{cache:'no-store'});if(!r.ok)return;
+   const m=(await r.text()).match(/const PT_VER='v(\d+)'/);
+   if(m&&+m[1]>parseInt(PT_VER.slice(1))){
     sessionStorage.setItem('pt-upd','1');
     const u=new URL(location.href);u.searchParams.set('u',Date.now());location.replace(u.toString())}
   }catch(e){}}
