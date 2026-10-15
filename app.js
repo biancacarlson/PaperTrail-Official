@@ -330,14 +330,20 @@ function delAllRecs(){if(!confirm('Delete all '+S.records.length+' saved records
 /* v83: the list below the controls is its own piece (svBody) so typing in the search box redraws only the list and the keyboard stays open */
 /* v97: Work invoices sorted by date are grouped under a small heading per week (Sunday to Saturday) with how many were done that week. Expenses are not grouped. */
 const wkStart=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate()-d.getDay());
+/* v1: an invoice can cover several days (10/18 and 10/21, say). Each distinct shift date counts as a day worked. */
+function workDays(r){if(!r||r.mode=='purchase')return [];const m=new Map();(r.shifts||[]).filter(x=>x&&(N(x.hours)!=null||(x.start&&x.end))).forEach(x=>{const d=Parser.pd(x.date||r.jobDate);if(d)m.set(+d,d)});
+ if(!m.size){const d=Parser.pd(r.jobDate);if(d)m.set(+d,d)}return [...m.values()].sort((a,b)=>a-b)}
+function daysLbl(r){const d=workDays(r);if(d.length<2)return r.jobDate;const y=new Set(d.map(x=>x.getFullYear())).size==1,md=x=>(x.getMonth()+1)+'/'+x.getDate();
+ return y?d.map(md).join(', ')+'/'+d[d.length-1].getFullYear():d.map(x=>md(x)+'/'+x.getFullYear()).join(', ')}
 function wkKey(r){const t=recDate(r);return t==null?'none':+wkStart(new Date(t))}
 function wkTitle(k){if(k==='none')return 'No date';const a=new Date(k),b=new Date(a.getFullYear(),a.getMonth(),a.getDate()+6),f=(d,m)=>d.toLocaleDateString('en-US',m?{month:'short',day:'numeric'}:{day:'numeric'}),cur=+wkStart(new Date())===k;
  return (cur?'This week \u00b7 ':'')+f(a,1)+' \u2013 '+f(b,a.getMonth()!==b.getMonth())}
-function grpRows(list,row){const g=[];list.forEach(e=>{const k=wkKey(e[0]),l=g[g.length-1];if(l&&l.k===k)l.r.push(e);else g.push({k,r:[e]})});
- return g.map(w=>'<div class="wkh"><span>'+wkTitle(w.k)+'</span><span>'+w.r.length+(w.r.length==1?' invoice':' invoices')+'</span></div><div class="sl">'+w.r.map(row).join('')+'</div>').join('')}
+function grpRows(list,row){const g=[],dc={};list.forEach(e=>{workDays(e[0]).forEach(d=>{const k=+wkStart(d);dc[k]=(dc[k]||0)+1});const k=wkKey(e[0]),l=g[g.length-1];if(l&&l.k===k)l.r.push(e);else g.push({k,r:[e]})});
+ const pl=(n,w)=>n+' '+w+(n==1?'':'s');
+ return g.map(w=>{const dn=w.k==='none'?0:dc[w.k]||0;return '<div class="wkh"><span>'+wkTitle(w.k)+'</span><span>'+(dn?pl(dn,'day')+' \u00b7 ':'')+pl(w.r.length,'invoice')+'</span></div><div class="sl">'+w.r.map(row).join('')+'</div>'}).join('')}
 function svBody(){
  const x=S.sv.sec=='x',grp=!x&&/^d/.test(sortFor(x)),q=svSearching(),list=svList(),tot=+list.reduce((s,[r])=>s+(recAmt(r)||0),0).toFixed(2),T=totals(),trow=(l,v)=>`<div class="srow"><div class="sm">${l}</div><b>${M(v)}</b></div>`,
- row=([r,i])=>{const pur=r.mode=='purchase',nm=esc((pur?niceMerch(r.merchant):r.client)||(pur?'Receipt':'Work invoice')),sub=[pur?r.date:r.jobDate,pur?r.category:null,r.location].filter(Boolean).map(esc).join(' · ');
+ row=([r,i])=>{const pur=r.mode=='purchase',nm=esc((pur?niceMerch(r.merchant):r.client)||(pur?'Receipt':'Work invoice')),sub=[pur?r.date:daysLbl(r),pur?r.category:null,r.location].filter(Boolean).map(esc).join(' · ');
   return `<div class="srow tap" role="button" tabindex="0" onclick="openRec(${i})" onkeydown="if(event.key=='Enter')openRec(${i})"><div class="sm"><div class="s1">${nm}</div>${sub?`<div class="s2">${sub}</div>`:''}</div><b>${M(recAmt(r))}</b></div>`};
  let lbl;if(q)lbl=list.length+' match'+(list.length==1?'':'es')+(x&&S.sv.cat!='All'?' in '+S.sv.cat:'');else lbl=x&&S.sv.cat!='All'?list.length+' in '+S.sv.cat:list.length+' '+(x?'expense':'work invoice')+(list.length==1?'':'s');
  let none='';if(!list.length){if(q){const toks=svTok(S.sv.q),o=S.records.filter(r=>(r.mode=='purchase')!=x&&recMatch(r,toks)).length;none='<div class="empty2">No matches for “'+esc(S.sv.q.trim())+'”.'+(x&&S.sv.cat!='All'?'<br>Try the All category.':'')+(o?'<br><button onclick="svOther()" style="margin-top:10px">Show '+o+' in '+(x?'Work invoices':'Expenses')+'</button>':'')+'</div>'}else none='<div class="empty2">'+(x?'No expenses saved yet.':'No work invoices saved yet.')+'</div>'}
@@ -1373,7 +1379,7 @@ window.csvGo=async function(){
 
 /* ---------- v96: the version badge is set here, from the code that is actually running, so it can never disagree with app.js even if index.html on the server is out of date.
    Home Screen self-update: on every launch the app asks the server for the newest app.js (bypassing the cache); if it carries a newer version, the page reloads once from a fresh address. Records stay in the same storage. ---------- */
-const PT_VER='v2';
+const PT_VER='vv1';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_VER};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
@@ -1381,8 +1387,8 @@ const PT_VER='v2';
   try{
    if(sessionStorage.getItem('pt-upd')==='1')return;
    const r=await fetch('app.js?chk='+Date.now(),{cache:'no-store'});if(!r.ok)return;
-   const m=(await r.text()).match(/const PT_VER='v(\d+)'/);
-   if(m&&+m[1]>parseInt(PT_VER.slice(1))){
+   const m=(await r.text()).match(/const PT_VER='vv(\d+)'/);
+   if(m&&+m[1]>parseInt(PT_VER.slice(2))){
     sessionStorage.setItem('pt-upd','1');
     const u=new URL(location.href);u.searchParams.set('u',Date.now());location.replace(u.toString())}
   }catch(e){}}
