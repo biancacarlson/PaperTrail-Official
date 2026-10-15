@@ -1334,3 +1334,20 @@ window.csvGo=async function(){
  if(document.body)build();else document.addEventListener('DOMContentLoaded',build);
  document.addEventListener('keydown',e=>{const b=document.getElementById('calcbox');if(e.key=='Escape'&&b)b.classList.remove('on')});
 })();
+
+/* ---------- v95: self-update for the Home Screen app. iOS keeps old copies of index.html and the scripts for a long time. On every launch the app asks the server for the newest index.html
+   (bypassing the cache); if its version badge is newer than this one, the page reloads once from a fresh address so the new files load. Nothing is lost: records stay in the same storage. ---------- */
+(function(){
+ const cur=()=>{const e=document.getElementById('ver');return e?e.textContent.trim():''};
+ async function check(){
+  try{
+   if(sessionStorage.getItem('pt-upd')==='1')return;
+   const v=cur();if(!v)return;
+   const r=await fetch('index.html?chk='+Date.now(),{cache:'no-store'});if(!r.ok)return;
+   const m=(await r.text()).match(/id="ver">\s*(v\d+)\s*</);
+   if(m&&m[1]!==v&&parseInt(m[1].slice(1))>parseInt(v.slice(1))){
+    sessionStorage.setItem('pt-upd','1');
+    const u=new URL(location.href);u.searchParams.set('u',Date.now());location.replace(u.toString())}
+  }catch(e){}}
+ if(document.readyState==='complete')setTimeout(check,800);else window.addEventListener('load',()=>setTimeout(check,800));
+})();
