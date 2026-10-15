@@ -333,15 +333,15 @@ const wkStart=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate()-d.getDay());
 function wkKey(r){const t=recDate(r);return t==null?'none':+wkStart(new Date(t))}
 function wkTitle(k){if(k==='none')return 'No date';const a=new Date(k),b=new Date(a.getFullYear(),a.getMonth(),a.getDate()+6),f=(d,m)=>d.toLocaleDateString('en-US',m?{month:'short',day:'numeric'}:{day:'numeric'}),cur=+wkStart(new Date())===k;
  return (cur?'This week \u00b7 ':'')+f(a,1)+' \u2013 '+f(b,a.getMonth()!==b.getMonth())}
-function grpRows(list,row,on){if(!on)return list.map(row).join('');const n={};list.forEach(([r])=>{const k=wkKey(r);n[k]=(n[k]||0)+1});let last,h='';
- list.forEach(e=>{const k=wkKey(e[0]);if(k!==last){h+='<h4>'+wkTitle(k==='none'?k:+k)+' \u00b7 '+n[k]+(n[k]==1?' invoice':' invoices')+'</h4>';last=k}h+=row(e)});return h}
+function grpRows(list,row){const g=[];list.forEach(e=>{const k=wkKey(e[0]),l=g[g.length-1];if(l&&l.k===k)l.r.push(e);else g.push({k,r:[e]})});
+ return g.map(w=>'<div class="wkh"><span>'+wkTitle(w.k)+'</span><span>'+w.r.length+(w.r.length==1?' invoice':' invoices')+'</span></div><div class="sl">'+w.r.map(row).join('')+'</div>').join('')}
 function svBody(){
  const x=S.sv.sec=='x',grp=!x&&/^d/.test(sortFor(x)),q=svSearching(),list=svList(),tot=+list.reduce((s,[r])=>s+(recAmt(r)||0),0).toFixed(2),T=totals(),trow=(l,v)=>`<div class="srow"><div class="sm">${l}</div><b>${M(v)}</b></div>`,
  row=([r,i])=>{const pur=r.mode=='purchase',nm=esc((pur?niceMerch(r.merchant):r.client)||(pur?'Receipt':'Work invoice')),sub=[pur?r.date:r.jobDate,pur?r.category:null,r.location].filter(Boolean).map(esc).join(' · ');
   return `<div class="srow tap" role="button" tabindex="0" onclick="openRec(${i})" onkeydown="if(event.key=='Enter')openRec(${i})"><div class="sm"><div class="s1">${nm}</div>${sub?`<div class="s2">${sub}</div>`:''}</div><b>${M(recAmt(r))}</b></div>`};
  let lbl;if(q)lbl=list.length+' match'+(list.length==1?'':'es')+(x&&S.sv.cat!='All'?' in '+S.sv.cat:'');else lbl=x&&S.sv.cat!='All'?list.length+' in '+S.sv.cat:list.length+' '+(x?'expense':'work invoice')+(list.length==1?'':'s');
  let none='';if(!list.length){if(q){const toks=svTok(S.sv.q),o=S.records.filter(r=>(r.mode=='purchase')!=x&&recMatch(r,toks)).length;none='<div class="empty2">No matches for “'+esc(S.sv.q.trim())+'”.'+(x&&S.sv.cat!='All'?'<br>Try the All category.':'')+(o?'<br><button onclick="svOther()" style="margin-top:10px">Show '+o+' in '+(x?'Work invoices':'Expenses')+'</button>':'')+'</div>'}else none='<div class="empty2">'+(x?'No expenses saved yet.':'No work invoices saved yet.')+'</div>'}
- return (list.length?'<div class="svsum"><span>'+lbl+'</span><b>'+M(tot)+'</b></div><div class="sl">'+grpRows(list,row,grp)+'</div>':none)
+ return (list.length?'<div class="svsum"><span>'+lbl+'</span><b>'+M(tot)+'</b></div>'+(grp?grpRows(list,row):'<div class="sl">'+list.map(row).join('')+'</div>'):none)
  +(x&&T.n&&S.sv.cat=='All'&&!q?`<div class="sl"><h4>Expense totals</h4>${T.months.map(([l,v])=>trow(l,v)).join('')}${T.years.length>1?T.years.map(([l,v])=>trow(l+' total',v)).join(''):''}${T.cats.map(([l,v])=>trow(l,v)).join('')}${trow('Total expenses',T.all)}</div>`:'')
  +(list.length?'<button class="pri" onclick="svCopy()">Copy '+(list.length==1?'this record':'these '+list.length+' records')+'</button>':'')
  +(list.length?'<button onclick="csvOpen()">Export CSV…</button>':'')
@@ -878,6 +878,7 @@ function editRec(i){const r=S.records[i];if(!r)return;
  render();renderPages();window.scrollTo(0,0)}
 document.addEventListener('keydown',e=>{if(e.key=='Escape')closeRec()});
 (function(){const s=document.createElement('style');s.textContent='#view{height:auto;min-height:120px;touch-action:pan-y}#layer{touch-action:auto!important}.zbtn{position:absolute;top:8px;right:8px;z-index:3;padding:6px 12px;font-size:13px;font-weight:700;border-radius:999px;background:rgba(255,255,255,.92);box-shadow:0 1px 4px rgba(0,0,0,.25)}'
+ +'.wkh{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;font-weight:600;color:var(--mut);padding:0 4px;margin:10px 0 -4px}.wkh span+span{font-weight:500}'
  +'.srow.tap{cursor:pointer}.srow.tap:active{background:rgba(0,0,0,.04)}'
  +'.dup{display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:10px 12px;border:1px solid #e0a59b;background:var(--warn);border-radius:12px;font-size:14px}.dup>div{flex:1;min-width:0}.dup b{display:block}.dup span{display:block;font-size:13px;overflow-wrap:anywhere}.dup button{flex:0 0 auto;padding:8px 14px;font-weight:700}'
  +'.rmo{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center}'
@@ -1296,58 +1297,72 @@ window.csvGo=async function(){
 '.sl{padding:4px 14px 6px}'
 ].join('');document.head.appendChild(s)})();
 
-/* ---------- v93: quick calculator. A small round button opens a compact pad in the corner; the page behind stays usable. Nothing is stored. ---------- */
+/* ---------- v93: calculator. A small round button opens a compact pad in the corner; the page behind stays usable. Works like the iPhone calculator
+   (each operator is applied as soon as the next one is pressed, = repeats the last step, C then AC, +/- and %). Nothing is stored. ---------- */
 (function(){
  const css=document.createElement('style');
  css.textContent='#calcfab{position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:45;width:48px;height:48px;min-height:0;padding:0;border-radius:50%;background:var(--g);color:#fff;border:0;box-shadow:0 2px 10px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center}'
  +'#calcfab svg{width:24px;height:24px}'
- +'#calcbox{position:fixed;right:14px;bottom:calc(72px + env(safe-area-inset-bottom,0px));z-index:46;width:244px;background:var(--card);border:1px solid var(--ln);border-radius:16px;box-shadow:0 6px 24px rgba(0,0,0,.28);padding:10px;display:none}'
- +'#calcbox.on{display:block}#calcbox .cd{background:var(--bg);border:1px solid var(--ln);border-radius:10px;padding:6px 10px;text-align:right;min-height:58px;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden}'
- +'#calcbox .ce{font:13px var(--mono);color:var(--mut);min-height:17px;word-break:break-all}#calcbox .cr{font:700 24px var(--mono);color:var(--fg);overflow-x:auto;white-space:nowrap}'
- +'#calcbox .ck{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px}'
- +'#calcbox .ck button{min-height:44px;height:44px;padding:0;font-size:19px;font-weight:600;border-radius:10px;margin:0;width:auto}'
- +'#calcbox .ck .op{background:var(--ext);color:var(--gd)}#calcbox .ck .eq{background:var(--g);color:#fff;border-color:var(--g)}'
- +'#calcbox .cc{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:12px;color:var(--mut)}#calcbox .cb{display:flex;gap:6px}#calcbox .cc button{min-height:0;height:26px;padding:0 10px;font-size:12px;border-radius:8px;width:auto;margin:0}'
+ +'#calcbox{position:fixed;right:14px;bottom:calc(72px + env(safe-area-inset-bottom,0px));z-index:46;width:252px;background:#000;border-radius:22px;box-shadow:0 8px 28px rgba(0,0,0,.4);padding:10px 10px 12px;display:none;-webkit-user-select:none;user-select:none}'
+ +'#calcbox.on{display:block}'
+ +'#calcbox .cc{display:flex;justify-content:space-between;align-items:center;color:#8e8e93;font-size:12px;padding:0 2px}#calcbox .cb{display:flex;gap:6px}'
+ +'#calcbox .cc button{min-height:0;height:26px;padding:0 10px;margin:0;width:auto;font-size:12px;border-radius:13px;border:0;background:#333;color:#fff}'
+ +'#calcbox .cr{color:#fff;text-align:right;font:300 44px/1.1 -apple-system,"SF Pro Display",system-ui,sans-serif;padding:8px 4px 10px;min-height:62px;white-space:nowrap;overflow:hidden}'
+ +'#calcbox .ck{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}'
+ +'#calcbox .ck button{min-height:0;height:50px;width:100%;padding:0;margin:0;border:0;border-radius:25px;font:400 22px -apple-system,system-ui,sans-serif;background:#333;color:#fff;-webkit-tap-highlight-color:transparent}'
+ +'#calcbox .ck button:active{filter:brightness(1.35)}'
+ +'#calcbox .ck .fn{background:#a5a5a5;color:#000;font-size:20px}#calcbox .ck .op{background:#ff9f0a;color:#fff;font-size:28px}#calcbox .ck .op.act{background:#fff;color:#ff9f0a}'
+ +'#calcbox .ck .z{grid-column:span 2;text-align:left;padding-left:20px}'
  +'#app{padding-bottom:calc(70px + env(safe-area-inset-bottom,0px))}';
  document.head.appendChild(css);
- let ex='',res='',done=false;
- const OPS={'/':'÷','*':'×','-':'−','+':'+'},pretty=s=>s.replace(/[/*\-+]/g,c=>' '+OPS[c]+' ').replace(/\s+/g,' ').trim();
- const fmt=n=>{if(!isFinite(n))return 'Error';n=+n.toPrecision(12);return n.toLocaleString('en-US',{maximumFractionDigits:6})};
- function calcNow(s){s=String(s).replace(/\s+/g,'').replace(/[+\-*/.]+$/,'');if(!s||!/^[0-9+\-*/.()]+$/.test(s))return null;let i=0,bad=false;
-  const expr=()=>{let v=term();while(s[i]=='+'||s[i]=='-'){const o=s[i++],r=term();v=o=='+'?v+r:v-r}return v},
-   term=()=>{let v=fac();while(s[i]=='*'||s[i]=='/'){const o=s[i++],r=fac();v=o=='*'?v*r:v/r}return v},
-   fac=()=>{if(s[i]=='-'){i++;return -fac()}if(s[i]=='+'){i++;return fac()}
-    if(s[i]=='('){i++;const v=expr();if(s[i]==')')i++;else if(i<s.length)bad=true;return v}
-    const m=s.slice(i).match(/^(?:\d+\.?\d*|\.\d+)/);if(!m){bad=true;return 0}i+=m[0].length;return parseFloat(m[0])};
-  const v=expr();return bad||i<s.length||!isFinite(v)?null:v}
- function paint(){const b=document.getElementById('calcbox');if(!b)return;b.querySelector('.ce').textContent=pretty(ex);const v=calcNow(ex);b.querySelector('.cr').textContent=done?res:(ex&&v!=null&&/[+\-*/]/.test(ex.replace(/^-/,''))?'= '+fmt(v):(ex?'':'0'))}
+ /* state: cur = what is on the display (a string while typing), acc / op = pending step, fresh = next digit starts a new number */
+ let cur='0',acc=null,op=null,fresh=false,eqd=false,lastOp=null,lastB=0,typed=false;
+ const SYM={'+':'+','-':'\u2212','*':'\u00d7','/':'\u00f7'};
+ const ap=(a,o,b)=>o=='+'?a+b:o=='-'?a-b:o=='*'?a*b:b===0?NaN:a/b;
+ const num=()=>parseFloat(cur);
+ function shown(){if(cur==='Error')return cur;if(typed&&!fresh){const neg=cur[0]=='-',t=neg?cur.slice(1):cur,d=t.indexOf('.'),ip=d<0?t:t.slice(0,d);return (neg?'-':'')+(+ip).toLocaleString('en-US')+(d<0?'':t.slice(d))}
+  const n=num();if(!isFinite(n))return 'Error';const a=Math.abs(n);if(a>=1e9||(a>0&&a<1e-6))return n.toExponential(4).replace(/\.?0+e/,'e');return (+n.toPrecision(9)).toLocaleString('en-US',{maximumFractionDigits:8})}
+ const setRes=n=>{cur=isFinite(n)?String(+n.toPrecision(12)):'Error'};
+ function paint(){const b=document.getElementById('calcbox');if(!b)return;const r=b.querySelector('.cr'),t=shown();r.textContent=t;r.style.fontSize=t.length>11?'26px':t.length>9?'32px':t.length>7?'38px':'44px';
+  b.querySelectorAll('.op').forEach(x=>x.classList.toggle('act',!!op&&fresh&&x.dataset.k===op));const c=b.querySelector('[data-k="C"]');if(c)c.textContent=typed&&cur!=='0'?'C':'AC'}
  function key(k){
-  if(k=='C'){ex='';res='';done=false}
-  else if(k=='<'){if(done){ex='';done=false}else ex=ex.slice(0,-1)}
-  else if(k=='='){if(!ex)return;const v=calcNow(ex);if(v!=null){res=fmt(v);ex=String(+v.toPrecision(12))}else res='Error';done=true}
-  else{const isOp='+-*/'.includes(k);
-   if(done&&!isOp){ex='';}done=false;
-   if(isOp){if(!ex){if(k!='-')return}else if(/[+\-*/]$/.test(ex)&&!(k=='-'&&/[*/]$/.test(ex)))ex=ex.replace(/[+\-*/]+$/,'')}
-   if(k=='.'){const last=ex.split(/[+\-*/]/).pop();if(last.includes('.'))return;if(!last)ex+='0'}
-   ex+=k}
+  if(cur==='Error'&&k!='C'){if(/^[0-9.]$/.test(k)){cur='0';acc=null;op=null;fresh=false;eqd=false;lastOp=null;typed=false}else{paint();return}}
+  if(!k){paint();return}
+  if(k=='C'){if(typed&&cur!=='0'&&cur!=='Error'){cur='0';typed=false;fresh=!!op}else{cur='0';acc=null;op=null;fresh=false;eqd=false;lastOp=null;typed=false}}
+  else if(k=='N'){if(cur!=='0'){cur=cur[0]=='-'?cur.slice(1):'-'+cur}else if(!fresh){cur='-0'}}
+  else if(k=='%'){const v=num();if(op&&(op=='+'||op=='-')&&acc!=null)setRes(acc*v/100);else setRes(v/100);typed=false;fresh=false;if(!op)eqd=true}
+  else if('+-*/'.includes(k)){
+   if(op&&!fresh){const v=ap(acc,op,num());setRes(v);acc=isFinite(v)?v:null}else if(acc==null||eqd||!op){acc=num()}
+   if(cur==='Error'){op=null;fresh=false}else{op=k;fresh=true;eqd=false;typed=false}}
+  else if(k=='='){
+   if(op){const b=num(),v=ap(acc,op,b);lastOp=op;lastB=b;acc=null;op=null;setRes(v);fresh=true;eqd=true;typed=false}
+   else if(lastOp&&eqd){setRes(ap(num(),lastOp,lastB));fresh=true;typed=false}}
+  else{ /* digit or point */
+   if(eqd&&!op){acc=null;lastOp=null;eqd=false;cur='0';fresh=false}
+   if(fresh||!typed&&cur==='0'||cur==='0'||cur==='-0'){const neg=cur==='-0'&&!fresh;cur=(neg?'-':'')+(k=='.'?'0.':k)}
+   else{const digits=cur.replace(/[-.]/g,'').length;if(k=='.'){if(cur.includes('.'))return}else if(digits>=9)return;cur+=k}
+   fresh=false;typed=true}
   paint()}
  function build(){
   const f=document.createElement('button');f.id='calcfab';f.type='button';f.setAttribute('aria-label','Calculator');
   f.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2.5" width="14" height="19" rx="2.5"/><rect x="8" y="5.5" width="8" height="3.5" rx=".8"/><path d="M8.5 13h.01M12 13h.01M15.5 13h.01M8.5 16.5h.01M12 16.5h.01M15.5 16.5h.01"/></svg>';
   const b=document.createElement('div');b.id='calcbox';b.setAttribute('role','dialog');b.setAttribute('aria-label','Calculator');
-  const rows=[['C','<','/','*'],['7','8','9','-'],['4','5','6','+'],['1','2','3','='],['0','.','(',')']];
-  b.innerHTML='<div class="cc"><span>Quick math</span><span class="cb"><button type="button" data-k="copy">Copy</button><button type="button" data-k="min" aria-label="Minimize calculator" style="font-weight:700;width:34px">\u2014</button></span></div><div class="cd"><div class="ce"></div><div class="cr">0</div></div><div class="ck">'
-   +rows.map(r=>r.map(k=>{const cls='/*-+'.includes(k)?'op':k=='='?'eq':'';const t=k=='<'?'⌫':OPS[k]||k;return '<button type="button" class="'+cls+'" data-k="'+k+'">'+t+'</button>'}).join('')).join('')+'</div>';
-  b.addEventListener('click',e=>{const t=e.target.closest('button');if(!t)return;const k=t.dataset.k;if(k=='min'){b.classList.remove('on');f.setAttribute('aria-expanded','false');return}if(k=='copy'){const v=done?res:(calcNow(ex)!=null?fmt(calcNow(ex)):'');if(v&&navigator.clipboard)navigator.clipboard.writeText(v.replace(/,/g,'')).then(()=>{t.textContent='Copied';setTimeout(()=>t.textContent='Copy',1200)}).catch(()=>{});return}key(k)});
+  const K=[['C','fn','AC'],['N','fn','\u00b1'],['%','fn','%'],['/','op',SYM['/']],['7'],['8'],['9'],['*','op',SYM['*']],['4'],['5'],['6'],['-','op',SYM['-']],['1'],['2'],['3'],['+','op',SYM['+']],['0','z'],['.'],['=','op','=']];
+  b.innerHTML='<div class="cc"><span>Calculator</span><span class="cb"><button type="button" data-k="copy">Copy</button><button type="button" data-k="min" aria-label="Minimize calculator" style="width:34px;font-weight:700">\u2014</button></span></div><div class="cr">0</div><div class="ck">'
+   +K.map(([k,c,t])=>'<button type="button" class="'+(c||'')+'" data-k="'+k+'">'+(t||k)+'</button>').join('')+'</div>';
+  b.addEventListener('click',e=>{const t=e.target.closest('button');if(!t)return;const k=t.dataset.k;
+   if(k=='min'){b.classList.remove('on');f.setAttribute('aria-expanded','false');return}
+   if(k=='copy'){const v=shown().replace(/,/g,'');if(v&&v!=='Error'&&navigator.clipboard)navigator.clipboard.writeText(v).then(()=>{t.textContent='Copied';setTimeout(()=>t.textContent='Copy',1200)}).catch(()=>{});return}
+   key(k)});
   f.onclick=()=>{b.classList.toggle('on');f.setAttribute('aria-expanded',b.classList.contains('on'))};
-  document.body.appendChild(b);document.body.appendChild(f)}
+  document.body.appendChild(b);document.body.appendChild(f);paint()}
  if(document.body)build();else document.addEventListener('DOMContentLoaded',build);
  document.addEventListener('keydown',e=>{const b=document.getElementById('calcbox');if(e.key=='Escape'&&b)b.classList.remove('on')});
 })();
 
 /* ---------- v96: the version badge is set here, from the code that is actually running, so it can never disagree with app.js even if index.html on the server is out of date.
    Home Screen self-update: on every launch the app asks the server for the newest app.js (bypassing the cache); if it carries a newer version, the page reloads once from a fresh address. Records stay in the same storage. ---------- */
-const PT_VER='v99';
+const PT_VER='v100';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_VER};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
