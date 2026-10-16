@@ -345,7 +345,9 @@ function wkAmt(r,k){const a=N(r.amount);if(a==null)return null;const ds=workDays
  let tot=ks.reduce((t,x)=>t+hr[x],0);if(!(tot>0)){ks.forEach(x=>hr[x]=ds.filter(d=>+wkStart(d)===x).length);tot=ks.reduce((t,x)=>t+hr[x],0)}
  let used=0;for(let i=0;i<ks.length;i++){const p=i==ks.length-1?+(a-used).toFixed(2):+(a*hr[ks[i]]/tot).toFixed(2);if(ks[i]===k)return p;used+=p}return a}
 /* v-5: work-invoice rows list each worked day as a small pill (weekday + date) so every day is easy to spot; split invoices get a short note */
-function dayPills(r,k){let d=workDays(r);if(k!=null)d=d.filter(x=>+wkStart(x)===k);if(sortFor(false)!=='dold')d=d.slice().reverse();if(!d.length)return esc(r.jobDate||'');
+function dayPills(r,k){let d=workDays(r);if(k!=null)d=d.filter(x=>+wkStart(x)===k);if(!d.length){const j=Parser.pd(r.jobDate);d=j?[j]:[]}
+ if(sortFor(false)!=='dold')d=d.slice().reverse();
+ if(!d.length)return r.jobDate?'<span class="dp">'+esc(r.jobDate)+'</span>':'';
  return d.map(x=>'<span class="dp">'+x.toLocaleDateString('en-US',{weekday:'short'})+' '+(x.getMonth()+1)+'/'+x.getDate()+'</span>').join('')}
 function daysInWk(r,k){const d=workDays(r).filter(x=>+wkStart(x)===k);if(!d.length)return r.jobDate;const md=x=>(x.getMonth()+1)+'/'+x.getDate();return d.map(md).join(', ')+'/'+d[d.length-1].getFullYear()}
 function grpRows(list,row){const dc={},m=new Map();
@@ -607,7 +609,7 @@ async function savePdf(){const J=window.jspdf&&window.jspdf.jsPDF;if(!J)return s
  if(IOS&&navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f]});return}catch(e){if(e&&e.name=='AbortError')return}}
  const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=n;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);toast('Saved '+n)}
 /* one PDF: the uploaded invoice / receipt pages + the plain text summary. The summary shares a page with the image whenever it fits. */
-async function saveCombo(rec){const J=window.jspdf&&window.jspdf.jsPDF;if(!J)return st('The PDF tool did not load. Check your connection and reload.');
+async function saveCombo(rec,view){const J=window.jspdf&&window.jspdf.jsPDF;if(!J)return st('The PDF tool did not load. Check your connection and reload.');
  try{const sv=rec&&rec.mode?rec:null,r=sv||S.rec,{t,G}=rows(r),pur=r.mode=='purchase',M=36,LW=170;let imgs=[];
  if(sv)imgs=[];else if(pur)imgs=(S.pages||[]).map(p=>({u:baked(p).toDataURL('image/jpeg',.92),w:p.w,h:p.h}));
  else if(r.doc&&S.img&&S.dim)imgs=[{u:S.img,w:S.dim[0],h:S.dim[1]}];
@@ -632,9 +634,10 @@ async function saveCombo(rec){const J=window.jspdf&&window.jspdf.jsPDF;if(!J)ret
    if(last){add(W,H+14+sh+M);d.addImage(im.u,'JPEG',0,0,W,H);sum(d,M,H+14,W-2*M,true)}/* summary sits under the last page of the receipt, same page */
    else{add(W,H);d.addImage(im.u,'JPEG',0,0,W,H)}})}
  const p=n=>String(n).padStart(2,'0'),dt=Parser.pd(pur?r.date:(r.jobDate||r.date)),n=uname(r,sv?(pur?'Expense Summary':'Invoice Summary'):(pur?'Receipt and Summary':'Call Sheet Invoice and Summary'))+'.pdf',f=new File([d.output('blob')],n,{type:'application/pdf'});
+ if(view){const u=URL.createObjectURL(f);if(view!==true&&!view.closed)view.location.href=u;else window.open(u,'_blank');return}
  if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f]});return}catch(e){if(e&&e.name=='AbortError')return}}
  const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=n;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);toast('Saved '+n)}
- catch(e){toast('Could not save PDF')}}
+ catch(e){if(view&&view!==true)try{view.close()}catch(_){}toast('Could not save PDF')}}
 (function(){const s=document.createElement('style');s.textContent=[
  'html,body{overflow-x:clip!important}.src{position:static!important}',
  '.ptool{position:sticky;top:max(8px,env(safe-area-inset-top));z-index:6;background:var(--bg);padding:6px 0 8px}',
@@ -879,13 +882,15 @@ function dupWarn(){const el=$('#dupwarn');if(!el)return;const r=S.rec,m=r&&r.loa
  {const ed=!!(r&&r.rid&&S.records.some(x=>x.rid===r.rid)),sb=$('#svbtn');if(sb)sb.textContent=ed?'Save changes':'Save record';if(ed)h='<div class="dup" role="status" style="background:#e9f1ed;border-color:#b9d2c4;color:var(--fg)"><div><b>Editing a saved record</b><span>Fix anything below, then tap Save changes.</span></div><button onclick="cancelEdit()">Cancel</button></div>'+h}
  if(el.dataset.h!==h){el.dataset.h=h;el.innerHTML=h}}
 function openRec(i){const r=S.records[i];if(!r)return;closeRec();const{t,G}=rows(r),
- h=G.map(g=>'<div class="rg">'+g.rows.map(([l,v,hl])=>`<div class="rr${hl?' hl':''}${g.k=='tot'?' tt':''}"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join('')+'</div>').join(''),
+ h=G.map(g=>({...g,rows:g.rows.filter(x=>x[0]!=='Regular Hours')})).map(g=>'<div class="rg">'+g.rows.map(([l,v,hl])=>`<div class="rr${hl?' hl':''}${g.k=='tot'?' tt':''}"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join('')+'</div>').join(''),
  o=document.createElement('div');o.id='recmodal';o.className='rmo';o.onclick=e=>{if(e.target===o)closeRec()};
- o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${h}</div><div class="rmf"><button class="pri" onclick="dlRec(${i})">Download PDF</button><button onclick="editRec(${i})">Edit</button><button onclick="delOpen(${i})" style="color:#b3261e">Delete</button><button onclick="closeRec()">Close</button></div></div>`;
+ o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${h}</div><div class="rmf"><button class="pri" onclick="dlRec(${i})">Download PDF</button><button onclick="viewRec(${i})">View PDF</button><button onclick="editRec(${i})">Edit</button><button onclick="delOpen(${i})" style="color:#b3261e">Delete</button></div></div>`;
  document.body.appendChild(o);document.body.style.overflow='hidden'}
 function delOpen(i){if(!S.records[i])return;if(!confirm('Delete this saved record? This cannot be undone.'))return;S.records.splice(i,1);closeRec();renderRecs();store()}
 function closeRec(){const o=$('#recmodal');if(o)o.remove();document.body.style.overflow=''}
 function dlRec(i){const r=S.records[i];if(r)saveCombo(r)}
+/* open the PDF in a new tab instead of downloading it (the tab is opened right away so iPhone does not block it) */
+function viewRec(i){const r=S.records[i];if(!r)return;let w=null;try{w=window.open('','_blank');if(w)w.document.write('<meta name=viewport content="width=device-width"><p style="font:17px -apple-system,sans-serif;padding:28px;color:#555">Opening PDF\u2026</p>')}catch(e){}saveCombo(r,w||true)}
 /* v78: open a saved record back in the form. Saving then updates that same record instead of adding a copy. */
 function endEdit(){S.rec=newRec();S.pages=[];S.undo=[];S.redo=[];S.sel=[];S.psel=[];S.words=[];S.img=null;const dw=$('#docwrap');if(dw)dw.style.display='none';const dz=$('#dupwarn');if(dz){dz.dataset.h='';dz.innerHTML=''}render();renderPages()}
 function cancelEdit(){endEdit();showSaved()}
@@ -1398,8 +1403,8 @@ window.csvGo=async function(){
    const PT_VER='v200'
    const PT_VER='vv200'
    ---------- */
-const PT_BUILD=207;
-const PT_LABEL='v8';
+const PT_BUILD=209;
+const PT_LABEL='v10';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
