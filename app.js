@@ -258,7 +258,11 @@ async function saveImg(){try{const b=await recsBlob([S.rec]),f=new File([b],inam
 function toast(m){$('#status').style.color='#0a0';$('#status').textContent=m;setTimeout(()=>{$('#status').textContent='';$('#status').style.color=''},2500)}
 const noun=()=>S.mode=='purchase'?'Receipt':'Call Sheet';const cpLabel=()=>'Copy '+noun()+' Text';
 let ct;const copyRec=async()=>{learnRec(S.rec);if(await copy([S.rec])){const b=$('#cpbtn');clearTimeout(ct);requestAnimationFrame(()=>{b.textContent='Copied'});ct=setTimeout(()=>requestAnimationFrame(()=>{b.textContent=cpLabel()}),2500)}};
-function saveRec(){if(!S.rec||!S.rec.loaded)return;learnRec(S.rec);const j=JSON.stringify(S.rec);
+/* v11: the saved record keeps a small compressed copy of the invoice / receipt so the summary PDF can be downloaded with it attached (stored encrypted on this phone like the rest) */
+function shrinkImg(u,w,h){return new Promise(res=>{const im=new Image();im.onload=()=>{try{const sc=Math.min(1,1300/im.naturalWidth),cw=Math.max(1,Math.round(im.naturalWidth*sc)),ch=Math.max(1,Math.round(im.naturalHeight*sc)),cv=document.createElement('canvas');cv.width=cw;cv.height=ch;const x=cv.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,cw,ch);x.drawImage(im,0,0,cw,ch);res({u:cv.toDataURL('image/jpeg',.72),w:cw,h:ch})}catch(e){res(null)}};im.onerror=()=>res(null);im.src=u})}
+async function attachImgs(r){if(r.imgs&&r.imgs.length)return;let src=[];try{if(r.mode=='purchase')src=(S.pages||[]).map(p=>({u:baked(p).toDataURL('image/jpeg',.9),w:p.w,h:p.h}));else if(r.doc&&S.img&&S.dim)src=[{u:S.img,w:S.dim[0],h:S.dim[1]}]}catch(e){src=[]}
+ if(!src.length)return;const out=(await Promise.all(src.map(x=>shrinkImg(x.u,x.w,x.h)))).filter(Boolean);if(out.length)r.imgs=out}
+async function saveRec(){if(!S.rec||!S.rec.loaded)return;await attachImgs(S.rec);learnRec(S.rec);const j=JSON.stringify(S.rec);
  if(S.rec.rid){const k=S.records.findIndex(x=>x.rid===S.rec.rid);if(k>=0){const same=JSON.stringify(S.records[k])===j;if(!same){S.records[k]=JSON.parse(j);S.sv.sec=S.rec.mode=='purchase'?'x':'w';S.sv.cat='All';S.sv.q='';store()}endEdit();showSaved();return toast(same?'No changes to save':'Changes saved')}}
 if(S.records.some(x=>JSON.stringify(x)===j))return toast('Already saved');if(S.records.some(x=>sameRec(S.rec,x))&&!confirm('You already have this one saved. Save it again anyway?'))return;S.records.push(JSON.parse(j));S.sv.sec=S.rec.mode=='purchase'?'x':'w';S.sv.cat='All';S.sv.q='';store();showSaved();toast('Added to Saved')}
 function key(r){const d=Parser.pd(r.date||r.jobDate);return d?+d:Infinity}
@@ -366,7 +370,7 @@ function svBody(){
  +(x&&T.n&&S.sv.cat=='All'&&!q?`<div class="sl"><h4>Expense totals</h4>${T.months.map(([l,v])=>trow(l,v)).join('')}${T.years.length>1?T.years.map(([l,v])=>trow(l+' total',v)).join(''):''}${T.cats.map(([l,v])=>trow(l,v)).join('')}${trow('Total expenses',T.all)}</div>`:'')
  +(list.length?'<button class="pri" onclick="svCopy()">Copy '+(list.length==1?'this record':'these '+list.length+' records')+'</button>':'')
  +(list.length?'<button onclick="csvOpen()">Export CSV…</button>':'')
- +'<button onclick="delAllRecs()">Delete all saved records</button><div class="hint">Saved on this phone only, encrypted with your passcode. Tap a record to open it and download its summary PDF. Receipt images are not kept; use Save as PDF for those.</div>'}
+ +'<button onclick="delAllRecs()">Delete all saved records</button><div class="hint">Saved on this phone only, encrypted with your passcode. Tap a record to open it and download its summary PDF. Records saved from v11 on keep a small copy of the invoice or receipt, so the PDF comes with it attached.</div>'}
 function renderRecs(){persist();try{dupWarn()}catch(e){}const nb=$('#m3');if(nb)nb.textContent='Saved';const el=$('#savedview');if(!el||S.tab!='saved')return;
  if(!S.records.length){el.innerHTML='<div class="sv"><div class="empty2">Nothing saved yet.<br>Fill in a record and tap Save record. It will show up here.</div></div>';return}
  if(S.sv.sec=='t'){el.innerHTML='<div class="sv">'+svSeg()+totalsView()+'</div>';return}
@@ -611,7 +615,7 @@ async function savePdf(){const J=window.jspdf&&window.jspdf.jsPDF;if(!J)return s
 /* one PDF: the uploaded invoice / receipt pages + the plain text summary. The summary shares a page with the image whenever it fits. */
 async function saveCombo(rec,view){const J=window.jspdf&&window.jspdf.jsPDF;if(!J)return st('The PDF tool did not load. Check your connection and reload.');
  try{const sv=rec&&rec.mode?rec:null,r=sv||S.rec,{t,G}=rows(r),pur=r.mode=='purchase',M=36,LW=170;let imgs=[];
- if(sv)imgs=[];else if(pur)imgs=(S.pages||[]).map(p=>({u:baked(p).toDataURL('image/jpeg',.92),w:p.w,h:p.h}));
+ if(sv)imgs=(sv.imgs||[]).map(x=>({u:x.u,w:x.w,h:x.h}));else if(pur)imgs=(S.pages||[]).map(p=>({u:baked(p).toDataURL('image/jpeg',.92),w:p.w,h:p.h}));
  else if(r.doc&&S.img&&S.dim)imgs=[{u:S.img,w:S.dim[0],h:S.dim[1]}];
  /* summary block: draws at (x0,y0) with width SW, returns its height; measure-only when draw is false */
  const sum=(d,x0,y0,SW,draw)=>{const R=x0+SW,VW=SW-LW-24;let y=y0;
@@ -633,7 +637,7 @@ async function saveCombo(rec,view){const J=window.jspdf&&window.jspdf.jsPDF;if(!
   imgs.forEach((im,i)=>{const last=i==imgs.length-1,W=595,H=+(W*im.h/im.w).toFixed(2);
    if(last){add(W,H+14+sh+M);d.addImage(im.u,'JPEG',0,0,W,H);sum(d,M,H+14,W-2*M,true)}/* summary sits under the last page of the receipt, same page */
    else{add(W,H);d.addImage(im.u,'JPEG',0,0,W,H)}})}
- const p=n=>String(n).padStart(2,'0'),dt=Parser.pd(pur?r.date:(r.jobDate||r.date)),n=uname(r,sv?(pur?'Expense Summary':'Invoice Summary'):(pur?'Receipt and Summary':'Call Sheet Invoice and Summary'))+'.pdf',f=new File([d.output('blob')],n,{type:'application/pdf'});
+ const p=n=>String(n).padStart(2,'0'),dt=Parser.pd(pur?r.date:(r.jobDate||r.date)),n=uname(r,sv&&!imgs.length?(pur?'Expense Summary':'Invoice Summary'):(pur?'Receipt and Summary':'Call Sheet Invoice and Summary'))+'.pdf',f=new File([d.output('blob')],n,{type:'application/pdf'});
  if(view){const u=URL.createObjectURL(f);if(view!==true&&!view.closed)view.location.href=u;else window.open(u,'_blank');return}
  if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f]});return}catch(e){if(e&&e.name=='AbortError')return}}
  const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=n;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);toast('Saved '+n)}
@@ -884,10 +888,26 @@ function dupWarn(){const el=$('#dupwarn');if(!el)return;const r=S.rec,m=r&&r.loa
 function openRec(i){const r=S.records[i];if(!r)return;closeRec();const{t,G}=rows(r),
  h=G.map(g=>({...g,rows:g.rows.filter(x=>x[0]!=='Regular Hours')})).map(g=>'<div class="rg">'+g.rows.map(([l,v,hl])=>`<div class="rr${hl?' hl':''}${g.k=='tot'?' tt':''}"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join('')+'</div>').join(''),
  o=document.createElement('div');o.id='recmodal';o.className='rmo';o.onclick=e=>{if(e.target===o)closeRec()};
- o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${h}</div><div class="rmf"><button class="pri" onclick="dlRec(${i})">Download PDF</button><button onclick="viewRec(${i})">View PDF</button><button onclick="editRec(${i})">Edit</button><button onclick="delOpen(${i})" style="color:#b3261e">Delete</button></div></div>`;
+ o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${h}</div><div class="rmf"><button class="pri" onclick="dlRec(${i})">Download PDF</button><button onclick="viewRec(${i})">View PDF</button>${r.imgs&&r.imgs.length?'':`<button onclick="attachRec(${i})">Attach invoice</button>`}<button onclick="editRec(${i})">Edit</button><button onclick="delOpen(${i})" style="color:#b3261e">Delete</button></div></div>`;
  document.body.appendChild(o);document.body.style.overflow='hidden'}
 function delOpen(i){if(!S.records[i])return;if(!confirm('Delete this saved record? This cannot be undone.'))return;S.records.splice(i,1);closeRec();renderRecs();store()}
 function closeRec(){const o=$('#recmodal');if(o)o.remove();document.body.style.overflow=''}
+/* v12: older saved records never kept the invoice picture, so let the person pick the file again and attach it to the record */
+/* v13: an old "invoice + summary" PDF has the summary printed under the invoice. Find its teal heading rule and cut it off, so the summary is not shown twice. Returns the canvas (cropped, or unchanged if no summary is found); null if the page was only a summary. */
+function stripSummary(c,ptW){try{const x=c.getContext('2d'),W=c.width,H=c.height,s=W/ptW,need=Math.round(60*s),near=(r,g,b)=>Math.abs(r-69)<32&&Math.abs(g-129)<32&&Math.abs(b-142)<32;
+ const rowHit=y=>{const d=x.getImageData(0,y,W,1).data;let run=0,best=0;for(let k=0;k<W;k++){const o=k*4;if(near(d[o],d[o+1],d[o+2])){run++;if(run>best)best=run}else run=0}return best>=need};
+ let y=H-1;while(y>=0&&!rowHit(y))y--;if(y<0)return c;while(y>0&&rowHit(y-1))y--;
+ const nh=Math.round(y-32*s);if(nh<40*s)return null;if(nh>=H)return c;const o=document.createElement('canvas');o.width=W;o.height=nh;o.getContext('2d').drawImage(c,0,0);return o}catch(e){return c}}
+function attachRec(i){const r=S.records[i];if(!r)return;const inp=document.createElement('input');inp.type='file';inp.accept='application/pdf,image/*';inp.style.cssText='position:fixed;left:-9999px;opacity:0';document.body.appendChild(inp);
+ inp.onchange=async()=>{const f=inp.files&&inp.files[0];inp.remove();if(!f)return;toast('Adding invoice\u2026');
+  try{const cs=[];
+   if(f.type=='application/pdf'||/\.pdf$/i.test(f.name)){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';const pdf=await pdfjsLib.getDocument({data:await f.arrayBuffer()}).promise;
+    for(let n=1;n<=Math.min(pdf.numPages,r.mode=='purchase'?6:4);n++){const p=await pdf.getPage(n),v=p.getViewport({scale:Math.min(2,1500/p.getViewport({scale:1}).width)}),c=document.createElement('canvas');c.width=v.width;c.height=v.height;await p.render({canvasContext:c.getContext('2d'),viewport:v}).promise;const keep=n==pdf.numPages?stripSummary(c,p.getViewport({scale:1}).width):c;if(keep)cs.push(keep)}}
+   else if(/^image\//.test(f.type)){const b=await createImageBitmap(f),sc=Math.min(1,1600/Math.max(b.width,b.height)),c=document.createElement('canvas');c.width=Math.round(b.width*sc);c.height=Math.round(b.height*sc);c.getContext('2d').drawImage(b,0,0,c.width,c.height);cs.push(c)}
+   else return toast('Use a PDF, JPG or PNG');
+   const out=(await Promise.all(cs.map(c=>shrinkImg(c.toDataURL('image/jpeg',.85))))).filter(Boolean);if(!out.length)return toast('Could not read that file');
+   r.imgs=out;store();toast('Invoice added');openRec(i)}catch(e){toast('Could not add that file')}};
+ inp.click()}
 function dlRec(i){const r=S.records[i];if(r)saveCombo(r)}
 /* open the PDF in a new tab instead of downloading it (the tab is opened right away so iPhone does not block it) */
 function viewRec(i){const r=S.records[i];if(!r)return;let w=null;try{w=window.open('','_blank');if(w)w.document.write('<meta name=viewport content="width=device-width"><p style="font:17px -apple-system,sans-serif;padding:28px;color:#555">Opening PDF\u2026</p>')}catch(e){}saveCombo(r,w||true)}
@@ -1403,8 +1423,8 @@ window.csvGo=async function(){
    const PT_VER='v200'
    const PT_VER='vv200'
    ---------- */
-const PT_BUILD=209;
-const PT_LABEL='v10';
+const PT_BUILD=212;
+const PT_LABEL='v13';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
