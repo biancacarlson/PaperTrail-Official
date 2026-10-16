@@ -207,7 +207,7 @@ function rows(r){if(r.mode=='summary')return sumRows(r);const o=compute(r),G=[],
  const hg=g('det'),fh=v=>v==null?null:(+(+v).toFixed(2))+' h';hg('Regular Hours',fh(N(r.hours)));hg('Overtime Hours',fh(N(r.overtime)));hg('Total Hours',fh(o.tot));
  {const sg=g('det'),sh=(r.shifts||[]).filter(x=>x&&(N(x.hours)!=null||(x.start&&x.end))),days=[];sh.forEach(x=>{const k=shDate(x.date),y=days.find(d=>d.k==k);y?y.a.push(x):days.push({k,a:[x]})});
   days.forEach(d=>{d.a.forEach((x,j)=>{const tm=x.start&&x.end?t12(x.start)+' \u2013 '+t12(x.end):'',hr=N(x.hours)!=null?fh(N(x.hours)):'';sg([d.k||'Shift',tm].filter(Boolean).join(' \u00b7 '),hr)});
-   if(d.a.length>1)sg('Split shift total',fh(+d.a.reduce((s,x)=>s+(N(x.hours)||0),0).toFixed(2)),1)})}
+   if(d.a.length>1)sg('Split shift total',fh(+d.a.reduce((s,x)=>s+(N(x.hours)||0),0).toFixed(2)))})}
  const d=g('det');d('Round-Trip Distance',o.rt!=null?o.rt.toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:1})+' mi':null);d('IRS Rate',o.rate!=null&&o.rt!=null?'$'+o.rate+'/mi':null);
  const t=g('tot');t('Amount Paid',fm(N(r.amount)));t('Mileage Deduction',fm(o.wear));
  return{t:'INVOICE SUMMARY',G:G.filter(x=>x.rows.length)}}
@@ -888,7 +888,7 @@ function dupWarn(){const el=$('#dupwarn');if(!el)return;const r=S.rec,m=r&&r.loa
 function openRec(i){const r=S.records[i];if(!r)return;closeRec();const{t,G}=rows(r),
  h=G.map(g=>({...g,rows:g.rows.filter(x=>x[0]!=='Regular Hours')})).map(g=>'<div class="rg">'+g.rows.map(([l,v,hl])=>`<div class="rr${hl?' hl':''}${g.k=='tot'?' tt':''}"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join('')+'</div>').join(''),
  o=document.createElement('div');o.id='recmodal';o.className='rmo';o.onclick=e=>{if(e.target===o)closeRec()};
- o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${h}</div><div class="rmf"><button class="pri" onclick="dlRec(${i})">Download PDF</button><button onclick="viewRec(${i})">View PDF</button>${r.imgs&&r.imgs.length?'':`<button onclick="attachRec(${i})">Attach invoice</button>`}<button onclick="editRec(${i})">Edit</button><button onclick="delOpen(${i})" style="color:#b3261e">Delete</button></div></div>`;
+ o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${h}</div><div class="rmf"><button onclick="dlRec(${i})">Download PDF</button><button onclick="viewRec(${i})">View PDF</button>${r.imgs&&r.imgs.length?`<button onclick="attachRec(${i})">Replace invoice</button><button onclick="rmImg(${i})">Remove invoice</button>`:`<button onclick="attachRec(${i})">Attach invoice</button>`}<button onclick="editRec(${i})">Edit</button><button onclick="delOpen(${i})" style="color:#b3261e">Delete</button></div></div>`;
  document.body.appendChild(o);document.body.style.overflow='hidden'}
 function delOpen(i){if(!S.records[i])return;if(!confirm('Delete this saved record? This cannot be undone.'))return;S.records.splice(i,1);closeRec();renderRecs();store()}
 function closeRec(){const o=$('#recmodal');if(o)o.remove();document.body.style.overflow=''}
@@ -908,6 +908,7 @@ function attachRec(i){const r=S.records[i];if(!r)return;const inp=document.creat
    const out=(await Promise.all(cs.map(c=>shrinkImg(c.toDataURL('image/jpeg',.85))))).filter(Boolean);if(!out.length)return toast('Could not read that file');
    r.imgs=out;store();toast('Invoice added');openRec(i)}catch(e){toast('Could not add that file')}};
  inp.click()}
+function rmImg(i){const r=S.records[i];if(!r||!r.imgs)return;if(!confirm('Remove the attached invoice from this saved item? Its details stay.'))return;delete r.imgs;store();toast('Invoice removed');openRec(i)}
 function dlRec(i){const r=S.records[i];if(r)saveCombo(r)}
 /* open the PDF in a new tab instead of downloading it (the tab is opened right away so iPhone does not block it) */
 function viewRec(i){const r=S.records[i];if(!r)return;let w=null;try{w=window.open('','_blank');if(w)w.document.write('<meta name=viewport content="width=device-width"><p style="font:17px -apple-system,sans-serif;padding:28px;color:#555">Opening PDF\u2026</p>')}catch(e){}saveCombo(r,w||true)}
@@ -1423,8 +1424,8 @@ window.csvGo=async function(){
    const PT_VER='v200'
    const PT_VER='vv200'
    ---------- */
-const PT_BUILD=212;
-const PT_LABEL='v13';
+const PT_BUILD=215;
+const PT_LABEL='v16';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();

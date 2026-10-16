@@ -1,7 +1,7 @@
 'use strict';
 /* self-update (V must match the ?v= number in index.html): the iPhone Home Screen app keeps its own cached copy of the page and ignores no-cache hints. On launch, ask the server (bypassing the cache) which version is current;
    if it is newer than this file, re-download every file once and reload. Runs from parser.js so even an old cached index.html picks it up. Once per session, so it can never loop. */
-(function(){var V=212;try{if(typeof window==='undefined'||!window.fetch||!navigator.onLine||sessionStorage.getItem('pt_upd'))return;
+(function(){var V=215;try{if(typeof window==='undefined'||!window.fetch||!navigator.onLine||sessionStorage.getItem('pt_upd'))return;
  fetch('index.html',{cache:'reload'}).then(function(r){return r.text()}).then(function(h){var m=h.match(/parser\.js\?v=(\d+)/);if(!m||+m[1]<=V)return;
   try{sessionStorage.setItem('pt_upd','1')}catch(e){}
   return Promise.all(['parser.js','scan.js','app.js'].map(function(f){return fetch(f+'?v='+m[1],{cache:'reload'})})).then(function(){location.reload()})}).catch(function(){})}catch(e){}})();
@@ -323,7 +323,7 @@ function parse1(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(
   {const c=label(L,/^(?:bill(?:ed)?\s*to|client(?:\s*name)?|customer|company)\s*[:\-]?\s*(.*)$/i);if(c&&!DATE.test(c)&&!/^\$?[\d,.]+$/.test(c))set('client',c.split(/\s{3,}/)[0])}
   set('invoice',evInvoice(L)||(inv&&inv[1]));
   set('jobDate',dateNear(L,/(job|service|work|shift|event|date of service)\s*date|date of service|worked/i));
-  if(!F.jobDate){const l=L.find(l=>DATE.test(l)&&!/invoice|payment|paid|due|issued|deposit/i.test(l));if(l)F.jobDate=l.match(DATE)[1]}
+  if(!F.jobDate){/* v16: skip payment-terms lines (Net 30, due dates); of the dates left, the earliest is the work date */const c=L.filter(l=>DATE.test(l)&&!/invoice|payment|paid|due|issued|deposit|net\s*-?\s*\d|terms|pay\s*by|remit/i.test(l)).map(l=>l.match(DATE)[1]).map(v=>({v,d:pd(v)})).filter(x=>x.d).sort((a,b)=>a.d-b.d);if(c.length)F.jobDate=c[0].v}
   set('location',label(L,/^(?:site|job\s*site|location|venue|address|job location)\s*[:\-]\s*(.*)$/i));
   const hrs=[...text.matchAll(/(\d+(?:\.\d+)?)\s*(?:hrs?|hours)\b/gi)].map(m=>+m[1]);
   const tot=label(L,/^(?:total\s*hours|hours\s*worked|hours)\s*[:\-]?\s*(\d+(?:\.\d+)?)\b(?!\s*[x×@])/i);
