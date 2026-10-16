@@ -1,7 +1,7 @@
 'use strict';
 /* self-update (V must match the ?v= number in index.html): the iPhone Home Screen app keeps its own cached copy of the page and ignores no-cache hints. On launch, ask the server (bypassing the cache) which version is current;
    if it is newer than this file, re-download every file once and reload. Runs from parser.js so even an old cached index.html picks it up. Once per session, so it can never loop. */
-(function(){var V=219;try{if(typeof window==='undefined'||!window.fetch||!navigator.onLine||sessionStorage.getItem('pt_upd'))return;
+(function(){var V=221;try{if(typeof window==='undefined'||!window.fetch||!navigator.onLine||sessionStorage.getItem('pt_upd'))return;
  fetch('index.html',{cache:'reload'}).then(function(r){return r.text()}).then(function(h){var m=h.match(/parser\.js\?v=(\d+)/);if(!m||+m[1]<=V)return;
   try{sessionStorage.setItem('pt_upd','1')}catch(e){}
   return Promise.all(['parser.js','scan.js','app.js'].map(function(f){return fetch(f+'?v='+m[1],{cache:'reload'})})).then(function(){location.reload()})}).catch(function(){})}catch(e){}})();
@@ -72,16 +72,38 @@ function shortName(title,v,cut){let t=title.split(' ').filter(Boolean),q=null,se
  if(set)return q>1?qs+'Set of '+n:n+' Set';
  return qs+n}
 /* Register receipts print short product codes (ELCTRIC, STK, 2PK). Expand the common ones and repair one damaged letter in common product words. */
-const ABBR={elctric:'Electrical',electric:'Electrical',elec:'Electrical',tpe:'Tape',tp:'Tape',stk:'Sticks',stks:'Sticks',lav:'Lavender',mnt:'Mint',van:'Vanilla',papya:'Papaya',papy:'Papaya',strwbry:'Strawberry',strawbry:'Strawberry',choc:'Chocolate',ckn:'Chicken',org:'Organic',pnut:'Peanut',btl:'Bottle',btls:'Bottles',bx:'Box',clnr:'Cleaner',clnsr:'Cleaner',dtrgnt:'Detergent',dtgt:'Detergent',shmp:'Shampoo',cndtnr:'Conditioner',tthpste:'Toothpaste',nsl:'Nasal',ref:'Refill',refl:'Refill',asst:'Assorted',assrt:'Assorted',wht:'White',blk:'Black',gry:'Gray',grn:'Green',blu:'Blue',slv:'Silver',pk:'Pack',ct:'Count'};
-const VOCAB=['Airwick','Strawberry','Electrical','Tape','Nasal','Lavender','Vanilla','Papaya','Refill','Batteries','Battery','Scissors','Marker','Markers','Notebook','Folder','Folders','Envelopes','Envelope','Stapler','Staples','Pencils','Pencil','Pens','Highlighters','Sharpie','Duct','Masking','Painter','Gloves','Trash','Bags','Sponges','Sponge','Bleach','Cleaner','Water','Bottle','Charger','Cable','Adapter','Extension','Flashlight','Screwdriver','Hammer','Pliers','Zip','Ties','Glue','Paper','Towels','Towel','Tissue','Napkins','Plates','Cups','Forks','Spoons','Snacks','Crackers','Cookies','Candy','Chips','Cereal','Coffee','Sugar','Cleaning','Laundry','Detergent','Soap','Shampoo','Toothpaste','Mouthwash','Deodorant','Lotion','Sanitizer','Wipes','Mints','Gum','Granola','Fruit','Grain','Bars','Bar','Sticks','Mint','Pack','Count','Assorted'];
+const ABBR={oil:'Oil',puc:'PVC',pvc:'PVC',elctric:'Electrical',electric:'Electrical',elec:'Electrical',tpe:'Tape',tp:'Tape',stk:'Sticks',stks:'Sticks',lav:'Lavender',mnt:'Mint',van:'Vanilla',papya:'Papaya',papy:'Papaya',strwbry:'Strawberry',strawbry:'Strawberry',choc:'Chocolate',ckn:'Chicken',org:'Organic',pnut:'Peanut',btl:'Bottle',btls:'Bottles',bx:'Box',clnr:'Cleaner',clnsr:'Cleaner',dtrgnt:'Detergent',dtgt:'Detergent',shmp:'Shampoo',cndtnr:'Conditioner',tthpste:'Toothpaste',nsl:'Nasal',ref:'Refill',refl:'Refill',asst:'Assorted',assrt:'Assorted',wht:'White',blk:'Black',gry:'Gray',grn:'Green',blu:'Blue',slv:'Silver',pk:'Pack',ct:'Count'};
+const VOCAB=['Airwick','Airpop','Strawberry','Electrical','Tape','Nasal','Lavender','Vanilla','Papaya','Refill','Batteries','Battery','Scissors','Marker','Markers','Notebook','Folder','Folders','Envelopes','Envelope','Stapler','Staples','Pencils','Pencil','Pens','Highlighters','Sharpie','Duct','Masking','Painter','Gloves','Trash','Bags','Sponges','Sponge','Bleach','Cleaner','Water','Bottle','Charger','Cable','Adapter','Extension','Flashlight','Screwdriver','Hammer','Pliers','Zip','Ties','Glue','Paper','Towels','Towel','Tissue','Napkins','Plates','Cups','Forks','Spoons','Snacks','Crackers','Cookies','Candy','Chips','Cereal','Coffee','Sugar','Cleaning','Laundry','Detergent','Soap','Shampoo','Toothpaste','Mouthwash','Deodorant','Lotion','Sanitizer','Wipes','Mints','Gum','Granola','Fruit','Grain','Bars','Bar','Sticks','Mint','Pack','Count','Assorted'];
 const nice=n=>{if(!n||n==='Item')return n;let t=String(n).replace(/\s+/g,' ').trim();
  /* sizes and dimensions are noise in a product name (".71INX50F", "2PK", "5CT") -> keep the pack count readable */
  t=t.replace(/\s+\.?\d+(?:\.\d+)?\s?(?:in|inch|ft|f|oz|ml|l|lb|g)(?:\s?x\s?\.?\d+(?:\.\d+)?\s?(?:in|inch|ft|f|oz|ml|l|lb|g)?)?\b/ig,'').replace(/\s+\.?\d+(?:\.\d+)?\s?in\s?x\s?\d+\s?f\b/ig,'');
- const out=t.split(' ').map(w=>{let m=w.match(/^(\d+)\s?(pk|ct|pcs?)$/i);if(m)return m[1]+(/^pk$/i.test(m[2])?'-pack':/^ct$/i.test(m[2])?'-count':' pc');
+ const out=t.split(' ').map(w=>{w=w.replace(/^[SsOoIl|](?=(?:pk|ct|pcs?)$)/i,c=>/[Ss]/.test(c)?'5':/[Oo]/.test(c)?'0':'1');let m=w.match(/^(\d+)\s?(pk|ct|pcs?)$/i);if(m)return m[1]+(/^pk$/i.test(m[2])?'-pack':/^ct$/i.test(m[2])?'-count':' pc');
   const raw=w.replace(/[^A-Za-z]/g,'');if(!raw)return w;const lo=raw.toLowerCase();if(ABBR[lo])return ABBR[lo];
-  if(raw.length>=5){let best=null,bd=2;for(const v of VOCAB){if(Math.abs(v.length-raw.length)>1)continue;const d=lev(lo,v.toLowerCase());if(d<bd){bd=d;best=v}}if(best&&bd<=1)return best}
+  if(raw.length===3&&raw===raw.toUpperCase()){for(const k of ['mnt','lav','stk','tpe','oil']){if(lev(lo,k)<=1)return ABBR[k]}}
+  if(raw.length>=5){let best=null,bd=2;for(const v of VOCAB){if(Math.abs(v.length-raw.length)>1)continue;const d=lev(lo,v.toLowerCase());if(d<bd){bd=d;best=v}}if(best&&bd<=1)return best;const pf=VOCAB.find(v=>v.length>=5&&lo.length>=v.length&&lo.startsWith(v.toLowerCase().slice(0,5))&&lo.length<=v.length+5);if(pf)return pf}
   return /^[A-Z&]{2,}$/.test(w)&&w.length>3?w[0]+w.slice(1).toLowerCase():w});
- return out.join(' ').replace(/\bvan(?:ilia|e)?\s*&?\s*pap[a-z]*\b/i,'Vanilla & Papaya').replace(/\bOIL\b/,'Oil').replace(/\bF&G\b/i,'Fruit & Grain').replace(/\bVan\s*&\s*Papaya\b/i,'Vanilla & Papaya').replace(/\bVan&Papaya\b/i,'Vanilla & Papaya').replace(/\bVanilla&Papaya\b/i,'Vanilla & Papaya').replace(/\s+/g,' ').trim()};
+ return out.join(' ').replace(/\bvan\w{0,3}\s*&?\s*pap\w*/i,'Vanilla & Papaya').replace(/\bOIL\b/,'Oil').replace(/\bF[&R]?G\b/i,'Fruit & Grain').replace(/\bVan\s*&\s*Papaya\b/i,'Vanilla & Papaya').replace(/\bVan&Papaya\b/i,'Vanilla & Papaya').replace(/\bVanilla&Papaya\b/i,'Vanilla & Papaya').replace(/\s+/g,' ').trim()};
+/* v21: register receipts (Dollar Tree style): every line between the DESCRIPTION header and the Sub Total line is an item, and the LAST number on the line is its total.
+   Tolerates the usual photo damage: 1.50T read as 1.507, 1.25T as 125], qty/price columns turned to junk. */
+function regRows(L){
+ let a=L.findIndex(l=>/descr/i.test(l)&&/(qty|price|total|ary|pr[il]ce)/i.test(l));if(a<0)a=L.findIndex(l=>/\bdescri/i.test(l));
+ if(a<0)return [];
+ let z=L.findIndex((l,i)=>i>a&&/sub\s?-?\s?tot|subtota|general\s+exempt|sales\s+tax|\btotal\b/i.test(l));if(z<0)return [];
+ const out=[],PK=/^\d{1,2}(pk|ct|pc|pcs)$/i;
+ for(let i=a+1;i<z;i++){const l=L[i].replace(/^[\s|!:;.,'`~_\-\u2014\u2018\u2019]+/,'').trim();
+  if(!/[A-Za-z]{3}/.test(l)||/^(reason|bag\s?fee|customer|coupon|discount|savings)|brought\s?bag/i.test(l))continue;
+  const tk=l.split(/\s+/),last=tk[tk.length-1],m=last.match(/^\$?(\d{1,3}?)[.,]?(\d{2})([A-Za-z7\]|)!1])?$/);
+  if(!m||tk.length<2)continue;const price=+(m[1]+'.'+m[2]);if(!(price>0))continue;
+  let nm=tk.slice(0,-1);const dropped=[];
+  while(nm.length>1&&dropped.length<3){const t=nm[nm.length-1],lt=(t.match(/[A-Za-z]/g)||[]).length;if(PK.test(t))break;
+   if(t.length<=2||(/[a-z]/.test(t)&&nm.length>2&&/^[^a-z]*$/.test(nm.slice(0,2).join(''))&&dropped.length<2)||(t.length<=5&&lt*2<=t.length)||/[|!]/.test(t)){dropped.push(t);nm.pop()}else break}
+  let q=1;const dq=dropped.slice().reverse().find(t=>/^[1-9]$/.test(t));if(dq)q=+dq;
+  /* size codes (.71INX50F, INX5SOF) are noise */
+  const sz=t=>!PK.test(t)&&(/^\.?\d+(?:\.\d+)?[A-Za-z]{1,5}\d*[A-Za-z]*$/.test(t)||/^[A-Za-z]{1,3}\d+[A-Za-z]*$/.test(t)),keep=nm.map(t=>!sz(t));
+  for(let k=0;k<nm.length-1;k++)if(!keep[k+1]&&/^\.?\d{1,3}$/.test(nm[k]))keep[k]=false;
+  const name=nm.filter((t,k)=>keep[k]).join(' ').replace(/[|]/g,'').replace(/\s+/g,' ').trim();if(!name||(name.match(/[A-Za-z]/g)||[]).length<3)continue;
+  out.push({n:nice(name),full:nice(name),cut:false,n0:l,q,p:+(price/q).toFixed(2),tx:/[T7]$/.test(last)?1:0,ext:1,u:/[.,]/.test(last)?0:1})}
+ return out}
 const readable=n=>((n.match(/[A-Za-z]/g)||[]).length>=3)&&!/^\W*(items?|qty|quantity|price)\W*$/i.test(n);
 /* price typed with a space instead of a point: '10 00', '4. 99', '$4 99' */
 const np=l=>PRICE.test(l)?l.replace(/(\d)\s?[.,]\s+(\d{2})(?=\s*-?\s*[A-Z]{0,2}\d?\s*$)/,'$1.$2'):l.replace(/^(.*[A-Za-z]{3}.*?)\s\$?(\d{1,3})\s(\d{2})(\s*-?\s*[A-Z]{0,2})\s*$/,(m,a,d,c,f)=>+c<=99&&!/\d\s*$/.test(a)?a+' '+d+'.'+c+f:m);
@@ -208,7 +230,7 @@ function cityStateName(L){for(let i=1;i<L.length;i++){const m=L[i].match(/^\W{0,
   if(!/^[A-Za-z][A-Za-z .'\-]{2,24}$/.test(prev)||STREETW.test(prev.split(' ').pop())||NOTCITY.test(prev))continue;
   const c=prev.replace(/\s+/g,' ');return (c===c.toUpperCase()?tcase(c.toLowerCase()):c)+', '+st}return null}
 /* last resort for a damaged address line: the zip is clear, so the state comes from it and the city from the words in front ("Encinitas CA 92024-2847", "Encinitas (A 92024~2847") */
-function cityZip(L){for(let i=0;i<Math.min(L.length,30);i++){const m=L[i].match(/^\W{0,2}([A-Za-z][A-Za-z.'\-]{2,}(?:\s[A-Za-z][A-Za-z.'\-]{2,}){0,2})[\s,]+\S{1,3}[\s,]*(\d{5})(?:[-~\s]\d{4})?\W*$/);if(!m)continue;
+function cityZip(L){for(let i=0;i<Math.min(L.length,30);i++){const m=L[i].match(/^\W{0,2}([A-Za-z][A-Za-z.'\-]{2,}(?:\s[A-Za-z][A-Za-z.'\-]{2,}){0,2})[\s,]+\S{1,3}[\s,]*(\d{5})(?:[-~\s]\d{4})?(?:\s+\S{1,2})?\W*$/);if(!m)continue;
   const st=zipState(m[2]);if(!st)continue;const c=m[1].replace(/\s+/g,' ');if(STREETW.test(c.split(' ').pop())||NOTCITY.test(c))continue;return (c===c.toUpperCase()?tcase(c.toLowerCase()):c)+', '+st}return null}
 /* register line printed before the date: store  register  transaction number ... then the date (Dollar Tree: "0895 04162 03 028 50120119 10/10/26 18:06") */
 function regNo(L){for(const l of L){const m=l.match(/^\W*(\d{3,5}(?:\s+\d{2,8}){3,5})\s+\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\b/);if(m)return m[1].replace(/\s+/g,' ')}return null}
@@ -273,7 +295,7 @@ function parse1(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(
  const inv=invNo(L,mode==='purchase'),txf=taxFlags(text);
  if(mode==='purchase'){
   {const gm=guessMerchant(text,L);if(gm){set('merchant',gm.n);if(gm.sure)found.mk=1}}
-  if(!ONLINE.test(text)){const cs=cityState(L.slice(0,25))||cityStateName(L.slice(0,25))||cityZip(L.slice(0,25));if(cs)set('location',cs)}
+  if(!ONLINE.test(text)){const cs=cityState(L.slice(0,25))||cityZip(L.slice(0,25))||cityStateName(L.slice(0,25));if(cs)set('location',cs)}
   set('date',dateNear(L,/ordered on|order placed|order date|order time|purchase date|date of purchase|date placed|invoice date|\bdate?\b|transaction|print date/i)||firstDate(L));{const ic=text.match(/item details\s*\(\s*(\d+)\s*\)/i);if(ic)set('expected',+ic[1])}set('number',(text.match(/\b(\d{3}-\d{7}-\d{7})\b/)||[])[1]||(inv&&inv[1])||(mode==='purchase'?regNo(L):null));
   const mk=ONLINE.test(text)||/item details|\ba[fl]ter\s+(?:promos?|credit)/i.test(text),dp=x=>mk&&!PRICE.test(x)?x.replace(/\$\s?(\d{1,2})(\d{2})\s*$/,'$$$1.$2'):x;
   let pend=null,tnd=null,chg=null;const skipped=[],pays=[];
@@ -328,6 +350,10 @@ function parse1(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(
   if(F.extSub==null&&items.length&&F.extTotal!=null&&F.tax!=null&&F.discount==null&&!F.shipping)set('extSub',+(F.extTotal-F.tax).toFixed(2));
   /* Missing-item recovery: when the items do not add up to the receipt's own subtotal (or to total - tax - shipping), and a line that was set aside
      (unreadable name, gift card, etc.) accounts for exactly the gap (one line, or two), put it back and mark it for checking. */
+  /* register-style receipts: when the normal read does not add up to the printed subtotal, but the row-by-row read does, use the row-by-row read */
+  if(!mk){try{const alt=regRows(L);if(alt.length){const d0=F.discount||0,t0=F.extSub!=null?F.extSub:(F.extTotal!=null?+(F.extTotal-(F.tax||0)-(F.shipping||0)+d0).toFixed(2):null),sm=a=>+a.reduce((x,i)=>x+i.q*i.p,0).toFixed(2),okS=a=>t0!=null&&Math.abs(sm(a)-t0)<=0.02;
+    if(t0!=null&&!okS(alt)){const un=alt.filter(x=>x.u);if(un.length===1){const r=un[0],need=+(t0-(sm(alt)-r.q*r.p)).toFixed(2);if(need>0&&need<=r.q*r.p*3+5){r.p=+(need/r.q).toFixed(2);r.chk=1}}}
+    if(!items.length||(t0==null&&alt.length>=2)||(okS(alt)&&!okS(items))||(t0!=null&&!okS(items)&&Math.abs(sm(alt)-t0)<Math.abs(sm(items)-t0))){items.length=0;alt.forEach(x=>items.push(x))}}}catch(e){}}
   {const sumI=()=>+items.reduce((a,i)=>a+i.q*i.p,0).toFixed(2),d=F.discount||0;
    let t=F.extSub;if(t==null&&F.extTotal!=null)t=+(F.extTotal-(F.tax||0)-(F.shipping||0)+d).toFixed(2);
    if(t!=null&&skipped.length&&items.length){const sum=sumI(),ok=x=>Math.abs(x-t)<=0.02;
