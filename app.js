@@ -1398,8 +1398,8 @@ window.csvGo=async function(){
    const PT_VER='v200'
    const PT_VER='vv200'
    ---------- */
-const PT_BUILD=206;
-const PT_LABEL='v7';
+const PT_BUILD=207;
+const PT_LABEL='v8';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
@@ -1418,16 +1418,16 @@ const PT_LABEL='v7';
 /* v7: Saved list polish (cards, week headers, amounts, chevrons) */
 (function(){const st=document.createElement('style');st.textContent=
 '.svsum{background:var(--ext);border-radius:14px;padding:12px 16px;align-items:center;margin:4px 0 2px}'
-+'.svsum b{font-size:24px;color:var(--gd);letter-spacing:-.3px;font-variant-numeric:tabular-nums}'
++'.svsum b{font-size:17px;color:var(--gd);letter-spacing:-.3px;font-variant-numeric:tabular-nums}'
 +'.wkh{margin:20px 0 -2px;padding:0 2px;align-items:center}'
-+'.wkh span:first-child{color:var(--fg);font-size:15px;font-weight:700;letter-spacing:-.1px}'
++'.wkh span:first-child{color:var(--fg);font-size:13px;font-weight:700;letter-spacing:-.1px}'
 +'.wkh span+span{background:var(--ext);color:var(--gd);font-weight:700;font-size:13px;padding:3px 11px;border-radius:999px;font-variant-numeric:tabular-nums}'
 +'.sl{border-radius:16px;padding:2px 16px;box-shadow:0 1px 2px rgba(35,47,58,.05),0 6px 18px rgba(35,47,58,.06);border-color:rgba(226,224,216,.7)}'
 +'.srow{padding:14px 0;gap:12px}'
 +'.srow .sm{flex:1;min-width:0}'
-+'.srow .s1{font-size:16px;font-weight:650;letter-spacing:-.1px}'
-+'.srow b{font-size:17px;font-weight:700;color:var(--fg);font-variant-numeric:tabular-nums}'
-+'.srow.tap::after{content:"\\203A";color:#b9c0c6;font-size:24px;line-height:1;margin-left:-2px}'
++'.srow .s1{font-size:14px;font-weight:650;letter-spacing:-.1px}'
++'.srow b{font-size:14px;font-weight:700;color:var(--fg);font-variant-numeric:tabular-nums}'
++'.srow.tap::after{content:"\\203A";color:#b9c0c6;font-size:20px;line-height:1;margin-left:-2px}'
 +'.dp{font-size:12px;padding:2px 9px;margin-top:6px;font-weight:600;background:var(--ext);color:var(--gd)}'
 +'.srow .s2{color:var(--mut)}';
 document.head.appendChild(st)})();
