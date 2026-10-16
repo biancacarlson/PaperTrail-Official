@@ -1,6 +1,6 @@
 'use strict';
 const LS=(k,d)=>{try{return localStorage.getItem(k)||d}catch(e){return d}};
-const $=s=>document.querySelector(s),S={start:'North Park, San Diego, CA 92104',mode:'purchase',rec:null,records:[],sel:[],words:[],idle:15,img:null,z:1,x:0,y:0,tab:'new',learn:{m:{},mi:{}},sv:{sec:'x',cat:'All',sort:'dnew',q:''}};
+const $=s=>document.querySelector(s),S={start:'North Park, San Diego, CA 92104',mode:'freelance',rec:null,records:[],sel:[],words:[],idle:15,img:null,z:1,x:0,y:0,tab:'new',learn:{m:{},mi:{}},sv:{sec:'w',cat:'All',sort:'dnew',q:''}};
 const est=r=>Parser.net30(r.endDate||r.jobDate);
 const chk=()=>S.rec.location?true:(st('Enter the job location first.'),false);
 const IOS=/iPhone|iPad|iPod/.test(navigator.userAgent);
@@ -344,6 +344,9 @@ function wkAmt(r,k){const a=N(r.amount);if(a==null)return null;const ds=workDays
  const hr={};ks.forEach(x=>hr[x]=0);(r.shifts||[]).filter(x=>x&&N(x.hours)!=null).forEach(x=>{const d=Parser.pd(x.date||r.jobDate);if(d){const w=+wkStart(d);if(w in hr)hr[w]+=N(x.hours)}});
  let tot=ks.reduce((t,x)=>t+hr[x],0);if(!(tot>0)){ks.forEach(x=>hr[x]=ds.filter(d=>+wkStart(d)===x).length);tot=ks.reduce((t,x)=>t+hr[x],0)}
  let used=0;for(let i=0;i<ks.length;i++){const p=i==ks.length-1?+(a-used).toFixed(2):+(a*hr[ks[i]]/tot).toFixed(2);if(ks[i]===k)return p;used+=p}return a}
+/* v-5: work-invoice rows list each worked day as a small pill (weekday + date) so every day is easy to spot; split invoices get a short note */
+function dayPills(r,k){let d=workDays(r);if(k!=null)d=d.filter(x=>+wkStart(x)===k);if(!d.length)return esc(r.jobDate||'');
+ return d.map(x=>'<span class="dp">'+x.toLocaleDateString('en-US',{weekday:'short'})+' '+(x.getMonth()+1)+'/'+x.getDate()+'</span>').join('')}
 function daysInWk(r,k){const d=workDays(r).filter(x=>+wkStart(x)===k);if(!d.length)return r.jobDate;const md=x=>(x.getMonth()+1)+'/'+x.getDate();return d.map(md).join(', ')+'/'+d[d.length-1].getFullYear()}
 function grpRows(list,row){const dc={},m=new Map();
  list.forEach(e=>{const ds=workDays(e[0]);ds.forEach(d=>{const k=+wkStart(d);dc[k]=(dc[k]||0)+1});const p=wkKey(e[0]),add=(k,cont)=>{const w=ds.filter(d=>+wkStart(d)===k).map(d=>+d),t=w.length?Math.min(...w):(recDate(e[0])||0);if(!m.has(k))m.set(k,[]);m.get(k).push({e,cont,t})};
@@ -353,7 +356,7 @@ function grpRows(list,row){const dc={},m=new Map();
  return keys.map(k=>{const rs=m.get(k).slice();if(k!=='none')rs.sort((a,b)=>desc?b.t-a.t:a.t-b.t);const sum=+rs.reduce((t,x)=>t+((k==='none'?recAmt(x.e[0]):wkAmt(x.e[0],k))||0),0).toFixed(2);return '<div class="wkh"><span>'+wkTitle(k)+'</span><span>'+M(sum)+'</span></div><div class="sl">'+rs.map(x=>row(x.e,k==='none'?null:k,x.cont)).join('')+'</div>'}).join('')}
 function svBody(){
  const x=S.sv.sec=='x',grp=!x&&/^d/.test(sortFor(x)),q=svSearching(),list=svList(),tot=+list.reduce((s,[r])=>s+(recAmt(r)||0),0).toFixed(2),T=totals(),trow=(l,v)=>`<div class="srow"><div class="sm">${l}</div><b>${M(v)}</b></div>`,
- row=([r,i],wk,cont)=>{const pur=r.mode=='purchase',nm=esc((pur?niceMerch(r.merchant):r.client)||(pur?'Receipt':'Work invoice')),sub=[pur?r.date:(wk!=null?daysInWk(r,wk):daysLbl(r)),pur?r.category:null].filter(Boolean).map(esc).join(' · ');
+ row=([r,i],wk,cont)=>{const pur=r.mode=='purchase',nm=esc((pur?niceMerch(r.merchant):r.client)||(pur?'Receipt':'Work invoice')),split=!pur&&wk!=null&&new Set(workDays(r).map(x=>+wkStart(x))).size>1,first=split&&Math.min(...workDays(r).map(x=>+wkStart(x)))===wk,sub=pur?[r.date,r.category].filter(Boolean).map(esc).join(' · '):dayPills(r,wk)+(split?'<div class="dn">'+(first?'Same invoice continues next week':'Continued from previous week')+'</div>':'');
   return `<div class="srow tap" role="button" tabindex="0" onclick="openRec(${i})" onkeydown="if(event.key=='Enter')openRec(${i})"><div class="sm"><div class="s1">${nm}</div>${sub?`<div class="s2">${sub}</div>`:''}</div><b>${M(!pur&&wk!=null?wkAmt(r,wk):recAmt(r))}</b></div>`};
  let lbl;if(q)lbl=list.length+' match'+(list.length==1?'':'es')+(x&&S.sv.cat!='All'?' in '+S.sv.cat:'');else lbl=x&&S.sv.cat!='All'?list.length+' in '+S.sv.cat:list.length+' '+(x?'expense':'work invoice')+(list.length==1?'':'s');
  let none='';if(!list.length){if(q){const toks=svTok(S.sv.q),o=S.records.filter(r=>(r.mode=='purchase')!=x&&recMatch(r,toks)).length;none='<div class="empty2">No matches for “'+esc(S.sv.q.trim())+'”.'+(x&&S.sv.cat!='All'?'<br>Try the All category.':'')+(o?'<br><button onclick="svOther()" style="margin-top:10px">Show '+o+' in '+(x?'Work invoices':'Expenses')+'</button>':'')+'</div>'}else none='<div class="empty2">'+(x?'No expenses saved yet.':'No work invoices saved yet.')+'</div>'}
@@ -395,7 +398,7 @@ async function store(){if(!S.key||!S.loaded||S.noStore)return;try{const iv=crypt
 async function flush(){}
 async function nuke(){if(!confirm('Delete every saved record from this phone and clear the screen? Your passcode stays.'))return;try{await idb('del')}catch(e){}S.noStore=false;wipe();st('Saved data deleted.');window.bkRefresh&&window.bkRefresh()}
 
-setMode('purchase');showLock();bump();
+setMode('freelance');showLock();bump();
 
 addEventListener('dragover',e=>e.preventDefault());addEventListener('drop',e=>{e.preventDefault();handleFiles(e.dataTransfer.files)});
 addEventListener('afterprint',()=>{$('#print').textContent=''});
@@ -895,6 +898,7 @@ function editRec(i){const r=S.records[i];if(!r)return;
 document.addEventListener('keydown',e=>{if(e.key=='Escape')closeRec()});
 (function(){const s=document.createElement('style');s.textContent='#view{height:auto;min-height:120px;touch-action:pan-y}#layer{touch-action:auto!important}.zbtn{position:absolute;top:8px;right:8px;z-index:3;padding:6px 12px;font-size:13px;font-weight:700;border-radius:999px;background:rgba(255,255,255,.92);box-shadow:0 1px 4px rgba(0,0,0,.25)}'
  +'.wkh{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;font-weight:600;color:var(--mut);padding:0 4px;margin:10px 0 -4px}.wkh span+span{font-weight:500}'
+ +'.dp{display:inline-block;background:rgba(63,127,95,.14);color:#2f6b4f;border-radius:999px;padding:3px 10px;margin:5px 6px 0 0;font-size:13px;font-weight:600}.dn{font-size:12px;color:var(--mut);margin-top:6px}'
  +'.srow.tap{cursor:pointer}.srow.tap:active{background:rgba(0,0,0,.04)}'
  +'.dup{display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:10px 12px;border:1px solid #e0a59b;background:var(--warn);border-radius:12px;font-size:14px}.dup>div{flex:1;min-width:0}.dup b{display:block}.dup span{display:block;font-size:13px;overflow-wrap:anywhere}.dup button{flex:0 0 auto;padding:8px 14px;font-weight:700}'
  +'.rmo{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center}'
@@ -1394,8 +1398,8 @@ window.csvGo=async function(){
    const PT_VER='v200'
    const PT_VER='vv200'
    ---------- */
-const PT_BUILD=203;
-const PT_LABEL='v-4';
+const PT_BUILD=204;
+const PT_LABEL='v-5';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
