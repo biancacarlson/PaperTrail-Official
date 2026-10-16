@@ -338,13 +338,18 @@ function daysLbl(r){const d=workDays(r);if(d.length<2)return r.jobDate;const y=n
 function wkKey(r){const t=recDate(r);return t==null?'none':+wkStart(new Date(t))}
 function wkTitle(k){if(k==='none')return 'No date';const a=new Date(k),b=new Date(a.getFullYear(),a.getMonth(),a.getDate()+6),f=(d,m)=>d.toLocaleDateString('en-US',m?{month:'short',day:'numeric'}:{day:'numeric'}),cur=+wkStart(new Date())===k;
  return (cur?'This week \u00b7 ':'')+f(a,1)+' \u2013 '+f(b,a.getMonth()!==b.getMonth())}
-function grpRows(list,row){const g=[],dc={};list.forEach(e=>{workDays(e[0]).forEach(d=>{const k=+wkStart(d);dc[k]=(dc[k]||0)+1});const k=wkKey(e[0]),l=g[g.length-1];if(l&&l.k===k)l.r.push(e);else g.push({k,r:[e]})});
+/* v-2: an invoice that crosses a week boundary (10/24 and 10/27) is listed under each week it touches, showing only that week's dates. The amount stays on the first week; later weeks show "Part of $X". */
+function daysInWk(r,k){const d=workDays(r).filter(x=>+wkStart(x)===k);if(!d.length)return r.jobDate;const md=x=>(x.getMonth()+1)+'/'+x.getDate();return d.map(md).join(', ')+'/'+d[d.length-1].getFullYear()}
+function grpRows(list,row){const dc={},m=new Map();
+ list.forEach(e=>{const ds=workDays(e[0]);ds.forEach(d=>{const k=+wkStart(d);dc[k]=(dc[k]||0)+1});const p=wkKey(e[0]),add=(k,cont)=>{const w=ds.filter(d=>+wkStart(d)===k).map(d=>+d),t=w.length?Math.min(...w):(recDate(e[0])||0);if(!m.has(k))m.set(k,[]);m.get(k).push({e,cont,t})};
+  add(p,false);if(p!=='none')[...new Set(ds.map(d=>+wkStart(d)))].filter(k=>k!==p).forEach(k=>add(k,true))});
+ const desc=sortFor(false)!=='dold',keys=[...m.keys()].filter(k=>k!=='none').sort((a,b)=>desc?b-a:a-b);if(m.has('none'))keys.push('none');
  const pl=(n,w)=>n+' '+w+(n==1?'':'s');
- return g.map(w=>{const dn=w.k==='none'?0:dc[w.k]||0;return '<div class="wkh"><span>'+wkTitle(w.k)+'</span><span>'+(dn?pl(dn,'day')+' \u00b7 ':'')+pl(w.r.length,'invoice')+'</span></div><div class="sl">'+w.r.map(row).join('')+'</div>'}).join('')}
+ return keys.map(k=>{const rs=m.get(k).slice();if(k!=='none')rs.sort((a,b)=>desc?b.t-a.t:a.t-b.t);const dn=k==='none'?0:dc[k]||0;return '<div class="wkh"><span>'+wkTitle(k)+'</span><span>'+(dn?pl(dn,'day')+' \u00b7 ':'')+pl(rs.length,'invoice')+'</span></div><div class="sl">'+rs.map(x=>row(x.e,k==='none'?null:k,x.cont)).join('')+'</div>'}).join('')}
 function svBody(){
  const x=S.sv.sec=='x',grp=!x&&/^d/.test(sortFor(x)),q=svSearching(),list=svList(),tot=+list.reduce((s,[r])=>s+(recAmt(r)||0),0).toFixed(2),T=totals(),trow=(l,v)=>`<div class="srow"><div class="sm">${l}</div><b>${M(v)}</b></div>`,
- row=([r,i])=>{const pur=r.mode=='purchase',nm=esc((pur?niceMerch(r.merchant):r.client)||(pur?'Receipt':'Work invoice')),sub=[pur?r.date:daysLbl(r),pur?r.category:null,r.location].filter(Boolean).map(esc).join(' · ');
-  return `<div class="srow tap" role="button" tabindex="0" onclick="openRec(${i})" onkeydown="if(event.key=='Enter')openRec(${i})"><div class="sm"><div class="s1">${nm}</div>${sub?`<div class="s2">${sub}</div>`:''}</div><b>${M(recAmt(r))}</b></div>`};
+ row=([r,i],wk,cont)=>{const pur=r.mode=='purchase',nm=esc((pur?niceMerch(r.merchant):r.client)||(pur?'Receipt':'Work invoice')),sub=[pur?r.date:(wk!=null?daysInWk(r,wk):daysLbl(r)),pur?r.category:null,r.location].filter(Boolean).map(esc).join(' · ');
+  return `<div class="srow tap" role="button" tabindex="0" onclick="openRec(${i})" onkeydown="if(event.key=='Enter')openRec(${i})"><div class="sm"><div class="s1">${nm}</div>${sub?`<div class="s2">${sub}</div>`:''}</div>${cont?`<span class="s2" style="white-space:nowrap">Part of ${M(recAmt(r))}</span>`:`<b>${M(recAmt(r))}</b>`}</div>`};
  let lbl;if(q)lbl=list.length+' match'+(list.length==1?'':'es')+(x&&S.sv.cat!='All'?' in '+S.sv.cat:'');else lbl=x&&S.sv.cat!='All'?list.length+' in '+S.sv.cat:list.length+' '+(x?'expense':'work invoice')+(list.length==1?'':'s');
  let none='';if(!list.length){if(q){const toks=svTok(S.sv.q),o=S.records.filter(r=>(r.mode=='purchase')!=x&&recMatch(r,toks)).length;none='<div class="empty2">No matches for “'+esc(S.sv.q.trim())+'”.'+(x&&S.sv.cat!='All'?'<br>Try the All category.':'')+(o?'<br><button onclick="svOther()" style="margin-top:10px">Show '+o+' in '+(x?'Work invoices':'Expenses')+'</button>':'')+'</div>'}else none='<div class="empty2">'+(x?'No expenses saved yet.':'No work invoices saved yet.')+'</div>'}
  return (list.length?'<div class="svsum"><span>'+lbl+'</span><b>'+M(tot)+'</b></div>'+(grp?grpRows(list,row):'<div class="sl">'+list.map(row).join('')+'</div>'):none)
@@ -1384,8 +1389,8 @@ window.csvGo=async function(){
    const PT_VER='v200'
    const PT_VER='vv200'
    ---------- */
-const PT_BUILD=200;
-const PT_LABEL='v-1';
+const PT_BUILD=201;
+const PT_LABEL='v-2';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
