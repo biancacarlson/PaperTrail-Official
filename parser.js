@@ -1,7 +1,7 @@
 'use strict';
 /* self-update (V must match the ?v= number in index.html): the iPhone Home Screen app keeps its own cached copy of the page and ignores no-cache hints. On launch, ask the server (bypassing the cache) which version is current;
    if it is newer than this file, re-download every file once and reload. Runs from parser.js so even an old cached index.html picks it up. Once per session, so it can never loop. */
-(function(){var V=217;try{if(typeof window==='undefined'||!window.fetch||!navigator.onLine||sessionStorage.getItem('pt_upd'))return;
+(function(){var V=219;try{if(typeof window==='undefined'||!window.fetch||!navigator.onLine||sessionStorage.getItem('pt_upd'))return;
  fetch('index.html',{cache:'reload'}).then(function(r){return r.text()}).then(function(h){var m=h.match(/parser\.js\?v=(\d+)/);if(!m||+m[1]<=V)return;
   try{sessionStorage.setItem('pt_upd','1')}catch(e){}
   return Promise.all(['parser.js','scan.js','app.js'].map(function(f){return fetch(f+'?v='+m[1],{cache:'reload'})})).then(function(){location.reload()})}).catch(function(){})}catch(e){}})();
@@ -71,6 +71,17 @@ function shortName(title,v,cut){let t=title.split(' ').filter(Boolean),q=null,se
  const qs=q>1?q+'pc ':'';
  if(set)return q>1?qs+'Set of '+n:n+' Set';
  return qs+n}
+/* Register receipts print short product codes (ELCTRIC, STK, 2PK). Expand the common ones and repair one damaged letter in common product words. */
+const ABBR={elctric:'Electrical',electric:'Electrical',elec:'Electrical',tpe:'Tape',tp:'Tape',stk:'Sticks',stks:'Sticks',lav:'Lavender',mnt:'Mint',van:'Vanilla',papya:'Papaya',papy:'Papaya',strwbry:'Strawberry',strawbry:'Strawberry',choc:'Chocolate',ckn:'Chicken',org:'Organic',pnut:'Peanut',btl:'Bottle',btls:'Bottles',bx:'Box',clnr:'Cleaner',clnsr:'Cleaner',dtrgnt:'Detergent',dtgt:'Detergent',shmp:'Shampoo',cndtnr:'Conditioner',tthpste:'Toothpaste',nsl:'Nasal',ref:'Refill',refl:'Refill',asst:'Assorted',assrt:'Assorted',wht:'White',blk:'Black',gry:'Gray',grn:'Green',blu:'Blue',slv:'Silver',pk:'Pack',ct:'Count'};
+const VOCAB=['Airwick','Strawberry','Electrical','Tape','Nasal','Lavender','Vanilla','Papaya','Refill','Batteries','Battery','Scissors','Marker','Markers','Notebook','Folder','Folders','Envelopes','Envelope','Stapler','Staples','Pencils','Pencil','Pens','Highlighters','Sharpie','Duct','Masking','Painter','Gloves','Trash','Bags','Sponges','Sponge','Bleach','Cleaner','Water','Bottle','Charger','Cable','Adapter','Extension','Flashlight','Screwdriver','Hammer','Pliers','Zip','Ties','Glue','Paper','Towels','Towel','Tissue','Napkins','Plates','Cups','Forks','Spoons','Snacks','Crackers','Cookies','Candy','Chips','Cereal','Coffee','Sugar','Cleaning','Laundry','Detergent','Soap','Shampoo','Toothpaste','Mouthwash','Deodorant','Lotion','Sanitizer','Wipes','Mints','Gum','Granola','Fruit','Grain','Bars','Bar','Sticks','Mint','Pack','Count','Assorted'];
+const nice=n=>{if(!n||n==='Item')return n;let t=String(n).replace(/\s+/g,' ').trim();
+ /* sizes and dimensions are noise in a product name (".71INX50F", "2PK", "5CT") -> keep the pack count readable */
+ t=t.replace(/\s+\.?\d+(?:\.\d+)?\s?(?:in|inch|ft|f|oz|ml|l|lb|g)(?:\s?x\s?\.?\d+(?:\.\d+)?\s?(?:in|inch|ft|f|oz|ml|l|lb|g)?)?\b/ig,'').replace(/\s+\.?\d+(?:\.\d+)?\s?in\s?x\s?\d+\s?f\b/ig,'');
+ const out=t.split(' ').map(w=>{let m=w.match(/^(\d+)\s?(pk|ct|pcs?)$/i);if(m)return m[1]+(/^pk$/i.test(m[2])?'-pack':/^ct$/i.test(m[2])?'-count':' pc');
+  const raw=w.replace(/[^A-Za-z]/g,'');if(!raw)return w;const lo=raw.toLowerCase();if(ABBR[lo])return ABBR[lo];
+  if(raw.length>=5){let best=null,bd=2;for(const v of VOCAB){if(Math.abs(v.length-raw.length)>1)continue;const d=lev(lo,v.toLowerCase());if(d<bd){bd=d;best=v}}if(best&&bd<=1)return best}
+  return /^[A-Z&]{2,}$/.test(w)&&w.length>3?w[0]+w.slice(1).toLowerCase():w});
+ return out.join(' ').replace(/\bvan(?:ilia|e)?\s*&?\s*pap[a-z]*\b/i,'Vanilla & Papaya').replace(/\bOIL\b/,'Oil').replace(/\bF&G\b/i,'Fruit & Grain').replace(/\bVan\s*&\s*Papaya\b/i,'Vanilla & Papaya').replace(/\bVan&Papaya\b/i,'Vanilla & Papaya').replace(/\bVanilla&Papaya\b/i,'Vanilla & Papaya').replace(/\s+/g,' ').trim()};
 const readable=n=>((n.match(/[A-Za-z]/g)||[]).length>=3)&&!/^\W*(items?|qty|quantity|price)\W*$/i.test(n);
 /* price typed with a space instead of a point: '10 00', '4. 99', '$4 99' */
 const np=l=>PRICE.test(l)?l.replace(/(\d)\s?[.,]\s+(\d{2})(?=\s*-?\s*[A-Z]{0,2}\d?\s*$)/,'$1.$2'):l.replace(/^(.*[A-Za-z]{3}.*?)\s\$?(\d{1,3})\s(\d{2})(\s*-?\s*[A-Z]{0,2})\s*$/,(m,a,d,c,f)=>+c<=99&&!/\d\s*$/.test(a)?a+' '+d+'.'+c+f:m);
@@ -287,7 +298,7 @@ function parse1(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(
     const QL=/^(\d+)\s*[x@]\s*\$?(\d+[.,]\d{2})(?:\s*(?:ea|each))?$/i,WL=/^\d+(?:\.\d+)?\s*(?:lbs?|kg|oz|ea|each)\b/i;
     if(m=head.match(QL)){q=+m[1]||1;p=v/q;n=''}
     /* register columns: NAME  qty  unit-price  [total printed as v] -> keep only the name */
-    else if(!mk&&(m=n.match(/^(.+?)[:\s]+(\d{1,2})\s+\$?(\d+[.,]\d{2})$/))&&+m[2]>0&&Math.abs(+m[2]*num(m[3])-v)<=0.02&&/[A-Za-z]{3}/.test(m[1])){n=m[1].replace(/[:\s]+$/,'');q=+m[2];p=num(m[3])}
+    else if(!mk&&(m=n.match(/^(.+?)[:\s]+(\d{1,2}|[lI|])\s+\$?(\d+[.,]\d{2})$/))&&/[A-Za-z]{3}/.test(m[1])&&(()=>{const qq=/^\d/.test(m[2])?+m[2]:1;return qq>0&&(Math.abs(qq*num(m[3])-v)<=0.02||qq===1)})()){const qq=/^\d/.test(m[2])?+m[2]:1;n=m[1].replace(/[:\s]+$/,'');q=qq;p=qq===1?v:num(m[3])}
     else if(WL.test(head)||/^\W*(?:qty|quantity)\b/i.test(head)){n=''}
     else if(m=n.match(/^(\d+)\s*[x@]\s*(.+)/i)){q=+m[1];n=m[2];p=v/q}
     else if(m=n.match(/^(.+?)\s+(\d+)\s*[x@]\s*\$?(\d+[.,]\d{2})$/i)){n=m[1];q=+m[2];p=num(m[3])}
@@ -311,8 +322,9 @@ function parse1(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(
   if(!items.length&&!mk){const fi=fallbackItem(L,F);if(fi)items.push(fi)}
   /* no printed total: the amount tendered less change given back is what was paid; else subtotal - discount + tax + shipping */
   if(F.extTotal==null){if(tnd!=null&&tnd>0)set('extTotal',+(tnd-(chg||0)).toFixed(2));else if(F.extSub!=null)set('extTotal',+(F.extSub-(F.discount||0)+(F.tax||0)+(F.shipping||0)).toFixed(2))}
+  if(!mk)items.forEach(it=>{if(it.n&&!it.chk){it.n=nice(it.n)}});
   /* the total read does not equal subtotal + tax, but the card/payment line does: the total was misread */
-  if(F.extSub!=null&&F.tax!=null&&F.extTotal!=null&&!F.discount&&!F.shipping){const ex=+(F.extSub+F.tax).toFixed(2);if(Math.abs(ex-F.extTotal)>0.02&&pays.some(x=>Math.abs(x-ex)<=0.005))F.extTotal=ex}
+  if(F.extSub!=null&&F.tax!=null&&F.extTotal!=null&&!F.discount&&!F.shipping){const ex=+(F.extSub+F.tax).toFixed(2);if(Math.abs(ex-F.extTotal)>0.02&&(pays.some(x=>Math.abs(x-ex)<=0.005)||F.extTotal<F.extSub-0.005))F.extTotal=ex}
   if(F.extSub==null&&items.length&&F.extTotal!=null&&F.tax!=null&&F.discount==null&&!F.shipping)set('extSub',+(F.extTotal-F.tax).toFixed(2));
   /* Missing-item recovery: when the items do not add up to the receipt's own subtotal (or to total - tax - shipping), and a line that was set aside
      (unreadable name, gift card, etc.) accounts for exactly the gap (one line, or two), put it back and mark it for checking. */

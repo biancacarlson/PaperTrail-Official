@@ -1051,6 +1051,7 @@ function extras(){
  if(d&&!$('#rcbtn')){
   const mk=(id,txt,fn)=>{const b=document.createElement('button');b.id=id;b.type='button';b.textContent=txt;b.onclick=fn;d.appendChild(b)};
   mk('rcbtn','Create a new recovery code',()=>window.authMakeCode());
+  mk('pwbtn','Change password',()=>window.authChangePw());
   mk('bkbtn','Download backup',()=>window.authBackup());
  }
  let n=$('#rcbar');
@@ -1066,6 +1067,37 @@ window.authMakeCode=async function(){
  showCode(code,()=>{open_();extras()},'Save your recovery code');
 };
 
+/* v19: change password while signed in. Re-encrypts the saved records under the new password; the old recovery code stops working, so a new one is made. */
+window.authChangePw=function(){
+ const o=S.uid&&getAcct(S.uid);if(!o||!S.pp)return;
+ if(S.noStore){alert('Your saved records could not be opened, so the password cannot be changed safely.');return}
+ const old=document.getElementById('pwov');if(old)old.remove();
+ const ov=document.createElement('div');ov.id='pwov';ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px';
+ ov.innerHTML='<div style="background:var(--card,#fff);color:var(--fg,#111);border-radius:16px;padding:18px;width:100%;max-width:380px;box-shadow:0 10px 40px rgba(0,0,0,.3)"><h2 style="margin:0 0 10px">Change password</h2>'
+  +'<input id="cp0" type="password" autocomplete="current-password" placeholder="Current password">'
+  +'<input id="cp1" type="password" autocomplete="new-password" placeholder="New password (8+ characters)">'
+  +'<input id="cp2" type="password" autocomplete="new-password" placeholder="Confirm new password">'
+  +'<div id="cpm" style="color:#b3261e;min-height:20px;font-size:14px;margin:6px 0"></div>'
+  +'<div style="display:flex;gap:8px"><button type="button" id="cpx">Cancel</button><button type="button" class="pri" id="cps">Change password</button></div></div>';
+ document.body.appendChild(ov);
+ const g=i=>document.getElementById(i),m=t=>{g('cpm').textContent=t||''};
+ g('cpx').onclick=()=>ov.remove();
+ g('cps').onclick=async()=>{const a=g('cp0').value,b=g('cp1').value,c=g('cp2').value;
+  if(!a||!b||!c)return m('Fill in all three boxes.');
+  if(b.length<8)return m('New password needs 8 or more characters.');
+  if(b!==c)return m('The new passwords do not match.');
+  if(b===a)return m('Choose a different password.');
+  const btn=g('cps');btn.disabled=true;
+  try{
+   if(await hash(pp(S.email,a),unhex(o.s))!==o.h){btn.disabled=false;return m('Current password is not right.')}
+   const np=pp(S.email,b),salt=rnd(16),n={s:salt,h:await hash(np,unhex(salt)),e:rnd(16)},nk=await dk(np,n.e),
+    iv=crypto.getRandomValues(new Uint8Array(12)),ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},nk,new TextEncoder().encode(JSON.stringify(learnPack())));
+   await idb('put',{iv,c:ct});setAcct(S.uid,n);S.pp=np;S.key=nk;
+   let code=null;if(o.rw){code=newCode();n.rw=await wrap(code,np);setAcct(S.uid,n)}
+   ov.remove();try{window.bkChanged&&window.bkChanged()}catch(e){}
+   if(code)showCode(code,()=>{open_();extras()},'Password changed. Save your new recovery code');else{try{toast('Password changed')}catch(e){}extras()}
+  }catch(e){btn.disabled=false;m('Could not change the password. Nothing was changed.')}}
+};
 window.authForgot=function(){
  let last='';try{last=localStorage.getItem(LAST)||''}catch(e){}
  lockUI('<h2>Reset password</h2><p style="margin:0 0 10px;font-size:14px;line-height:1.5">Enter your email, the recovery code you saved, and a new password. Your saved records stay as they are. Tip: you can paste the whole recovery sheet into the code box.</p>'
@@ -1424,8 +1456,8 @@ window.csvGo=async function(){
    const PT_VER='v200'
    const PT_VER='vv200'
    ---------- */
-const PT_BUILD=217;
-const PT_LABEL='v18';
+const PT_BUILD=219;
+const PT_LABEL='v20';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
