@@ -45,7 +45,7 @@ const css=`
  #actions{margin:0 -14px;padding-inline:14px}
 }
 /* dropdown panel (shared by every menu) */
-#ptmenu{position:fixed;z-index:60;min-width:236px;max-width:calc(100vw - 24px);max-height:calc(100vh - 80px);overflow-y:auto;background:#14171a;border:1px solid #2a2e33;border-radius:14px;padding:6px;box-shadow:0 14px 40px rgba(0,0,0,.55)}
+#ptmenu{position:fixed;z-index:200;min-width:236px;max-width:calc(100vw - 24px);max-height:calc(100vh - 80px);overflow-y:auto;background:#14171a;border:1px solid #2a2e33;border-radius:14px;padding:6px;box-shadow:0 14px 40px rgba(0,0,0,.55)}
 #ptmenu .mh{padding:8px 10px 6px;font-size:12.5px;color:var(--mut);overflow-wrap:anywhere}
 #ptmenu .mi{display:block;width:100%;text-align:left;background:transparent;border:0;border-radius:9px;padding:10px;min-height:40px;font-size:14.5px;font-weight:500;color:var(--fg);box-shadow:none}
 #ptmenu .mi small{display:block;font-size:12px;font-weight:400;color:var(--mut);margin-top:2px}
@@ -59,6 +59,7 @@ const css=`
 /* info sheets (Disclaimer, Home Screen guide) */
 #ptinfo .rmh h3{font:600 17px -apple-system,system-ui,sans-serif;letter-spacing:-.01em;text-transform:none;color:var(--fg)}
 #ptinfo .dt{max-height:none;overflow:visible}
+#ptinfo.rmo{z-index:150}
 @media(min-width:700px){#ptinfo.rmo{align-items:center}#ptinfo .rm{border-radius:18px}}
 /* Saved: quiet export control, quieter banners */
 #savedview .svsum{display:flex;align-items:center;gap:12px}
