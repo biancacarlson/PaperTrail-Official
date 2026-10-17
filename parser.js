@@ -1,7 +1,7 @@
 'use strict';
 /* self-update (V must match the ?v= number in index.html): the iPhone Home Screen app keeps its own cached copy of the page and ignores no-cache hints. On launch, ask the server (bypassing the cache) which version is current;
    if it is newer than this file, re-download every file once and reload. Runs from parser.js so even an old cached index.html picks it up. Once per session, so it can never loop. */
-(function(){var V=221;try{if(typeof window==='undefined'||!window.fetch||!navigator.onLine||sessionStorage.getItem('pt_upd'))return;
+(function(){var V=223;try{if(typeof window==='undefined'||!window.fetch||!navigator.onLine||sessionStorage.getItem('pt_upd'))return;
  fetch('index.html',{cache:'reload'}).then(function(r){return r.text()}).then(function(h){var m=h.match(/parser\.js\?v=(\d+)/);if(!m||+m[1]<=V)return;
   try{sessionStorage.setItem('pt_upd','1')}catch(e){}
   return Promise.all(['parser.js','scan.js','app.js'].map(function(f){return fetch(f+'?v='+m[1],{cache:'reload'})})).then(function(){location.reload()})}).catch(function(){})}catch(e){}})();
@@ -93,7 +93,8 @@ function regRows(L){
  for(let i=a+1;i<z;i++){const l=L[i].replace(/^[\s|!:;.,'`~_\-\u2014\u2018\u2019]+/,'').trim();
   if(!/[A-Za-z]{3}/.test(l)||/^(reason|bag\s?fee|customer|coupon|discount|savings)|brought\s?bag/i.test(l))continue;
   const tk=l.split(/\s+/),last=tk[tk.length-1],m=last.match(/^\$?(\d{1,3}?)[.,]?(\d{2})([A-Za-z7\]|)!1])?$/);
-  if(!m||tk.length<2)continue;const price=+(m[1]+'.'+m[2]);if(!(price>0))continue;
+  if(tk.length<2)continue;let unk=false,price;
+  if(m){price=+(m[1]+'.'+m[2]);if(!(price>0))continue}else if(/\d/.test(last)&&last.length>=3&&/[A-Za-z]{4}/.test(tk.slice(0,-1).join(' '))){unk=true;price=0}else continue;
   let nm=tk.slice(0,-1);const dropped=[];
   while(nm.length>1&&dropped.length<3){const t=nm[nm.length-1],lt=(t.match(/[A-Za-z]/g)||[]).length;if(PK.test(t))break;
    if(t.length<=2||(/[a-z]/.test(t)&&nm.length>2&&/^[^a-z]*$/.test(nm.slice(0,2).join(''))&&dropped.length<2)||(t.length<=5&&lt*2<=t.length)||/[|!]/.test(t)){dropped.push(t);nm.pop()}else break}
@@ -102,8 +103,10 @@ function regRows(L){
   const sz=t=>!PK.test(t)&&(/^\.?\d+(?:\.\d+)?[A-Za-z]{1,5}\d*[A-Za-z]*$/.test(t)||/^[A-Za-z]{1,3}\d+[A-Za-z]*$/.test(t)),keep=nm.map(t=>!sz(t));
   for(let k=0;k<nm.length-1;k++)if(!keep[k+1]&&/^\.?\d{1,3}$/.test(nm[k]))keep[k]=false;
   const name=nm.filter((t,k)=>keep[k]).join(' ').replace(/[|]/g,'').replace(/\s+/g,' ').trim();if(!name||(name.match(/[A-Za-z]/g)||[]).length<3)continue;
-  out.push({n:nice(name),full:nice(name),cut:false,n0:l,q,p:+(price/q).toFixed(2),tx:/[T7]$/.test(last)?1:0,ext:1,u:/[.,]/.test(last)?0:1})}
+  out.push({n:nice(name),full:nice(name),cut:false,n0:l,q,p:+(price/q).toFixed(2),tx:/[T7]$/.test(last)?1:0,ext:1,u:unk?2:(/[.,]/.test(last)?0:1)})}
  return out}
+/* item names: letters, digits, spaces, - and / only */
+const cleanItem=n=>String(n).replace(/\s*&\s*/g,' & ').replace(/['\u2019\u2018]/g,'').replace(/[^A-Za-z0-9\s\-\/&]/g,' ').replace(/\s*-\s*$/,'').replace(/\s+/g,' ').trim();
 const readable=n=>((n.match(/[A-Za-z]/g)||[]).length>=3)&&!/^\W*(items?|qty|quantity|price)\W*$/i.test(n);
 /* price typed with a space instead of a point: '10 00', '4. 99', '$4 99' */
 const np=l=>PRICE.test(l)?l.replace(/(\d)\s?[.,]\s+(\d{2})(?=\s*-?\s*[A-Z]{0,2}\d?\s*$)/,'$1.$2'):l.replace(/^(.*[A-Za-z]{3}.*?)\s\$?(\d{1,3})\s(\d{2})(\s*-?\s*[A-Z]{0,2})\s*$/,(m,a,d,c,f)=>+c<=99&&!/\d\s*$/.test(a)?a+' '+d+'.'+c+f:m);
@@ -298,7 +301,7 @@ function parse1(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(
   if(!ONLINE.test(text)){const cs=cityState(L.slice(0,25))||cityZip(L.slice(0,25))||cityStateName(L.slice(0,25));if(cs)set('location',cs)}
   set('date',dateNear(L,/ordered on|order placed|order date|order time|purchase date|date of purchase|date placed|invoice date|\bdate?\b|transaction|print date/i)||firstDate(L));{const ic=text.match(/item details\s*\(\s*(\d+)\s*\)/i);if(ic)set('expected',+ic[1])}set('number',(text.match(/\b(\d{3}-\d{7}-\d{7})\b/)||[])[1]||(inv&&inv[1])||(mode==='purchase'?regNo(L):null));
   const mk=ONLINE.test(text)||/item details|\ba[fl]ter\s+(?:promos?|credit)/i.test(text),dp=x=>mk&&!PRICE.test(x)?x.replace(/\$\s?(\d{1,2})(\d{2})\s*$/,'$$$1.$2'):x;
-  let pend=null,tnd=null,chg=null;const skipped=[],pays=[];
+  let pend=null,tnd=null,chg=null;const skipped=[],pays=[];let derivedT=0;
   for(const raw of L){const l0=np(dp(fix(raw))),l=fzl(tidyL(l0)),cm=l.match(COLROW);if(cm&&pend&&!mk){/* register row: qty  price  discount  total, with the name on the line above */const q=+num(cm[1])||1,tv=num(cm[4]),dv=num(cm[3]);if(tv!=null&&tv>0){let cn=cleanName(pend.replace(/^[^A-Za-z0-9(]+/,''),null,true);if(readable(cn)){if(dv)set('discount',(F.discount||0)+dv);items.push({n:shortName(cn,null,false),full:cn,cut:false,n0:pend,q:q>0?q:1,p:+(tv/(q>0?q:1)).toFixed(2),tx:undefined,ext:1});pend=null;continue}}}
    const pm=l.match(PRICE),fm=l.match(/\d[.,]\d{2}\s*-?\s*([A-Z])(?:[A-Z]|\d)?\s*$/),neg=/\d[.,]\d{2}\s*-\s*[A-Z]{0,2}\d?\s*$/.test(l);if(!pm){if(!mk&&!NOTNAME.test(l)&&!SUMLBL.test(l)&&readable(l)&&l.length>=3&&l.length<=60&&!DATE.test(l)&&!/[:@]/.test(l))pend=l;else if(!/^\W*(?:qty|quantity|ea|each)\b/i.test(l))pend=null;const qm=l.match(/(?:^|\s)[x×]\s?(\d+)\s*$/i),li=items[items.length-1];if(qm&&li&&+qm[1]>1&&li.q==1&&!li.qs){li.q=+qm[1];li.qs=1}if(qm&&li&&!li.v){li.v=l.replace(/\s*[x×]\s?\d+\s*$/i,'').trim();li.n=shortName(li.full||li.n,li.v,li.cut)}continue}const v=num(pm[1]);if(v==null)continue;const head=l.slice(0,pm.index).trim();
    if(/[il1]tems?\s*\)?\s*\(?s?\)?\s*(total|discount)|extra bonus|tota.?\s+it[eo]ms|items?\s*\/\s*qu/i.test(head))continue;
@@ -312,6 +315,7 @@ function parse1(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(
    else if((/\b(total|amount due)\b/i.test(head)||/\b\w{0,3}[mn]ount\s+due\b/i.test(head))&&!/savings|saved/i.test(head)){if(!found.gt)set('extTotal',v)}
    else if(/\b(sales\s)?tax\b|\bvat\b|\bgst\b/i.test(head))set('tax',(F.tax||0)+v);
    else if(WALLET.test(head)||/\b(?:visa|master\s?card|amex|american express|discover|debit|cash|tender(?:ed)?|change)\b|^\W*credit(?:\s+card)?\W*$/i.test(head)){if(v>0)pays.push(v);if(/\bchange\b/i.test(head)&&/due|given|back|\$/i.test(head+'$'))chg=v;else if(/\btender(?:ed)?\s*(?:amount|amt)\b|\bamount\s*tender/i.test(head)&&tnd==null)tnd=v}
+   else if(neg&&!mk&&!/discount|\bdisc\b|coupon|\bcpn\b|\bmfr\b|\bbogo\b|\bsave\b|promo|savings|rewards?|points|store credit|credit applied|\bcredit\b|gift/i.test(head)&&(head.match(/[A-Za-z]/g)||[]).length>=8){/* a product line whose price got a stray dash (1.50 read as 4-201) is not a discount */}
    else if(neg||/discount|\bdisc\b|coupon|\bcpn\b|\bmfr\b|\bbogo\b|\bsave\b|promo|savings|rewards?|points|store credit|credit applied|\bcredit\b/i.test(head)||(/gift\s*card/i.test(head)&&/appl|redeem|balance|tender/i.test(head)))set('discount',(F.discount||0)+Math.abs(v));
    else if(/\b(?:tip|gratuity)\b/i.test(head)){}
    else if(/gift\s*card/i.test(head)&&F.extTotal!=null){}
@@ -343,7 +347,7 @@ function parse1(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(
   /* Nothing readable but the receipt's own subtotal: the purchase is one line at that price. Flag it so the name gets checked. */
   if(!items.length&&!mk){const fi=fallbackItem(L,F);if(fi)items.push(fi)}
   /* no printed total: the amount tendered less change given back is what was paid; else subtotal - discount + tax + shipping */
-  if(F.extTotal==null){if(tnd!=null&&tnd>0)set('extTotal',+(tnd-(chg||0)).toFixed(2));else if(F.extSub!=null)set('extTotal',+(F.extSub-(F.discount||0)+(F.tax||0)+(F.shipping||0)).toFixed(2))}
+  if(F.extTotal==null){derivedT=1;if(tnd!=null&&tnd>0)set('extTotal',+(tnd-(chg||0)).toFixed(2));else if(F.extSub!=null)set('extTotal',+(F.extSub-(F.discount||0)+(F.tax||0)+(F.shipping||0)).toFixed(2))}
   if(!mk)items.forEach(it=>{if(it.n&&!it.chk){it.n=nice(it.n)}});
   /* the total read does not equal subtotal + tax, but the card/payment line does: the total was misread */
   if(F.extSub!=null&&F.tax!=null&&F.extTotal!=null&&!F.discount&&!F.shipping){const ex=+(F.extSub+F.tax).toFixed(2);if(Math.abs(ex-F.extTotal)>0.02&&(pays.some(x=>Math.abs(x-ex)<=0.005)||F.extTotal<F.extSub-0.005))F.extTotal=ex}
@@ -352,7 +356,8 @@ function parse1(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(
      (unreadable name, gift card, etc.) accounts for exactly the gap (one line, or two), put it back and mark it for checking. */
   /* register-style receipts: when the normal read does not add up to the printed subtotal, but the row-by-row read does, use the row-by-row read */
   if(!mk){try{const alt=regRows(L);if(alt.length){const d0=F.discount||0,t0=F.extSub!=null?F.extSub:(F.extTotal!=null?+(F.extTotal-(F.tax||0)-(F.shipping||0)+d0).toFixed(2):null),sm=a=>+a.reduce((x,i)=>x+i.q*i.p,0).toFixed(2),okS=a=>t0!=null&&Math.abs(sm(a)-t0)<=0.02;
-    if(t0!=null&&!okS(alt)){const un=alt.filter(x=>x.u);if(un.length===1){const r=un[0],need=+(t0-(sm(alt)-r.q*r.p)).toFixed(2);if(need>0&&need<=r.q*r.p*3+5){r.p=+(need/r.q).toFixed(2);r.chk=1}}}
+    {const unk=alt.filter(x=>x.u===2);if(unk.length){if(unk.length===1&&t0!=null){const r=unk[0],need=+(t0-sm(alt.filter(x=>x!==r))).toFixed(2);if(need>0&&need<=20){r.p=need;r.u=0;r.chk=1}else alt.splice(alt.indexOf(r),1)}else unk.forEach(r=>alt.splice(alt.indexOf(r),1))}}
+    if(t0!=null&&!okS(alt)){const un=alt.filter(x=>x.u===1);if(un.length===1){const r=un[0],need=+(t0-(sm(alt)-r.q*r.p)).toFixed(2);if(need>0&&need<=r.q*r.p*3+5){r.p=+(need/r.q).toFixed(2);r.chk=1}}}
     if(!items.length||(t0==null&&alt.length>=2)||(okS(alt)&&!okS(items))||(t0!=null&&!okS(items)&&Math.abs(sm(alt)-t0)<Math.abs(sm(items)-t0))){items.length=0;alt.forEach(x=>items.push(x))}}}catch(e){}}
   {const sumI=()=>+items.reduce((a,i)=>a+i.q*i.p,0).toFixed(2),d=F.discount||0;
    let t=F.extSub;if(t==null&&F.extTotal!=null)t=+(F.extTotal-(F.tax||0)-(F.shipping||0)+d).toFixed(2);
@@ -363,6 +368,8 @@ function parse1(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(
       for(let i=0;i<skipped.length&&!hit;i++)for(let j=i+1;j<skipped.length;j++)if(Math.abs(skipped[i].p+skipped[j].p-need)<=0.005){hit=[skipped[i],skipped[j]];break}}
      if(hit)hit.forEach(c=>items.push({n:c.n&&readable(c.n)?shortName(cleanName(c.n),null,false):'Item',full:c.n||'Item',cut:0,n0:c.n||'',q:1,p:c.p,ext:1,chk:1}))}}
    var recon=(()=>{let t2=F.extSub;if(t2==null&&F.extTotal!=null)t2=+(F.extTotal-(F.tax||0)-(F.shipping||0)+d).toFixed(2);const sum=sumI();return {sum,target:t2==null?null:t2,ok:t2!=null&&items.length>0&&(Math.abs(sum-t2)<=0.02||Math.abs(sum-d-t2)<=0.02)}})()}
+  /* a total that was worked out (not read) is subtotal + tax: a stray discount from a damaged line must not pull it down */
+  if(!mk&&derivedT&&F.extSub!=null&&F.tax!=null&&F.discount&&recon&&recon.ok){delete F.discount;F.extTotal=+(F.extSub+F.tax+(F.shipping||0)).toFixed(2)}
   if(F.discount!=null)F.discount=+F.discount.toFixed(2);if(F.tax!=null)F.tax=+F.tax.toFixed(2);guess=titleGuess(L)}
  else{
   var D=new RegExp(DATE.source,'gi'),dts=l=>[...l.matchAll(D)].map(m=>m[1]);
@@ -433,6 +440,7 @@ function parse1(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(
   if(!shifts.length&&typeof drow!=='undefined'&&drow.length)drow.forEach(l=>{const m=l.match(/^(\d{1,2}\/\d{1,2}\/\d{2,4})\b/),t=l.match(tri);if(m&&t)shifts.push({date:m[1],start:'',end:'',hours:+t[1]})});
  }
  if(mode!=='purchase'&&!F.hours&&shifts.length){const h=+shifts.reduce((a,s)=>a+s.hours,0).toFixed(2);if(h>0){F.hours=String(h);found.hours=1}}
+ try{items.forEach(it=>{if(it&&it.n)it.n=cleanItem(it.n);if(it&&it.full)it.full=cleanItem(it.full)})}catch(e){}
  return {fields:F,items,found,guess,shifts,L,recon:(typeof recon!=='undefined'?recon:null)}}
 /* Other reads of the same photo (different cleanup / layout) fill what the best read missed. Items and amounts stay with the best read. */
 function parse(text,mode,alts){const R=parse1(text,mode);if(mode!=='purchase'||!alts||!alts.length)return R;
