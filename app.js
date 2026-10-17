@@ -359,14 +359,14 @@ function grpRows(list,row){const dc={},m=new Map();
   add(p,false);if(p!=='none')[...new Set(ds.map(d=>+wkStart(d)))].filter(k=>k!==p).forEach(k=>add(k,true))});
  const desc=sortFor(false)!=='dold',keys=[...m.keys()].filter(k=>k!=='none').sort((a,b)=>desc?b-a:a-b);if(m.has('none'))keys.push('none');
  const pl=(n,w)=>n+' '+w+(n==1?'':'s');
- return keys.map(k=>{const rs=m.get(k).slice();if(k!=='none')rs.sort((a,b)=>desc?b.t-a.t:a.t-b.t);const sum=+rs.reduce((t,x)=>t+((k==='none'?recAmt(x.e[0]):wkAmt(x.e[0],k))||0),0).toFixed(2);return '<div class="wkh"><span>'+wkTitle(k)+'</span><span>'+M(sum)+'</span></div><div class="sl">'+rs.map(x=>row(x.e,k==='none'?null:k,x.cont)).join('')+'</div>'}).join('')}
+ return keys.map(k=>{const rs=m.get(k).slice();if(k!=='none')rs.sort((a,b)=>desc?b.t-a.t:a.t-b.t);const sum=+rs.reduce((t,x)=>t+((k==='none'?recAmt(x.e[0]):wkAmt(x.e[0],k))||0),0).toFixed(2);return '<div class="sl">'+rs.map(x=>row(x.e,k==='none'?null:k,x.cont)).join('')+'</div>'}).join('')}
 function svBody(){
  const x=S.sv.sec=='x',grp=!x&&/^d/.test(sortFor(x)),q=svSearching(),list=svList(),miss=list.filter(([r])=>!(r.imgs&&r.imgs.length)).length,tot=+list.reduce((s,[r])=>s+(recAmt(r)||0),0).toFixed(2),T=totals(),trow=(l,v)=>`<div class="srow"><div class="sm">${l}</div><b>${M(v)}</b></div>`,
  row=([r,i],wk,cont)=>{const pur=r.mode=='purchase',nm=esc((pur?niceMerch(r.merchant):r.client)||(pur?'Receipt':'Work invoice')),split=!pur&&wk!=null&&new Set(workDays(r).map(x=>+wkStart(x))).size>1,first=split&&Math.min(...workDays(r).map(x=>+wkStart(x)))===wk,sub=pur?[r.date,r.category].filter(Boolean).map(esc).join(' · '):dayPills(r,wk);
-  return `<div class="srow tap" role="button" tabindex="0" onclick="openRec(${i})" onkeydown="if(event.key=='Enter')openRec(${i})"><div class="sm"><div class="s1">${nm}</div>${sub?`<div class="s2">${sub}</div>`:''}${r.imgs&&r.imgs.length?'':`<div class="s3">${pur?'No receipt attached':'No invoice attached'}</div>`}</div><b>${M(!pur&&wk!=null?wkAmt(r,wk):recAmt(r))}</b></div>`};
+  return `<div class="srow tap" role="button" tabindex="0" onclick="openRec(${i})" onkeydown="if(event.key=='Enter')openRec(${i})"><div class="sm"><div class="s1">${nm}</div>${sub?`<div class="s2">${sub}</div>`:''}${r.imgs&&r.imgs.length?'':`<div class="s3">${pur?'No receipt':'No invoice'}</div>`}</div><b>${M(!pur&&wk!=null?wkAmt(r,wk):recAmt(r))}</b></div>`};
  let lbl;if(q)lbl=list.length+' match'+(list.length==1?'':'es')+(x&&S.sv.cat!='All'?' in '+S.sv.cat:'');else lbl=x&&S.sv.cat!='All'?list.length+' in '+S.sv.cat:list.length+' '+(x?'expense':'work invoice')+(list.length==1?'':'s');
  let none='';if(!list.length){if(q){const toks=svTok(S.sv.q),o=S.records.filter(r=>(r.mode=='purchase')!=x&&recMatch(r,toks)).length;none='<div class="empty2">No matches for “'+esc(S.sv.q.trim())+'”.'+(x&&S.sv.cat!='All'?'<br>Try the All category.':'')+(o?'<br><button onclick="svOther()" style="margin-top:10px">Show '+o+' in '+(x?'Work invoices':'Expenses')+'</button>':'')+'</div>'}else none='<div class="empty2">'+(x?'No expenses saved yet.':'No work invoices saved yet.')+'</div>'}
- return (list.length?'<div class="svsum"><span>'+lbl+'</span><b>'+M(tot)+'</b></div>'+(miss?'<div class="invm">\u26A0 '+miss+' of '+list.length+' missing '+(x?'a receipt':'an invoice')+'</div>':'<div class="invm ok">\u2713 '+(x?'Every receipt is attached':'Every invoice is attached')+'</div>')+(grp?grpRows(list,row):'<div class="sl">'+list.map(row).join('')+'</div>'):none)
+ return (list.length?'<div class="svsum"><span>'+lbl+'</span><b>'+M(tot)+'</b></div>'+(miss?'<div class="invm">'+miss+' of '+list.length+' without '+(x?'a receipt':'an invoice')+'</div>':'')+(grp?grpRows(list,row):'<div class="sl">'+list.map(row).join('')+'</div>'):none)
  +(x&&T.n&&S.sv.cat=='All'&&!q?`<div class="sl"><h4>Expense totals</h4>${T.months.map(([l,v])=>trow(l,v)).join('')}${T.years.length>1?T.years.map(([l,v])=>trow(l+' total',v)).join(''):''}${T.cats.map(([l,v])=>trow(l,v)).join('')}${trow('Total expenses',T.all)}</div>`:'')
  +(list.length?'<button class="pri" onclick="svCopy()">Copy '+(list.length==1?'this record':'these '+list.length+' records')+'</button>':'')
  +(list.length?'<button onclick="csvOpen()">Export CSV…</button>':'')
@@ -895,7 +895,7 @@ function dupWarn(){const el=$('#dupwarn');if(!el)return;const r=S.rec,m=r&&r.loa
 function openRec(i){const r=S.records[i];if(!r)return;closeRec();const{t,G}=rows(r),
  h=G.map(g=>({...g,rows:g.rows.filter(x=>x[0]!=='Regular Hours')})).map(g=>'<div class="rg">'+g.rows.map(([l,v,hl])=>`<div class="rr${hl?' hl':''}${g.k=='tot'?' tt':''}"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join('')+'</div>').join(''),
  o=document.createElement('div');o.id='recmodal';o.className='rmo';o.onclick=e=>{if(e.target===o)closeRec()};
- o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb"><div class="invm${r.imgs&&r.imgs.length?' ok':''}">${r.imgs&&r.imgs.length?'\u2713 '+(r.mode=='purchase'?'Receipt attached':'Invoice attached'):'\u26A0 '+(r.mode=='purchase'?'No receipt attached':'No invoice attached')}</div>${h}</div><div class="rmf"><button onclick="dlRec(${i})">Download PDF</button><button onclick="viewRec(${i})">View PDF</button>${r.imgs&&r.imgs.length?`<button onclick="attachRec(${i})">Replace invoice</button><button onclick="rmImg(${i})">Remove invoice</button>`:`<button onclick="attachRec(${i})">Attach invoice</button>`}<button onclick="editRec(${i})">Edit</button><button onclick="delOpen(${i})" style="color:#b3261e">Delete</button></div></div>`;
+ o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${r.imgs&&r.imgs.length?'':'<div class="invm">'+(r.mode=='purchase'?'No receipt attached':'No invoice attached')+'</div>'}${h}</div><div class="rmf"><button onclick="dlRec(${i})">Download PDF</button><button onclick="viewRec(${i})">View PDF</button>${r.imgs&&r.imgs.length?`<button onclick="attachRec(${i})">Replace invoice</button><button onclick="rmImg(${i})">Remove invoice</button>`:`<button onclick="attachRec(${i})">Attach invoice</button>`}<button onclick="editRec(${i})">Edit</button><button onclick="delOpen(${i})" style="color:#b3261e">Delete</button></div></div>`;
  document.body.appendChild(o);document.body.style.overflow='hidden'}
 function delOpen(i){if(!S.records[i])return;if(!confirm('Delete this saved record? This cannot be undone.'))return;S.records.splice(i,1);closeRec();renderRecs();store()}
 function closeRec(){const o=$('#recmodal');if(o)o.remove();document.body.style.overflow=''}
@@ -1464,8 +1464,8 @@ window.csvGo=async function(){
    const PT_VER='v200'
    const PT_VER='vv200'
    ---------- */
-const PT_BUILD=227;
-const PT_LABEL='v26';
+const PT_BUILD=229;
+const PT_LABEL='v28';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
@@ -1529,4 +1529,4 @@ function deskewPage(c,ws){try{const W=c.width,H=c.height,t=skewOf(ws,W);if(t==nu
  rmPage=function(i){if(!confirm('Are you sure you want to remove page '+(i+1)+' from the PDF?'))return;pushU();S.pages.splice(i,1);renderPages();snack('Page removed',undoMark)};
  rmImg=function(i){const r=S.records[i];if(!r||!r.imgs)return;if(!confirm('Are you sure you want to remove the attached '+(r.mode=='purchase'?'receipt':'invoice')+' from this saved item? Its details stay.'))return;const old=r.imgs;delete r.imgs;store();renderRecs();openRec(i);snack((r.mode=='purchase'?'Receipt':'Invoice')+' removed',()=>{r.imgs=old;store();renderRecs();openRec(S.records.indexOf(r))})};
  fixAll=function(){if(!confirm('Are you sure you want to forget every remembered fix? Saved records are not changed.'))return;const old=S.learn;S.learn={m:{},mi:{}};store();learnUI();fixOpen();snack('Remembered fixes cleared',()=>{S.learn=old;store();learnUI();fixOpen()})};
- const st2=document.createElement('style');st2.textContent='.s3{font-size:12px;font-weight:600;color:var(--amb);margin-top:3px}.invm{font-size:13px;font-weight:600;color:var(--amb);margin:6px 2px 10px}.invm.ok{color:var(--gd)}.rmb .invm{margin:0 0 10px}';document.head.appendChild(st2)})();
+ const st2=document.createElement('style');st2.textContent='.s3{font-size:11.5px;font-weight:400;color:var(--mut);margin-top:2px}.invm{font-size:12px;font-weight:400;color:var(--mut);margin:4px 2px 8px}.rmb .invm{margin:0 0 8px}';document.head.appendChild(st2)})();
