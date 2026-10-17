@@ -1456,8 +1456,8 @@ window.csvGo=async function(){
    const PT_VER='v200'
    const PT_VER='vv200'
    ---------- */
-const PT_BUILD=224;
-const PT_LABEL='v24';
+const PT_BUILD=226;
+const PT_LABEL='v25';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
