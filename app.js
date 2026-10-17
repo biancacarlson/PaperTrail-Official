@@ -273,8 +273,8 @@ function totals(){const m={},y={},c={};let all=0;S.records.filter(r=>r.mode=='pu
 function sumRows(){const T=totals(),G=[],g=(k,a)=>{if(a.length)G.push({k,rows:a.map(([l,v])=>[l,M(v),false])})};g('info',T.months);if(T.years.length>1)g('info',T.years);g('det',T.cats);g('tot',[['Total expenses',T.all]]);return{t:'EXPENSE TOTALS',G}}
 function allRecs(){const a=[...S.records].sort((p,q)=>key(p)-key(q));if(S.records.some(r=>r.mode=='purchase'))a.push({mode:'summary'});return a}
 /* ---------- Saved tab: Expenses and Work invoices, with category filter and sorting ---------- */
-function showWork(){S.tab='new';const w=$('#workview'),v=$('#savedview'),b=$('#m3');if(w)w.style.display='';if(v)v.style.display='none';if(b)b.className=''}
-function showSaved(){S.tab='saved';$('#workview').style.display='none';$('#savedview').style.display='block';$('#m1').className='';$('#m2').className='';$('#m3').className='on';$('.head h1').textContent='Saved';renderRecs();window.scrollTo(0,0)}
+function showWork(){S.tab='new';document.body.classList.remove('onsaved');const w=$('#workview'),v=$('#savedview'),b=$('#m3');if(w)w.style.display='';if(v)v.style.display='none';if(b)b.className=''}
+function showSaved(){S.tab='saved';$('#workview').style.display='none';$('#savedview').style.display='block';$('#m1').className='';$('#m2').className='';$('#m3').className='on';$('.head h1').textContent='';document.body.classList.add('onsaved');renderRecs();window.scrollTo(0,0)}
 function goMode(m){if(S.tab=='saved'&&S.mode==m){showWork();$('#m1').className=m=='purchase'?'on':'';$('#m2').className=m=='freelance'?'on':'';$('.head h1').textContent=m=='purchase'?'':'';render();renderPages()}else setMode(m)}
 const SORTS=[['dnew','Date (newest first)'],['dold','Date (oldest first)'],['chi','Cost (high to low)'],['clo','Cost (low to high)']];
 /* v80: work invoices sort by date or by location, not by cost */
@@ -368,10 +368,9 @@ function svBody(){
   return `<div class="srow tap" role="button" tabindex="0" onclick="openRec(${i})" onkeydown="if(event.key=='Enter')openRec(${i})"><div class="sm"><div class="s1">${nm}</div>${sub?`<div class="s2">${sub}</div>`:''}${r.imgs&&r.imgs.length?'':`<div class="s3">${pur?'No receipt':'No invoice'}</div>`}</div><b>${M(!pur&&wk!=null?wkAmt(r,wk):recAmt(r))}</b></div>`};
  let lbl;if(q)lbl=list.length+' match'+(list.length==1?'':'es')+(x&&S.sv.cat!='All'?' in '+S.sv.cat:'');else lbl=x&&S.sv.cat!='All'?list.length+' in '+S.sv.cat:list.length+' '+(x?'expense':'work invoice')+(list.length==1?'':'s');
  let none='';if(!list.length){if(q){const toks=svTok(S.sv.q),o=S.records.filter(r=>(r.mode=='purchase')!=x&&recMatch(r,toks)).length;none='<div class="empty2">No matches for “'+esc(S.sv.q.trim())+'”.'+(x&&S.sv.cat!='All'?'<br>Try the All category.':'')+(o?'<br><button onclick="svOther()" style="margin-top:10px">Show '+o+' in '+(x?'Work invoices':'Expenses')+'</button>':'')+'</div>'}else none='<div class="empty2">'+(x?'No expenses saved yet.':'No work invoices saved yet.')+'</div>'}
- return (list.length?'<div class="svsum"><span>'+lbl+'</span><b>'+M(tot)+'</b></div>'+(miss?'<div class="invm">'+miss+' of '+list.length+' without '+(x?'a receipt':'an invoice')+'</div>':'')+(grp?grpRows(list,row):'<div class="sl">'+list.map(row).join('')+'</div>'):none)
+ return (list.length?'<div class="svsum"><span>'+lbl+(miss?'<em class="invm2"> \u00b7 '+miss+' without '+(x?'a receipt':'an invoice')+'</em>':'')+'</span><b>'+M(tot)+'</b></div>'+(grp?grpRows(list,row):'<div class="sl">'+list.map(row).join('')+'</div>'):none)
  +(x&&T.n&&S.sv.cat=='All'&&!q?`<div class="sl tgl${S.sv.tot?' open':''}"><button type="button" class="tgh" aria-expanded="${S.sv.tot?'true':'false'}" onclick="totTog(this)"><span class="tgt">Expense totals</span><span class="tgv">${M(T.all)}</span><i class="tgc" aria-hidden="true"></i></button><div class="tgb"><div class="tgi">${T.months.map(([l,v])=>trow(l,v)).join('')}${T.years.length>1?T.years.map(([l,v])=>trow(l+' total',v)).join(''):''}${T.cats.map(([l,v])=>trow(l,v)).join('')}</div></div></div>`:'')
- +(list.length?'<button class="pri" onclick="svCopy()">Copy '+(list.length==1?'this record':'these '+list.length+' records')+'</button>':'')
- +(list.length?'<button onclick="csvOpen()">Export CSV…</button>':'')
+ +(list.length?'<div class="svact"><button class="pri" onclick="svCopy()">Copy '+(list.length==1?'record':list.length+' records')+'</button><button onclick="csvOpen()">Export CSV\u2026</button></div>':'')
  }
 function renderRecs(){persist();try{dupWarn()}catch(e){}const nb=$('#m3');if(nb)nb.textContent='Saved';const el=$('#savedview');if(!el||S.tab!='saved')return;
  if(!S.records.length){el.innerHTML='<div class="sv"><div class="empty2">Nothing saved yet.<br>Fill in a record and tap Save record. It will show up here.</div></div>';return}
@@ -1466,8 +1465,8 @@ window.csvGo=async function(){
    const PT_VER='v200'
    const PT_VER='vv200'
    ---------- */
-const PT_BUILD=235;
-const PT_LABEL='v34';
+const PT_BUILD=236;
+const PT_LABEL='v35';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
@@ -1581,7 +1580,11 @@ function deskewPage(c,ws){try{const W=c.width,H=c.height,t=skewOf(ws,W);if(t==nu
  '.tgb{display:grid;grid-template-rows:0fr;visibility:hidden;transition:grid-template-rows .3s cubic-bezier(.32,.72,0,1),visibility 0s .3s}',
  '.tgl.open .tgb{grid-template-rows:1fr;visibility:visible;transition:grid-template-rows .3s cubic-bezier(.32,.72,0,1),visibility 0s}',
  '.tgi{min-height:0;overflow:hidden}',
- '.tgi .srow{padding:10px 0}.tgi .srow:first-child{border-top:1px solid var(--hair,var(--ln))}',
+ '.sv .tgi .srow{padding:9px 0}.tgi .srow:first-child{border-top:1px solid var(--hair,var(--ln))}',
+ '.onsaved .head{margin-bottom:6px;min-height:0}.onsaved .head h1:empty{display:none}',
+ '#savedview .sv,#savedview .sv.sv{gap:8px}#savedview .sv .srow{padding:11px 0}#savedview .svsum{margin:2px 0 0!important}',
+ '.invm2{font-style:normal;font-size:12px;font-weight:400;color:var(--amb)}',
+ '.svact{display:flex;gap:8px}.svact button{flex:1;width:auto;min-width:0}',
  '@media (prefers-reduced-motion:reduce){.sl[data-wt],.wtbd,.wtpop,.tgb,.tgc{transition:none!important}}'
  ].join('');document.head.appendChild(st)})();
 
