@@ -363,11 +363,12 @@ function grpRows(list,row){const dc={},m=new Map();
 function wkLbl(k){if(k==='none')return'No date';const a=new Date(k),b=new Date(k);b.setDate(b.getDate()+6);const f=d=>d.toLocaleString('en-US',{month:'short',day:'numeric'});return 'Week of '+f(a)+' \u2013 '+(a.getMonth()==b.getMonth()?b.getDate():f(b))}
 function totTog(b){const p=b.parentNode,o=!p.classList.contains('open');S.sv.tot=o;p.classList.toggle('open',o);b.setAttribute('aria-expanded',o?'true':'false')}
 function sortCtl(x){const cur=sortFor(x),L={dnew:'Newest',dold:'Oldest',chi:'High\u2013low',clo:'Low\u2013high',loc:'Location',cli:'Client'};return '<label class="svsb" aria-label="Sort"><span>'+(L[cur]||'Sort')+'</span><i aria-hidden="true"></i><select id="svsort" aria-label="Sort by" onchange="svSort(this.value)">'+(x?SORTS:SORTS_W).map(([v,l])=>'<option value="'+v+'"'+(cur==v?' selected':'')+'>'+l+'</option>').join('')+'</select></label>'}
+function wdCount(list){const d=new Set();list.forEach(([r])=>{let w=workDays(r);if(!w.length){const j=Parser.pd(r.jobDate);w=j?[j]:[]}w.forEach(x=>d.add(+new Date(x.getFullYear(),x.getMonth(),x.getDate())))});return d.size}
 function svBody(){
  const x=S.sv.sec=='x',grp=!x&&/^d/.test(sortFor(x)),q=svSearching(),list=svList(),miss=list.filter(([r])=>!(r.imgs&&r.imgs.length)).length,tot=+list.reduce((s,[r])=>s+(recAmt(r)||0),0).toFixed(2),T=totals(),trow=(l,v)=>`<div class="srow"><div class="sm">${l}</div><b>${M(v)}</b></div>`,
  row=([r,i],wk,cont)=>{const pur=r.mode=='purchase',nm=esc((pur?niceMerch(r.merchant):r.client)||(pur?'Receipt':'Work invoice')),split=!pur&&wk!=null&&new Set(workDays(r).map(x=>+wkStart(x))).size>1,first=split&&Math.min(...workDays(r).map(x=>+wkStart(x)))===wk,sub=pur?[r.date,r.category].filter(Boolean).map(esc).join(' · '):dayPills(r,wk);
   return `<div class="srow tap" role="button" tabindex="0" onclick="openRec(${i})" onkeydown="if(event.key=='Enter')openRec(${i})"><div class="sm"><div class="s1">${nm}</div>${sub?`<div class="s2">${sub}</div>`:''}${r.imgs&&r.imgs.length?'':`<div class="s3">${pur?'No receipt':'No invoice'}</div>`}</div><b>${M(!pur&&wk!=null?wkAmt(r,wk):recAmt(r))}</b></div>`};
- let lbl;if(q)lbl=list.length+' match'+(list.length==1?'':'es')+(x&&S.sv.cat!='All'?' in '+S.sv.cat:'');else lbl=x&&S.sv.cat!='All'?list.length+' in '+S.sv.cat:list.length+' '+(x?'expense':'work invoice')+(list.length==1?'':'s');
+ let lbl;if(q)lbl=list.length+' match'+(list.length==1?'':'es')+(x&&S.sv.cat!='All'?' in '+S.sv.cat:'');else if(x)lbl=S.sv.cat!='All'?list.length+' in '+S.sv.cat:list.length+' expense'+(list.length==1?'':'s');else{const wd=wdCount(list);lbl=wd?wd+' working day'+(wd==1?'':'s'):list.length+' work invoice'+(list.length==1?'':'s')}
  let none='';if(!list.length){if(q){const toks=svTok(S.sv.q),o=S.records.filter(r=>(r.mode=='purchase')!=x&&recMatch(r,toks)).length;none='<div class="empty2">No matches for “'+esc(S.sv.q.trim())+'”.'+(x&&S.sv.cat!='All'?'<br>Try the All category.':'')+(o?'<br><button onclick="svOther()" style="margin-top:10px">Show '+o+' in '+(x?'Work invoices':'Expenses')+'</button>':'')+'</div>'}else none='<div class="empty2">'+(x?'No expenses saved yet.':'No work invoices saved yet.')+'</div>'}
  return (list.length?'<div class="svsum"><span>'+lbl+'</span><b>'+M(tot)+'</b></div>'+(miss?'<div class="invm">'+miss+' of '+list.length+' without '+(x?'a receipt':'an invoice')+'</div>':'')+(grp?grpRows(list,row):'<div class="sl">'+list.map(row).join('')+'</div>'):none)
  +(x&&T.n&&S.sv.cat=='All'&&!q?`<div class="sl tgl${S.sv.tot?' open':''}"><button type="button" class="tgh" aria-expanded="${S.sv.tot?'true':'false'}" onclick="totTog(this)"><span class="tgt">Expense totals</span><span class="tgv">${M(T.all)}</span><i class="tgc" aria-hidden="true"></i></button><div class="tgb"><div class="tgi">${T.months.map(([l,v])=>trow(l,v)).join('')}${T.years.length>1?T.years.map(([l,v])=>trow(l+' total',v)).join(''):''}${T.cats.map(([l,v])=>trow(l,v)).join('')}</div></div></div>`:'')
@@ -998,11 +999,13 @@ function ui(tab){
  +'<input id="pw" type="password" autocomplete="'+(up?'new-password':'current-password')+'" placeholder="Password'+(up?' (8+ characters)':'')+'">'
  +'<label style="display:flex;align-items:center;gap:8px;margin:0 0 10px;font:14px -apple-system,system-ui,sans-serif;letter-spacing:0;text-transform:none;color:var(--fg)"><input type="checkbox" style="width:auto;margin:0" onchange="[\'pw\',\'pw2\'].forEach(function(i){var e=document.getElementById(i);if(e)e.type=event.target.checked?\'text\':\'password\'})"> Show password</label>'
  +(up?'<input id="pw2" type="password" autocomplete="new-password" placeholder="Confirm password">'
+      +'<input id="ph" type="text" maxlength="100" autocomplete="off" autocapitalize="sentences" spellcheck="false" placeholder="Password hint (optional)">'
+      +'<div class="hint" style="font-size:12.5px;color:var(--mut);margin:-4px 0 8px">The hint shows on the sign-in screen to anyone holding this phone. Write something only you would get, not the password.</div>'
       +installGuide(true)
       +'<div class="hint" style="font-size:13px;color:var(--mut);margin:2px 0 8px">Your records are encrypted on this device with this password. On the next screen you will get a recovery code. Save it: it is the only way back in if you forget your password.</div>'
    +'<button class="pri" type="button" onclick="authUp()">Create account</button>'
   :'<button class="pri" type="button" onclick="authIn()">Sign in</button>'
-   +'<div style="display:flex;flex-direction:column;gap:2px;margin-top:6px"><button type="button" style="'+LNK+'" onclick="authForgot()">Forgot password?</button><button type="button" style="'+LNK+'" onclick="authRestore()">Restore from a backup file</button></div><div class="hint" style="margin-top:18px;white-space:nowrap">Records are encrypted and saved on this device only.</div>')
+   +'<div style="display:flex;flex-direction:column;gap:2px;margin-top:6px"><button type="button" style="'+LNK+'" onclick="authForgot()">Forgot password?</button><button type="button" style="'+LNK+'" onclick="authHint()">Show my password hint</button><button type="button" style="'+LNK+'" onclick="authRestore()">Restore from a backup file</button></div><div class="hint" style="margin-top:18px;white-space:nowrap">Records are encrypted and saved on this device only.</div>')
  +'<div id="lm" class="msg" style="margin-top:10px"></div>');
  const f=$(up?'#em':(last?'#pw':'#em'));if(f)try{f.focus()}catch(e){}
 }
@@ -1055,13 +1058,22 @@ window.authEmail=function(){const t=sheetText(window.__rc);location.href='mailto
 window.authShare=window.authSaveFile;
 
 /* Settings buttons and the "no recovery code yet" bar, added once someone is signed in */
+function tidySettings(d){
+ if(d.querySelector('.setgrid'))return;
+ const lab=[...d.children].find(e=>e.tagName=='LABEL'),inp=d.querySelector('#idle');
+ if(lab&&inp){const r=document.createElement('div');r.className='setrow';d.insertBefore(r,lab);r.appendChild(lab);r.appendChild(inp)}
+ const g=document.createElement('div');g.className='setgrid';
+ [...d.children].filter(e=>e.tagName=='BUTTON'||e.id=='bkinfo').forEach(e=>g.appendChild(e));
+ d.appendChild(g)}
 function extras(){
  const d=document.querySelector('.side details');
  if(d&&!$('#rcbtn')){
   const mk=(id,txt,fn)=>{const b=document.createElement('button');b.id=id;b.type='button';b.textContent=txt;b.onclick=fn;d.appendChild(b)};
   mk('rcbtn','Create a new recovery code',()=>window.authMakeCode());
   mk('pwbtn','Change password',()=>window.authChangePw());
+  mk('hintbtn','Change password hint',()=>window.authChangeHint());
   mk('bkbtn','Download backup',()=>window.authBackup());
+  tidySettings(d);
  }
  let n=$('#rcbar');
  if(!n){const m=document.querySelector('.main');if(!m)return;n=document.createElement('div');n.id='rcbar';n.style.cssText='display:none;gap:8px;align-items:center;flex-wrap:wrap;background:var(--usr);border:1px solid #ecd3a8;border-radius:12px;padding:10px 12px;margin-bottom:14px';n.innerHTML='<span style="flex:1;min-width:180px">Set up a recovery code (a spare key) so a forgotten password never locks you out of your invoices.</span><button type="button" class="pri" style="flex:0 0 auto">Create</button>';n.children[1].onclick=()=>window.authMakeCode();m.insertBefore(n,m.firstChild)}
@@ -1096,16 +1108,44 @@ window.authChangePw=function(){
   if(b.length<8)return m('New password needs 8 or more characters.');
   if(b!==c)return m('The new passwords do not match.');
   if(b===a)return m('Choose a different password.');
+  if(o.hint&&o.hint.toLowerCase().includes(b.toLowerCase()))return m('Your hint contains this password. Change the hint first.');
   const btn=g('cps');btn.disabled=true;
   try{
    if(await hash(pp(S.email,a),unhex(o.s))!==o.h){btn.disabled=false;return m('Current password is not right.')}
-   const np=pp(S.email,b),salt=rnd(16),n={s:salt,h:await hash(np,unhex(salt)),e:rnd(16)},nk=await dk(np,n.e),
+   const np=pp(S.email,b),salt=rnd(16),n={s:salt,h:await hash(np,unhex(salt)),e:rnd(16),...(o.hint?{hint:o.hint}:{})},nk=await dk(np,n.e),
     iv=crypto.getRandomValues(new Uint8Array(12)),ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},nk,new TextEncoder().encode(JSON.stringify(learnPack())));
    await idb('put',{iv,c:ct});setAcct(S.uid,n);S.pp=np;S.key=nk;
    let code=null;if(o.rw){code=newCode();n.rw=await wrap(code,np);setAcct(S.uid,n)}
    ov.remove();try{window.bkChanged&&window.bkChanged()}catch(e){}
    if(code)showCode(code,()=>{open_();extras()},'Password changed. Save your new recovery code');else{try{toast('Password changed')}catch(e){}extras()}
   }catch(e){btn.disabled=false;m('Could not change the password. Nothing was changed.')}}
+};
+window.authHint=async function(){
+ const em=norm(($('#em')||{}).value);if(!em)return msg('Enter your email first.');
+ const o=getAcct(await uidOf(em));
+ msg(o?(o.hint?'Hint: '+o.hint:'No hint was set for this account. Tap Forgot password? to use your recovery code.'):'No account for this email on this device.');
+};
+/* change (or remove) the hint while signed in, same place as Change password */
+window.authChangeHint=function(){
+ const o=S.uid&&getAcct(S.uid);if(!o||!S.pp)return;
+ const old=document.getElementById('hnov');if(old)old.remove();
+ const ov=document.createElement('div');ov.id='hnov';ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px';
+ ov.innerHTML='<div style="background:var(--card,#fff);color:var(--fg,#111);border-radius:16px;padding:18px;width:100%;max-width:380px;box-shadow:0 10px 40px rgba(0,0,0,.3)"><h2 style="margin:0 0 6px">Password hint</h2>'
+  +'<p style="margin:0 0 10px;font-size:13px;line-height:1.45;color:var(--mut)">Shown on the sign-in screen to anyone holding this phone. Write something only you would get, not the password. Leave it empty to remove the hint.</p>'
+  +'<input id="hn1" type="text" maxlength="100" autocomplete="off" spellcheck="false" placeholder="Password hint" value="'+esc(o.hint||'')+'">'
+  +'<div id="hnm" style="color:#b3261e;min-height:20px;font-size:14px;margin:6px 0"></div>'
+  +'<div style="display:flex;gap:8px"><button type="button" id="hnx">Cancel</button><button type="button" class="pri" id="hns">Save hint</button></div></div>';
+ document.body.appendChild(ov);
+ const g=i=>document.getElementById(i);
+ g('hnx').onclick=()=>ov.remove();
+ g('hns').onclick=()=>{const h=g('hn1').value.trim(),pw=S.pp.split('\u0000').slice(1).join('\u0000');
+  if(h&&pw&&h.toLowerCase().includes(pw.toLowerCase())){g('hnm').textContent='The hint can not contain your password.';return}
+  const c=getAcct(S.uid);if(!c){ov.remove();return}
+  if(h)c.hint=h;else delete c.hint;
+  setAcct(S.uid,c);ov.remove();
+  try{window.bkChanged&&window.bkChanged()}catch(e){}
+  try{toast(h?'Hint saved':'Hint removed')}catch(e){}};
+ try{g('hn1').focus()}catch(e){}
 };
 window.authForgot=function(){
  let last='';try{last=localStorage.getItem(LAST)||''}catch(e){}
@@ -1115,6 +1155,7 @@ window.authForgot=function(){
  +'<input id="pw" type="password" autocomplete="new-password" placeholder="New password (8+ characters)">'
  +'<input id="pw2" type="password" autocomplete="new-password" placeholder="Confirm new password">'
  +'<button class="pri" type="button" onclick="authReset()">Reset password</button>'
+ +'<button type="button" style="'+LNK+'" onclick="authHint()">Show my password hint</button>'
  +'<button type="button" style="'+LNK+'" onclick="authTab(\'in\')">Back</button><div id="lm" class="msg" style="margin-top:10px"></div>');
 };
 window.authReset=async function(){
@@ -1128,13 +1169,14 @@ window.authReset=async function(){
   const o=getAcct(uid);
   if(!o)return msg('No account for this email on this device. If you have a backup file, use Restore from a backup file first.');
   if(!o.rw)return msg('This account has no recovery code. Sign in with your password to create one.');
+  if(o.hint&&o.hint.toLowerCase().includes(p1.toLowerCase()))return msg('Your hint contains this new password. Choose a different password.');
   const bad=()=>{const f=(+localStorage.getItem(FK+uid)||0)+1;if(f>=MAXF){localStorage.removeItem(FK+uid);localStorage.setItem(LK+uid,String(Date.now()+COOL));return msg('Too many wrong attempts. Locked for 15 minutes.')}localStorage.setItem(FK+uid,String(f));msg('That recovery code is not right. '+(MAXF-f)+' attempt'+(MAXF-f==1?'':'s')+' left.')};
   let old;try{old=await unwrap(code,o.rw)}catch(e){return bad()}
   if(await hash(old,unhex(o.s))!==o.h)return bad();
   /* open the records with the old passphrase first; change nothing until that works */
   S.uid=uid;let recs=null;
   try{const x=await idb('get');if(x&&x.iv){S.key=await dk(old,o.e);recs=await dec(x)}}catch(e){S.uid=null;S.key=null;return msg('The saved records could not be opened, so nothing was changed.')}
-  const np=pp(em,p1),salt=rnd(16),n={s:salt,h:await hash(np,unhex(salt)),e:rnd(16)};
+  const np=pp(em,p1),salt=rnd(16),n={s:salt,h:await hash(np,unhex(salt)),e:rnd(16),...(o.hint?{hint:o.hint}:{})};
   n.rw=await wrap(code,np);
   if(recs){S.key=await dk(np,n.e);const iv=crypto.getRandomValues(new Uint8Array(12)),c=await crypto.subtle.encrypt({name:'AES-GCM',iv},S.key,new TextEncoder().encode(JSON.stringify(recs)));await idb('put',{iv,c})}
   setAcct(uid,n);localStorage.removeItem(FK+uid);localStorage.removeItem(LK+uid);
@@ -1180,10 +1222,12 @@ window.authUp=async function(){
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(em))return msg('Enter a valid email address.');
   if(p1.length<8)return msg('Use at least 8 characters for the password.');
   if(p1!==p2)return msg('The two passwords do not match.');
+  const hint=(($('#ph')||{}).value||'').trim();
+  if(hint&&hint.toLowerCase().includes(p1.toLowerCase()))return msg('The hint can not contain your password.');
   const uid=await uidOf(em);
   if(localStorage.getItem(AK+uid))return msg('This email already has an account on this device. Tap Sign in.');
   const salt=rnd(16),o={s:salt,h:await hash(pp(em,p1),unhex(salt)),e:rnd(16)},code=newCode();
-  o.rw=await wrap(code,pp(em,p1));
+  o.rw=await wrap(code,pp(em,p1));if(hint)o.hint=hint;
   localStorage.setItem(AK+uid,JSON.stringify(o));
   showCode(code,()=>enter(uid,em,p1,o),'Save your recovery code');
  }catch(e){msg('Could not create the account on this device.')}
@@ -1200,7 +1244,7 @@ window.authIn=async function(){
   if(await hash(pp(em,pw),unhex(o.s))===o.h){localStorage.removeItem(FK+uid);localStorage.removeItem(LK+uid);return enter(uid,em,pw,o)}
   const f=(+localStorage.getItem(FK+uid)||0)+1;
   if(f>=MAXF){localStorage.removeItem(FK+uid);localStorage.setItem(LK+uid,String(Date.now()+COOL));return msg('Too many wrong attempts. Locked for 15 minutes.')}
-  localStorage.setItem(FK+uid,String(f));msg('Wrong email or password. '+(MAXF-f)+' attempt'+(MAXF-f==1?'':'s')+' left.');
+  localStorage.setItem(FK+uid,String(f));msg('Wrong email or password. '+(MAXF-f)+' attempt'+(MAXF-f==1?'':'s')+' left.'+(o.hint?' Hint: '+o.hint:''));
  }catch(e){msg('Could not sign in.')}
 };
 
@@ -1466,8 +1510,8 @@ window.csvGo=async function(){
    const PT_VER='v200'
    const PT_VER='vv200'
    ---------- */
-const PT_BUILD=237;
-const PT_LABEL='v36';
+const PT_BUILD=238;
+const PT_LABEL='v37';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
@@ -1591,6 +1635,9 @@ function deskewPage(c,ws){try{const W=c.width,H=c.height,t=skewOf(ws,W);if(t==nu
  '.chips{flex-wrap:nowrap!important;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;margin:0 -2px;padding:0 2px}.chips::-webkit-scrollbar{display:none}.chips button{flex:0 0 auto;padding:4px 11px!important}',
  '.svact button{padding:9px 10px;min-height:0;font-size:14px}',
  '.svact{display:flex;gap:8px}.svact button{flex:1;width:auto;min-width:0}',
+ '.side .setrow{display:flex;align-items:center;gap:10px;margin-top:8px}.side .setrow label{flex:1;min-width:0;margin:0;font:12px/1.35 -apple-system,system-ui,sans-serif;letter-spacing:0;text-transform:none;color:var(--mut)}.side .setrow input{flex:0 0 64px;width:64px;margin:0;padding:8px 6px;text-align:center}',
+ '.side details .setgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.side details .setgrid button{width:auto;margin:0;min-height:40px;padding:8px 6px;font-size:13.5px;line-height:1.2}.side details .setgrid #bkinfo{grid-column:1/-1;order:9;margin:0!important;font-size:12px}',
+ '.side .disc{padding-top:6px}.side .logout{min-height:0;padding:9px 12px}',
  '@media (prefers-reduced-motion:reduce){.sl[data-wt],.wtbd,.wtpop,.tgb,.tgc{transition:none!important}}'
  ].join('');document.head.appendChild(st)})();
 
