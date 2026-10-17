@@ -32,6 +32,47 @@ const css=`
 .mt:hover,.mt[aria-expanded=true]{color:var(--fg);background:#15181c}
 .mt i,.xpb i{width:6px;height:6px;border:solid currentColor;border-width:0 1.6px 1.6px 0;transform:rotate(45deg) translate(-1px,-1px);opacity:.7}
 .mt:focus-visible,.xpb:focus-visible,#ptmenu .mi:focus-visible{outline:2px solid #3d6a7a;outline-offset:1px}
+
+/* search: icon in the top bar that expands */
+#topbar .tbsw{order:2;margin-left:auto;display:flex;align-items:center;gap:4px}
+#topbar .mts{margin-left:0}
+#topbar .tbi{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;padding:0;background:transparent;border:1px solid transparent;border-radius:9px;color:var(--mut)}
+#topbar .tbi:hover{color:var(--fg);background:#15181c}
+#topbar .tbf{display:flex;align-items:center;width:0;opacity:0;overflow:hidden;transition:width .2s ease,opacity .15s ease}
+#topbar .tbsw.open .tbf{width:260px;opacity:1}
+#topbar .tbsw.open .tbi{color:var(--gd)}
+#topbar .tbf input{margin:0;height:36px;padding:0 12px;border-radius:9px;font-size:16px;-webkit-appearance:none;appearance:none}
+#topbar .tbf input::-webkit-search-cancel-button,#topbar .tbf input::-webkit-search-decoration{-webkit-appearance:none;display:none}
+#topbar .tbx{flex:0 0 auto;width:32px;height:32px;padding:0;margin-left:2px;background:transparent;border:0;color:var(--mut);display:none}
+#topbar .tbsw.open .tbx{display:inline-block}
+#savedview .svs{display:none}
+#savedview .svq{justify-content:flex-end}
+@media(max-width:900px){
+ #topbar .tbsw{margin-left:auto}
+ #topbar .tbsw.open{position:absolute;left:14px;right:14px;top:max(8px,env(safe-area-inset-top));margin:0;z-index:2;background:#0b0d0f;height:36px}
+ #topbar .tbsw.open .tbf{flex:1;width:auto}
+ #topbar .tbsw.open .tbi{display:none}
+ #topbar .tb{position:relative}
+ #topbar.searching .brand,#topbar.searching .mts{visibility:hidden}
+ #topbar .mt{padding:7px 6px}
+}
+@media(prefers-reduced-motion:reduce){#topbar .tbf{transition:none}}
+
+/* mobile-first declutter */
+@media(max-width:900px){
+ #topbar .brand b{display:none}
+ #topbar .tb{row-gap:6px}
+ #app .main{padding-top:10px}
+ #bkbar,#rcbar{display:flex;flex-wrap:nowrap!important;align-items:center;background:transparent!important;border:1px solid var(--hair,var(--ln))!important;padding:6px 6px 6px 12px!important;margin-bottom:10px!important}
+ #bkbar>div,#rcbar>span{min-width:0!important;flex:1;font-size:13px}
+ #bkbar .bk2{display:none}
+ #bkbar .bk1,#rcbar>span{font-weight:500;color:var(--mut)}
+ #bkbar button.pri,#rcbar button.pri{border:0!important;padding:6px 8px;font-size:13px;white-space:nowrap}
+ #bkbar button:not(.pri){padding:6px 8px;font-size:13px;white-space:nowrap}
+ #savedview .invm{display:none}
+ #savedview .sv{gap:8px}
+ #savedview .seg button{white-space:nowrap;font-size:13px;padding-inline:2px}
+}
 /* work screen: keep sticky helpers clear of the bar */
 #app .src{top:76px}
 #addbar{top:64px}
@@ -102,6 +143,32 @@ const mts=document.createElement('div');mts.className='mts';
  b.innerHTML=l+'<i aria-hidden="true"></i>';b.onclick=e=>window.ptMenu(e,k);mts.appendChild(b)});
 inner.appendChild(mts);bar.appendChild(inner);shell.insertBefore(bar,shell.firstChild);
 
+
+/* ---------- search: magnifier in the top bar, expands into a field; drives the Saved search ---------- */
+const sw=document.createElement('div');sw.className='tbsw';
+sw.innerHTML='<div class="tbf"><input id="tbq" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Search merchant, client or receipt #" aria-label="Search saved records"><button type="button" class="tbx" aria-label="Clear search and close">\u2715</button></div>'
+ +'<button type="button" class="tbi" aria-label="Search saved records" aria-expanded="false"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>';
+inner.insertBefore(sw,mts);
+const tbq=sw.querySelector('#tbq'),tbi=sw.querySelector('.tbi'),tbx=sw.querySelector('.tbx');
+function sOpen(){sw.classList.add('open');bar.classList.add('searching');tbi.setAttribute('aria-expanded','true');setTimeout(()=>{try{tbq.focus()}catch(e){}},30)}
+function sClose(){sw.classList.remove('open');bar.classList.remove('searching');tbi.setAttribute('aria-expanded','false');tbq.blur()}
+tbi.onclick=()=>sw.classList.contains('open')?sClose():sOpen();
+tbx.onclick=()=>{tbq.value='';if(S.sv.q)runFind('');sClose()};
+tbq.addEventListener('blur',()=>{if(!tbq.value)setTimeout(()=>{if(document.activeElement!==tbq)sClose()},150)});
+tbq.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();tbq.blur()}if(e.key==='Escape'){e.stopPropagation();tbx.onclick()}});
+function runFind(v){
+ const fresh=S.tab!='saved';
+ if(fresh)showSaved();
+ if(fresh||S.sv.sec=='t')svSec(S.mode=='purchase'?'x':'w');
+ svFind(v);
+}
+tbq.addEventListener('input',()=>runFind(tbq.value));
+/* keep the field in step when the app changes the query itself (Clear, "Show N in ...") */
+function syncQ(){if(tbq.value!==S.sv.q){tbq.value=S.sv.q;if(S.sv.q)sOpen()}}
+if(typeof renderRecs==='function'){const _rr=renderRecs;renderRecs=function(){const r=_rr.apply(this,arguments);try{syncQ()}catch(e){}return r}}
+if(typeof svFind==='function'){const _sf=svFind;svFind=function(){const r=_sf.apply(this,arguments);try{syncQ()}catch(e){}return r}}
+if(typeof svClear==='function'){const _sc=svClear;svClear=function(){const r=_sc.apply(this,arguments);try{syncQ()}catch(e){}return r}}
+
 /* ---------- dropdown menus ---------- */
 const bkText=()=>{const e=$('#bkinfo');return e?e.textContent:''};
 const verText=()=>{const e=$('#ver');return e?e.textContent:''};
@@ -127,6 +194,10 @@ const MENUS={
   {hr:1},
   {t:'Log out',f:()=>lockNow()}],
  data:()=>[
+  ...(S.records&&S.records.length?[
+   {t:'Copy records',sub:'The list you are viewing in Saved',f:()=>{if(S.tab!='saved')showSaved();svCopy()}},
+   {t:'Export CSV\u2026',f:()=>{if(S.tab!='saved')showSaved();csvOpen()}},
+   {hr:1}]:[]),
   {t:'Download backup',sub:bkText(),f:()=>window.authBackup()},
   {t:'Remembered fixes',f:()=>fixOpen()},
   {hr:1},
@@ -198,7 +269,6 @@ if(typeof svBody==='function'){
  svBody=function(){
   let h=_sb.apply(this,arguments);
   h=h.replace(/<div class="svact">[\s\S]*?<\/div>/,'');
-  h=h.replace(/(<div class="svsum">[\s\S]*?<\/b>)(<\/div>)/,(m,a,b)=>a+'<button type="button" class="xpb" aria-haspopup="menu" aria-expanded="false" onclick="ptMenu(event,\'exp\')">Export<i aria-hidden="true"></i></button>'+b);
   return h};
 }
 
