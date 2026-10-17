@@ -12,7 +12,11 @@ if(!shell||!side||$('#topbar'))return;
 /* ---------- styles ---------- */
 const css=`
 /* layout: one column under a sticky top bar (the old sidebar is hidden; its buttons are still used by the menus) */
-#app .shell{display:block;min-height:100vh;padding:0}
+#app .shell{display:flex;flex-direction:column;min-height:100vh;min-height:100dvh;padding:0}
+#app .main{flex:1 0 auto;width:100%}
+#app{padding-bottom:0!important}
+#topbar{order:-1}
+#ptfoot{order:10;margin-top:auto;width:100%}
 #app .side{display:none!important}
 #app .main{max-width:1180px;margin:0 auto;padding:22px 20px 64px}
 #topbar{position:sticky;top:0;z-index:40;background:rgba(11,13,15,.9);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-bottom:1px solid var(--hair,var(--ln));padding:10px 20px;padding-top:max(10px,env(safe-area-inset-top))}
