@@ -359,7 +359,9 @@ function grpRows(list,row){const dc={},m=new Map();
   add(p,false);if(p!=='none')[...new Set(ds.map(d=>+wkStart(d)))].filter(k=>k!==p).forEach(k=>add(k,true))});
  const desc=sortFor(false)!=='dold',keys=[...m.keys()].filter(k=>k!=='none').sort((a,b)=>desc?b-a:a-b);if(m.has('none'))keys.push('none');
  const pl=(n,w)=>n+' '+w+(n==1?'':'s');
- return keys.map(k=>{const rs=m.get(k).slice();if(k!=='none')rs.sort((a,b)=>desc?b.t-a.t:a.t-b.t);const sum=+rs.reduce((t,x)=>t+((k==='none'?recAmt(x.e[0]):wkAmt(x.e[0],k))||0),0).toFixed(2);return '<div class="sl" data-wt="'+M(sum)+'">'+rs.map(x=>row(x.e,k==='none'?null:k,x.cont)).join('')+'</div>'}).join('')}
+ return keys.map(k=>{const rs=m.get(k).slice();if(k!=='none')rs.sort((a,b)=>desc?b.t-a.t:a.t-b.t);const sum=+rs.reduce((t,x)=>t+((k==='none'?recAmt(x.e[0]):wkAmt(x.e[0],k))||0),0).toFixed(2);return '<div class="sl" data-wt="'+M(sum)+'" data-wl="'+wkLbl(k)+'" data-wn="'+pl(rs.length,'invoice')+'">'+rs.map(x=>row(x.e,k==='none'?null:k,x.cont)).join('')+'</div>'}).join('')}
+function wkLbl(k){if(k==='none')return'No date';const a=new Date(k),b=new Date(k);b.setDate(b.getDate()+6);const f=d=>d.toLocaleString('en-US',{month:'short',day:'numeric'});return 'Week of '+f(a)+' \u2013 '+(a.getMonth()==b.getMonth()?b.getDate():f(b))}
+function totTog(b){const p=b.parentNode,o=!p.classList.contains('open');S.sv.tot=o;p.classList.toggle('open',o);b.setAttribute('aria-expanded',o?'true':'false')}
 function svBody(){
  const x=S.sv.sec=='x',grp=!x&&/^d/.test(sortFor(x)),q=svSearching(),list=svList(),miss=list.filter(([r])=>!(r.imgs&&r.imgs.length)).length,tot=+list.reduce((s,[r])=>s+(recAmt(r)||0),0).toFixed(2),T=totals(),trow=(l,v)=>`<div class="srow"><div class="sm">${l}</div><b>${M(v)}</b></div>`,
  row=([r,i],wk,cont)=>{const pur=r.mode=='purchase',nm=esc((pur?niceMerch(r.merchant):r.client)||(pur?'Receipt':'Work invoice')),split=!pur&&wk!=null&&new Set(workDays(r).map(x=>+wkStart(x))).size>1,first=split&&Math.min(...workDays(r).map(x=>+wkStart(x)))===wk,sub=pur?[r.date,r.category].filter(Boolean).map(esc).join(' · '):dayPills(r,wk);
@@ -367,7 +369,7 @@ function svBody(){
  let lbl;if(q)lbl=list.length+' match'+(list.length==1?'':'es')+(x&&S.sv.cat!='All'?' in '+S.sv.cat:'');else lbl=x&&S.sv.cat!='All'?list.length+' in '+S.sv.cat:list.length+' '+(x?'expense':'work invoice')+(list.length==1?'':'s');
  let none='';if(!list.length){if(q){const toks=svTok(S.sv.q),o=S.records.filter(r=>(r.mode=='purchase')!=x&&recMatch(r,toks)).length;none='<div class="empty2">No matches for “'+esc(S.sv.q.trim())+'”.'+(x&&S.sv.cat!='All'?'<br>Try the All category.':'')+(o?'<br><button onclick="svOther()" style="margin-top:10px">Show '+o+' in '+(x?'Work invoices':'Expenses')+'</button>':'')+'</div>'}else none='<div class="empty2">'+(x?'No expenses saved yet.':'No work invoices saved yet.')+'</div>'}
  return (list.length?'<div class="svsum"><span>'+lbl+'</span><b>'+M(tot)+'</b></div>'+(miss?'<div class="invm">'+miss+' of '+list.length+' without '+(x?'a receipt':'an invoice')+'</div>':'')+(grp?grpRows(list,row):'<div class="sl">'+list.map(row).join('')+'</div>'):none)
- +(x&&T.n&&S.sv.cat=='All'&&!q?`<div class="sl"><h4>Expense totals</h4>${T.months.map(([l,v])=>trow(l,v)).join('')}${T.years.length>1?T.years.map(([l,v])=>trow(l+' total',v)).join(''):''}${T.cats.map(([l,v])=>trow(l,v)).join('')}${trow('Total expenses',T.all)}</div>`:'')
+ +(x&&T.n&&S.sv.cat=='All'&&!q?`<div class="sl tgl${S.sv.tot?' open':''}"><button type="button" class="tgh" aria-expanded="${S.sv.tot?'true':'false'}" onclick="totTog(this)"><span class="tgt">Expense totals</span><span class="tgv">${M(T.all)}</span><i class="tgc" aria-hidden="true"></i></button><div class="tgb"><div class="tgi">${T.months.map(([l,v])=>trow(l,v)).join('')}${T.years.length>1?T.years.map(([l,v])=>trow(l+' total',v)).join(''):''}${T.cats.map(([l,v])=>trow(l,v)).join('')}</div></div></div>`:'')
  +(list.length?'<button class="pri" onclick="svCopy()">Copy '+(list.length==1?'this record':'these '+list.length+' records')+'</button>':'')
  +(list.length?'<button onclick="csvOpen()">Export CSV…</button>':'')
  }
@@ -1532,17 +1534,56 @@ function deskewPage(c,ws){try{const W=c.width,H=c.height,t=skewOf(ws,W);if(t==nu
  const st2=document.createElement('style');st2.textContent='.s3{font-size:12px;font-weight:400;color:var(--amb);opacity:.85;margin-top:2px}.invm{font-size:12px;font-weight:400;color:var(--mut);margin:4px 2px 8px}.rmb .invm{margin:0 0 8px;color:var(--amb);opacity:.85}';document.head.appendChild(st2)})();
 
 
-/* ---------- v31: press and hold a week on the Saved tab to see that week's total ---------- */
+/* ---------- v34: press and hold a week on the Saved tab: iOS-style peek with that week's total; collapsible Expense totals ---------- */
 (function(){
- let tm=null,x0=0,y0=0,fired=0;
+ let tm=null,x0=0,y0=0,fired=0,open=null,swallow=0;
  const stop=()=>{clearTimeout(tm);tm=null};
- document.addEventListener('pointerdown',e=>{const c=e.target.closest&&e.target.closest('.sl[data-wt]');if(!c)return;x0=e.clientX;y0=e.clientY;stop();
-  tm=setTimeout(()=>{tm=null;fired=Date.now();snack(c.getAttribute('data-wt'));clearTimeout(snT);snT=setTimeout(snackHide,2500)},450)},true);
+ const close=()=>{if(!open)return;const o=open;open=null;o.c.classList.remove('wtl');o.bd.classList.remove('on');o.pop.classList.remove('on');setTimeout(()=>{o.bd.remove();o.pop.remove()},260)};
+ const show=(c,x,y)=>{close();
+  const bd=document.createElement('div');bd.className='wtbd';
+  const pop=document.createElement('div');pop.className='wtpop';pop.setAttribute('role','status');
+  pop.innerHTML='<div class="wtl1"></div><div class="wtv"></div><div class="wtn"></div>';
+  pop.children[0].textContent=c.getAttribute('data-wl')||'Week total';pop.children[1].textContent=c.getAttribute('data-wt')||'';pop.children[2].textContent=c.getAttribute('data-wn')||'';
+  document.body.appendChild(bd);document.body.appendChild(pop);
+  const r=c.getBoundingClientRect(),w=pop.offsetWidth,h=pop.offsetHeight,min=64;
+  let top=r.top-h-14,above=true;if(top<min){above=false;top=Math.min(Math.max(y-h-30,min),innerHeight-h-24)}
+  const left=Math.min(Math.max(x-w/2,12),innerWidth-w-12);
+  pop.style.top=top+'px';pop.style.left=left+'px';pop.style.transformOrigin=Math.round(x-left)+'px '+(above||top<y?'100%':'0%');
+  c.classList.add('wtl');open={c,bd,pop};
+  requestAnimationFrame(()=>{bd.classList.add('on');pop.classList.add('on')})};
+ document.addEventListener('pointerdown',e=>{if(open){close();swallow=Date.now();return}
+  const c=e.target.closest&&e.target.closest('.sl[data-wt]');if(!c)return;x0=e.clientX;y0=e.clientY;stop();
+  tm=setTimeout(()=>{tm=null;fired=Date.now();try{navigator.vibrate&&navigator.vibrate(12)}catch(_){}show(c,x0,y0)},450)},true);
  document.addEventListener('pointermove',e=>{if(tm&&(Math.abs(e.clientX-x0)>10||Math.abs(e.clientY-y0)>10))stop()},true);
- ['pointerup','pointercancel','scroll'].forEach(t=>document.addEventListener(t,stop,true));
- document.addEventListener('click',e=>{if(fired&&Date.now()-fired<700&&e.target.closest&&e.target.closest('.sl[data-wt]')){e.stopPropagation();e.preventDefault();fired=0}},true);
+ ['pointerup','pointercancel'].forEach(t=>document.addEventListener(t,stop,true));
+ ['scroll','resize','orientationchange'].forEach(t=>addEventListener(t,()=>{stop();close()},true));
+ document.addEventListener('keydown',e=>{if(e.key=='Escape')close()});
+ document.addEventListener('click',e=>{const n=Date.now(),on=e.target.closest&&e.target.closest('.sl[data-wt]');if((fired&&n-fired<700&&on)||(swallow&&n-swallow<600)){e.stopPropagation();e.preventDefault();fired=0;swallow=0}},true);
  document.addEventListener('contextmenu',e=>{if(e.target.closest&&e.target.closest('.sl[data-wt]'))e.preventDefault()},true);
- const st=document.createElement('style');st.textContent='.sl[data-wt]{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}';document.head.appendChild(st)})();
+ const st=document.createElement('style');st.textContent=[
+ '.sl[data-wt]{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;transition:transform .32s cubic-bezier(.2,.9,.3,1.2),box-shadow .32s}',
+ '.sl.wtl{position:relative;z-index:59;transform:scale(1.025);box-shadow:0 20px 56px rgba(0,0,0,.55)}',
+ '.wtbd{position:fixed;inset:0;z-index:58;touch-action:none;background:rgba(0,0,0,0);-webkit-backdrop-filter:blur(0);backdrop-filter:blur(0);transition:background .28s,-webkit-backdrop-filter .28s,backdrop-filter .28s}',
+ '.wtbd.on{background:rgba(0,0,0,.38);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}',
+ '.wtpop{position:fixed;z-index:60;box-sizing:border-box;min-width:176px;max-width:calc(100vw - 24px);padding:13px 22px 14px;border-radius:20px;text-align:center;color:#fff;background:rgba(48,50,55,.74);-webkit-backdrop-filter:saturate(180%) blur(30px);backdrop-filter:saturate(180%) blur(30px);border:.5px solid rgba(255,255,255,.16);box-shadow:0 14px 44px rgba(0,0,0,.5);opacity:0;transform:scale(.8);pointer-events:none;transition:transform .34s cubic-bezier(.2,.9,.3,1.25),opacity .2s}',
+ '.wtpop.on{opacity:1;transform:scale(1)}',
+ '.wtl1{font:600 11px/1.2 -apple-system,"SF Pro Text",system-ui,sans-serif;letter-spacing:.07em;text-transform:uppercase;color:rgba(235,235,245,.6)}',
+ '.wtv{font:700 30px/1.15 -apple-system,"SF Pro Display",system-ui,sans-serif;letter-spacing:-.5px;font-variant-numeric:tabular-nums;margin-top:5px}',
+ '.wtn{font-size:12.5px;color:rgba(235,235,245,.6);margin-top:2px}',
+ /* collapsible Expense totals */
+ '.tgl{padding-top:0!important;padding-bottom:0!important}',
+ '.tgh{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:10px;width:100%;min-height:50px;cursor:pointer;-webkit-tap-highlight-color:transparent;font-size:14px}',
+ '.tgh:active{opacity:.6}.tgh:focus-visible{outline:2px solid var(--gd);outline-offset:2px;border-radius:8px}',
+ '.tgt{flex:1;min-width:0;font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}',
+ '.tgv{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}',
+ '.tgc{flex:0 0 auto;width:8px;height:8px;margin:0 3px 0 4px;border:solid var(--mut);border-width:0 2px 2px 0;transform:rotate(-45deg);transition:transform .3s cubic-bezier(.32,.72,0,1)}',
+ '.tgl.open .tgc{transform:rotate(45deg) translate(-2px,-2px)}',
+ '.tgb{display:grid;grid-template-rows:0fr;visibility:hidden;transition:grid-template-rows .3s cubic-bezier(.32,.72,0,1),visibility 0s .3s}',
+ '.tgl.open .tgb{grid-template-rows:1fr;visibility:visible;transition:grid-template-rows .3s cubic-bezier(.32,.72,0,1),visibility 0s}',
+ '.tgi{min-height:0;overflow:hidden}',
+ '.tgi .srow{padding:10px 0}.tgi .srow:first-child{border-top:1px solid var(--hair,var(--ln))}',
+ '@media (prefers-reduced-motion:reduce){.sl[data-wt],.wtbd,.wtpop,.tgb,.tgc{transition:none!important}}'
+ ].join('');document.head.appendChild(st)})();
 
 
 /* ---------- v33: crop a saved receipt or invoice picture ---------- */
