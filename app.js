@@ -199,9 +199,9 @@ function shiftsHtml(){const r=S.rec,sh=r.shifts||[],tot=shTotal(r),have=(N(r.hou
  const card=(x,i)=>`<div class="shc"><div class="shh"><span>Shift ${i+1}</span><button type="button" class="shx" onclick="shDel(${i})" aria-label="Remove shift ${i+1}">Remove</button></div><div class="shf d"><label>Date</label><input aria-label="Shift date" value="${esc(shDate(x.date))}" placeholder="mm/dd/yyyy" inputmode="numeric" onchange="shSet(${i},'date',this.value)"></div><div class="shf"><label>Start</label><input type="time" value="${esc(x.start||'')}" onchange="shSet(${i},'start',this.value)"></div><div class="shf"><label>End</label><input type="time" value="${esc(x.end||'')}" onchange="shSet(${i},'end',this.value)"></div><div class="shf h"><label>Hours</label><input data-sh="${i}" inputmode="decimal" value="${esc(x.hours==null?'':x.hours)}" placeholder="0" onchange="shSet(${i},'hours',this.value)"></div></div>`;
  return `<section class="grp"><h3>Shifts</h3><div class="hint shn">Enter start and end times and the hours fill in for you. Split shift? Add another shift with the same date.</div>${sh.map(card).join('')}<button type="button" class="sha" onclick="shNew()">+ Add shift</button><div id="shsum">${shSumHtml(r)}</div></section>`}
 function rows(r){if(r.mode=='summary')return sumRows(r);const o=compute(r),G=[],g=k=>{const x={k,rows:[]};G.push(x);return(l,v,h)=>{if(v!=null&&String(v).trim()!=='')x.rows.push([l,String(v).trim(),!!h])}};
- if(r.mode=='purchase'){const i=g('info');i('Date',r.date);i('Merchant',niceMerch(r.merchant));i('Location',r.location);i('Receipt/Invoice #',r.number);i('Category',r.category);
+ if(r.mode=='purchase'){const i=g('info');i('Date',r.date);i('Merchant',niceMerch(r.merchant));i('Category',r.category);
   const d=g('det');r.items.filter(x=>!x.off).forEach(x=>d((String(x.n||'Item').replace(/\s*(\.{2,}|…)\s*$/,'').trim()),M(x.t)));
-  const t=g('tot');t('Subtotal',M(o.sub));if(o.ship)t('Shipping',M(o.ship));if(o.disc)t('Discount','-'+M(o.disc));if(N(r.tax)!=null)t('Tax',M(o.tax));t('Total',M(o.total));
+  const t=g('tot');if(o.ship)t('Shipping',M(o.ship));if(o.disc)t('Discount','-'+M(o.disc));t('Total',M(o.total));
   return{t:'EXPENSE SUMMARY',G:G.filter(x=>x.rows.length)}}
  const i=g('info');i('Date',r.jobDate);i('Employer',r.employer);i('Client',r.client);
  const fh=v=>v==null?null:(+(+v).toFixed(2))+' h';i('Total Hours',fh(o.tot));
@@ -359,7 +359,7 @@ function grpRows(list,row){const dc={},m=new Map();
   add(p,false);if(p!=='none')[...new Set(ds.map(d=>+wkStart(d)))].filter(k=>k!==p).forEach(k=>add(k,true))});
  const desc=sortFor(false)!=='dold',keys=[...m.keys()].filter(k=>k!=='none').sort((a,b)=>desc?b-a:a-b);if(m.has('none'))keys.push('none');
  const pl=(n,w)=>n+' '+w+(n==1?'':'s');
- return keys.map(k=>{const rs=m.get(k).slice();if(k!=='none')rs.sort((a,b)=>desc?b.t-a.t:a.t-b.t);const sum=+rs.reduce((t,x)=>t+((k==='none'?recAmt(x.e[0]):wkAmt(x.e[0],k))||0),0).toFixed(2);return '<div class="sl">'+rs.map(x=>row(x.e,k==='none'?null:k,x.cont)).join('')+'</div>'}).join('')}
+ return keys.map(k=>{const rs=m.get(k).slice();if(k!=='none')rs.sort((a,b)=>desc?b.t-a.t:a.t-b.t);const sum=+rs.reduce((t,x)=>t+((k==='none'?recAmt(x.e[0]):wkAmt(x.e[0],k))||0),0).toFixed(2);return '<div class="sl" data-wt="'+M(sum)+'">'+rs.map(x=>row(x.e,k==='none'?null:k,x.cont)).join('')+'</div>'}).join('')}
 function svBody(){
  const x=S.sv.sec=='x',grp=!x&&/^d/.test(sortFor(x)),q=svSearching(),list=svList(),miss=list.filter(([r])=>!(r.imgs&&r.imgs.length)).length,tot=+list.reduce((s,[r])=>s+(recAmt(r)||0),0).toFixed(2),T=totals(),trow=(l,v)=>`<div class="srow"><div class="sm">${l}</div><b>${M(v)}</b></div>`,
  row=([r,i],wk,cont)=>{const pur=r.mode=='purchase',nm=esc((pur?niceMerch(r.merchant):r.client)||(pur?'Receipt':'Work invoice')),split=!pur&&wk!=null&&new Set(workDays(r).map(x=>+wkStart(x))).size>1,first=split&&Math.min(...workDays(r).map(x=>+wkStart(x)))===wk,sub=pur?[r.date,r.category].filter(Boolean).map(esc).join(' · '):dayPills(r,wk);
@@ -1047,7 +1047,7 @@ function showCode(code,next,title){
 }
 window.authCopy=async function(){try{await navigator.clipboard.writeText(window.__rc);msg('Copied. Paste it into Notes or a password manager.')}catch(e){try{const r=document.createRange();r.selectNodeContents($('#lock div[style*="mono"]'));const g=getSelection();g.removeAllRanges();g.addRange(r);msg('Selected. Tap Copy in the menu that appears.')}catch(x){msg('Press and hold the code to copy it.')}}};
 window.authSaveFile=async function(){const t=sheetText(window.__rc),f=new File([t],'PaperTrail recovery sheet.txt',{type:'text/plain'});
- try{if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:'PaperTrail recovery sheet'});return}}catch(e){if(e&&e.name=='AbortError')return}
+ try{if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f]});return}}catch(e){if(e&&e.name=='AbortError')return}
  try{const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=f.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);msg('Saved to your downloads.')}catch(e){msg('Could not save a file here. Use Copy instead.')}};
 window.authEmail=function(){const t=sheetText(window.__rc);location.href='mailto:'+encodeURIComponent(S.email||'')+'?subject='+encodeURIComponent('PaperTrail recovery sheet')+'&body='+encodeURIComponent(t)};
 window.authShare=window.authSaveFile;
@@ -1217,7 +1217,7 @@ const ago=ms=>{const d=Math.floor((Date.now()-ms)/DAY);if(d<1)return 'today';if(
    Returns 'shared', 'downloaded' or 'cancel'. */
 window.deliverFile=async function(file){
  if(navigator.canShare&&navigator.canShare({files:[file]})){
-  try{await navigator.share({files:[file],title:file.name});return 'shared'}catch(e){if(e&&e.name==='AbortError')return 'cancel'}
+  try{await navigator.share({files:[file]});return 'shared'}catch(e){if(e&&e.name==='AbortError')return 'cancel'}
  }
  const a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=file.name;document.body.appendChild(a);a.click();a.remove();
  setTimeout(()=>URL.revokeObjectURL(a.href),4000);return 'downloaded';
@@ -1464,8 +1464,8 @@ window.csvGo=async function(){
    const PT_VER='v200'
    const PT_VER='vv200'
    ---------- */
-const PT_BUILD=229;
-const PT_LABEL='v28';
+const PT_BUILD=233;
+const PT_LABEL='v32';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
@@ -1529,4 +1529,17 @@ function deskewPage(c,ws){try{const W=c.width,H=c.height,t=skewOf(ws,W);if(t==nu
  rmPage=function(i){if(!confirm('Are you sure you want to remove page '+(i+1)+' from the PDF?'))return;pushU();S.pages.splice(i,1);renderPages();snack('Page removed',undoMark)};
  rmImg=function(i){const r=S.records[i];if(!r||!r.imgs)return;if(!confirm('Are you sure you want to remove the attached '+(r.mode=='purchase'?'receipt':'invoice')+' from this saved item? Its details stay.'))return;const old=r.imgs;delete r.imgs;store();renderRecs();openRec(i);snack((r.mode=='purchase'?'Receipt':'Invoice')+' removed',()=>{r.imgs=old;store();renderRecs();openRec(S.records.indexOf(r))})};
  fixAll=function(){if(!confirm('Are you sure you want to forget every remembered fix? Saved records are not changed.'))return;const old=S.learn;S.learn={m:{},mi:{}};store();learnUI();fixOpen();snack('Remembered fixes cleared',()=>{S.learn=old;store();learnUI();fixOpen()})};
- const st2=document.createElement('style');st2.textContent='.s3{font-size:11.5px;font-weight:400;color:var(--mut);margin-top:2px}.invm{font-size:12px;font-weight:400;color:var(--mut);margin:4px 2px 8px}.rmb .invm{margin:0 0 8px}';document.head.appendChild(st2)})();
+ const st2=document.createElement('style');st2.textContent='.s3{font-size:12px;font-weight:400;color:var(--amb);opacity:.85;margin-top:2px}.invm{font-size:12px;font-weight:400;color:var(--mut);margin:4px 2px 8px}.rmb .invm{margin:0 0 8px;color:var(--amb);opacity:.85}';document.head.appendChild(st2)})();
+
+
+/* ---------- v31: press and hold a week on the Saved tab to see that week's total ---------- */
+(function(){
+ let tm=null,x0=0,y0=0,fired=0;
+ const stop=()=>{clearTimeout(tm);tm=null};
+ document.addEventListener('pointerdown',e=>{const c=e.target.closest&&e.target.closest('.sl[data-wt]');if(!c)return;x0=e.clientX;y0=e.clientY;stop();
+  tm=setTimeout(()=>{tm=null;fired=Date.now();snack(c.getAttribute('data-wt'));clearTimeout(snT);snT=setTimeout(snackHide,2500)},450)},true);
+ document.addEventListener('pointermove',e=>{if(tm&&(Math.abs(e.clientX-x0)>10||Math.abs(e.clientY-y0)>10))stop()},true);
+ ['pointerup','pointercancel','scroll'].forEach(t=>document.addEventListener(t,stop,true));
+ document.addEventListener('click',e=>{if(fired&&Date.now()-fired<700&&e.target.closest&&e.target.closest('.sl[data-wt]')){e.stopPropagation();e.preventDefault();fired=0}},true);
+ document.addEventListener('contextmenu',e=>{if(e.target.closest&&e.target.closest('.sl[data-wt]'))e.preventDefault()},true);
+ const st=document.createElement('style');st.textContent='.sl[data-wt]{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}';document.head.appendChild(st)})();
