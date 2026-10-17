@@ -993,7 +993,7 @@ function ui(tab){
       +'<div class="hint" style="font-size:13px;color:var(--mut);margin:2px 0 8px">Your records are encrypted on this device with this password. On the next screen you will get a recovery code. Save it: it is the only way back in if you forget your password.</div>'
    +'<button class="pri" type="button" onclick="authUp()">Create account</button>'
   :'<button class="pri" type="button" onclick="authIn()">Sign in</button>'
-   +'<div style="display:flex;flex-direction:column;gap:2px;margin-top:6px"><button type="button" style="'+LNK+'" onclick="authForgot()">Forgot password?</button><button type="button" style="'+LNK+'" onclick="authRestore()">Restore from a backup file</button></div><div class="hint" style="margin-top:18px">Records are saved on this phone only and encrypted with your password.</div>')
+   +'<div style="display:flex;flex-direction:column;gap:2px;margin-top:6px"><button type="button" style="'+LNK+'" onclick="authForgot()">Forgot password?</button><button type="button" style="'+LNK+'" onclick="authRestore()">Restore from a backup file</button></div><div class="hint" style="margin-top:18px;white-space:nowrap">Records are encrypted and saved on this device only.</div>')
  +'<div id="lm" class="msg" style="margin-top:10px"></div>');
  const f=$(up?'#em':(last?'#pw':'#em'));if(f)try{f.focus()}catch(e){}
 }
