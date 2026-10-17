@@ -895,7 +895,7 @@ function dupWarn(){const el=$('#dupwarn');if(!el)return;const r=S.rec,m=r&&r.loa
 function openRec(i){const r=S.records[i];if(!r)return;closeRec();const{t,G}=rows(r),
  h=G.map(g=>({...g,rows:g.rows.filter(x=>x[0]!=='Regular Hours')})).map(g=>'<div class="rg">'+g.rows.map(([l,v,hl])=>`<div class="rr${hl?' hl':''}${g.k=='tot'?' tt':''}"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join('')+'</div>').join(''),
  o=document.createElement('div');o.id='recmodal';o.className='rmo';o.onclick=e=>{if(e.target===o)closeRec()};
- o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${r.imgs&&r.imgs.length?'':'<div class="invm">'+(r.mode=='purchase'?'No receipt attached':'No invoice attached')+'</div>'}${h}</div><div class="rmf"><button onclick="dlRec(${i})">Download PDF</button><button onclick="viewRec(${i})">View PDF</button>${r.imgs&&r.imgs.length?`<button onclick="attachRec(${i})">Replace invoice</button><button onclick="rmImg(${i})">Remove invoice</button>`:`<button onclick="attachRec(${i})">Attach invoice</button>`}<button onclick="editRec(${i})">Edit</button><button onclick="delOpen(${i})" style="color:#b3261e">Delete</button></div></div>`;
+ o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${r.imgs&&r.imgs.length?'':'<div class="invm">'+(r.mode=='purchase'?'No receipt attached':'No invoice attached')+'</div>'}${h}</div><div class="rmf"><button onclick="dlRec(${i})">Download PDF</button><button onclick="viewRec(${i})">View PDF</button>${r.imgs&&r.imgs.length?`<button onclick="cropRec(${i})">Crop</button><button onclick="attachRec(${i})">Replace invoice</button><button onclick="rmImg(${i})">Remove invoice</button>`:`<button onclick="attachRec(${i})">Attach invoice</button>`}<button onclick="editRec(${i})">Edit</button><button onclick="delOpen(${i})" style="color:#b3261e">Delete</button></div></div>`;
  document.body.appendChild(o);document.body.style.overflow='hidden'}
 function delOpen(i){if(!S.records[i])return;if(!confirm('Delete this saved record? This cannot be undone.'))return;S.records.splice(i,1);closeRec();renderRecs();store()}
 function closeRec(){const o=$('#recmodal');if(o)o.remove();document.body.style.overflow=''}
@@ -913,7 +913,7 @@ function attachRec(i){const r=S.records[i];if(!r)return;const inp=document.creat
    else if(/^image\//.test(f.type)){const b=await createImageBitmap(f),sc=Math.min(1,1600/Math.max(b.width,b.height)),c=document.createElement('canvas');c.width=Math.round(b.width*sc);c.height=Math.round(b.height*sc);c.getContext('2d').drawImage(b,0,0,c.width,c.height);cs.push(c)}
    else return toast('Use a PDF, JPG or PNG');
    const out=(await Promise.all(cs.map(c=>shrinkImg(c.toDataURL('image/jpeg',.85))))).filter(Boolean);if(!out.length)return toast('Could not read that file');
-   r.imgs=out;store();toast('Invoice added');openRec(i)}catch(e){toast('Could not add that file')}};
+   r.imgs=out;store();renderRecs();toast('Invoice added');openRec(i)}catch(e){toast('Could not add that file')}};
  inp.click()}
 function rmImg(i){const r=S.records[i];if(!r||!r.imgs)return;if(!confirm('Remove the attached invoice from this saved item? Its details stay.'))return;delete r.imgs;store();toast('Invoice removed');openRec(i)}
 function dlRec(i){const r=S.records[i];if(r)saveCombo(r)}
@@ -1464,8 +1464,8 @@ window.csvGo=async function(){
    const PT_VER='v200'
    const PT_VER='vv200'
    ---------- */
-const PT_BUILD=233;
-const PT_LABEL='v32';
+const PT_BUILD=234;
+const PT_LABEL='v33';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
@@ -1543,3 +1543,36 @@ function deskewPage(c,ws){try{const W=c.width,H=c.height,t=skewOf(ws,W);if(t==nu
  document.addEventListener('click',e=>{if(fired&&Date.now()-fired<700&&e.target.closest&&e.target.closest('.sl[data-wt]')){e.stopPropagation();e.preventDefault();fired=0}},true);
  document.addEventListener('contextmenu',e=>{if(e.target.closest&&e.target.closest('.sl[data-wt]'))e.preventDefault()},true);
  const st=document.createElement('style');st.textContent='.sl[data-wt]{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}';document.head.appendChild(st)})();
+
+
+/* ---------- v33: crop a saved receipt or invoice picture ---------- */
+var CR=null;
+function cropRec(i,idx){const r=S.records[i];if(!r||!r.imgs||!r.imgs.length)return;cropClose();
+ const o=document.createElement('div');o.id='cropmod';o.className='cmo';
+ o.innerHTML='<div class="cmh"><button type="button" onclick="cropClose()">Cancel</button><span id="cmp"></span><button type="button" class="pri" onclick="cropApply()">Crop</button></div><div class="cmw"><div class="cmb" id="cmb"><img id="cmi" alt="" draggable="false"><div class="cms" id="cms">'+['nw','n','ne','e','se','s','sw','w'].map(h=>'<i data-h="'+h+'"></i>').join('')+'</div></div></div>'+(r.imgs.length>1?'<div class="cmf"><button type="button" onclick="cropPage(-1)">Previous page</button><button type="button" onclick="cropPage(1)">Next page</button></div>':'');
+ document.body.appendChild(o);CR={i,idx:Math.min(idx||0,r.imgs.length-1),sel:null,W:0,H:0,im:null};cropLoad();cropBind()}
+function cropLoad(){const r=S.records[CR.i];if(!r||!r.imgs||!r.imgs[CR.idx])return cropClose();const x=r.imgs[CR.idx],im=new Image();
+ im.onload=()=>{if(!CR)return;CR.im=im;const b=$('#cmb'),mw=Math.min(innerWidth-60,900),mh=innerHeight*.62,sc=Math.min(mw/im.naturalWidth,mh/im.naturalHeight),W=Math.max(40,Math.round(im.naturalWidth*sc)),H=Math.max(40,Math.round(im.naturalHeight*sc));
+  CR.W=W;CR.H=H;b.style.width=W+'px';b.style.height=H+'px';const e=$('#cmi');e.style.width=W+'px';e.style.height=H+'px';e.src=x.u;CR.sel={x:0,y:0,w:W,h:H};cropPaint();
+  const p=$('#cmp');if(p)p.textContent=r.imgs.length>1?'Page '+(CR.idx+1)+' of '+r.imgs.length:''};
+ im.src=x.u}
+function cropPaint(){const s=$('#cms');if(!s||!CR||!CR.sel)return;const q=CR.sel;s.style.left=(18+q.x)+'px';s.style.top=(18+q.y)+'px';s.style.width=q.w+'px';s.style.height=q.h+'px'}
+function cropBind(){const s=$('#cms');let d=null;
+ s.addEventListener('pointerdown',e=>{if(!CR||!CR.sel)return;const h=e.target.dataset&&e.target.dataset.h;d={h:h||'m',x:e.clientX,y:e.clientY,s:{...CR.sel}};try{s.setPointerCapture(e.pointerId)}catch(_){}e.preventDefault()});
+ s.addEventListener('pointermove',e=>{if(!d||!CR)return;const dx=e.clientX-d.x,dy=e.clientY-d.y,S0=d.s,W=CR.W,H=CR.H,M=36;let{x,y,w,h}=S0;
+  if(d.h=='m'){x=Math.min(Math.max(0,S0.x+dx),W-S0.w);y=Math.min(Math.max(0,S0.y+dy),H-S0.h)}
+  else{if(d.h.includes('w')){x=Math.min(Math.max(0,S0.x+dx),S0.x+S0.w-M);w=S0.x+S0.w-x}
+   if(d.h.includes('e'))w=Math.min(Math.max(M,S0.w+dx),W-S0.x);
+   if(d.h.includes('n')){y=Math.min(Math.max(0,S0.y+dy),S0.y+S0.h-M);h=S0.y+S0.h-y}
+   if(d.h.includes('s'))h=Math.min(Math.max(M,S0.h+dy),H-S0.y)}
+  CR.sel={x,y,w,h};cropPaint();e.preventDefault()});
+ const end=()=>{d=null};s.addEventListener('pointerup',end);s.addEventListener('pointercancel',end)}
+function cropPage(dir){const r=CR&&S.records[CR.i];if(!r)return;const n=r.imgs.length;CR.idx=(CR.idx+dir+n)%n;cropLoad()}
+function cropClose(){const o=$('#cropmod');if(o)o.remove();CR=null}
+async function cropApply(){if(!CR||!CR.im||!CR.sel)return;const r=S.records[CR.i];if(!r)return;const{im,sel,W,H}=CR,i=CR.i,idx=CR.idx;
+ if(sel.w>=W-1&&sel.h>=H-1){cropClose();return}
+ const k=im.naturalWidth/W,sx=Math.round(sel.x*k),sy=Math.round(sel.y*k),sw=Math.max(1,Math.round(sel.w*k)),sh=Math.max(1,Math.round(sel.h*k)),sc=Math.min(1,1300/sw),
+  c=document.createElement('canvas');c.width=Math.max(1,Math.round(sw*sc));c.height=Math.max(1,Math.round(sh*sc));const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);g.imageSmoothingQuality='high';g.drawImage(im,sx,sy,sw,sh,0,0,c.width,c.height);
+ const out={u:c.toDataURL('image/jpeg',.8),w:c.width,h:c.height},old=r.imgs[idx];r.imgs[idx]=out;store();cropClose();renderRecs();openRec(i);
+ snack('Cropped',()=>{r.imgs[idx]=old;store();renderRecs();if($('#recmodal')){const q=S.records.indexOf(r);if(q>=0)openRec(q)}})}
+(function(){const st=document.createElement('style');st.textContent='.cmo{position:fixed;inset:0;z-index:10000;background:#000;display:flex;flex-direction:column;padding:max(10px,env(safe-area-inset-top)) 12px max(10px,env(safe-area-inset-bottom))}.cmh{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0 10px}.cmh span{font-size:13px;color:var(--mut)}.cmw{flex:1;display:flex;align-items:center;justify-content:center;min-height:0}.cmb{position:relative;padding:18px;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;box-sizing:content-box}.cmb img{display:block;pointer-events:none}.cms{position:absolute;border:2px solid #fff;box-sizing:border-box;box-shadow:0 0 0 9999px rgba(0,0,0,.6);touch-action:none;cursor:move}.cms i{position:absolute;width:40px;height:40px;margin:-20px 0 0 -20px;touch-action:none}.cms i::after{content:"";position:absolute;left:50%;top:50%;width:14px;height:14px;margin:-7px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.4)}.cms i[data-h=nw]{left:0;top:0}.cms i[data-h=n]{left:50%;top:0}.cms i[data-h=ne]{left:100%;top:0}.cms i[data-h=e]{left:100%;top:50%}.cms i[data-h=se]{left:100%;top:100%}.cms i[data-h=s]{left:50%;top:100%}.cms i[data-h=sw]{left:0;top:100%}.cms i[data-h=w]{left:0;top:50%}.cmf{display:flex;gap:10px;padding:10px 0}.cmf button{flex:1}';document.head.appendChild(st)})();
