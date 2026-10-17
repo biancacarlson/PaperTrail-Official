@@ -362,13 +362,14 @@ function grpRows(list,row){const dc={},m=new Map();
  return keys.map(k=>{const rs=m.get(k).slice();if(k!=='none')rs.sort((a,b)=>desc?b.t-a.t:a.t-b.t);const sum=+rs.reduce((t,x)=>t+((k==='none'?recAmt(x.e[0]):wkAmt(x.e[0],k))||0),0).toFixed(2);return '<div class="sl" data-wt="'+M(sum)+'" data-wl="'+wkLbl(k)+'" data-wn="'+pl(rs.length,'invoice')+'">'+rs.map(x=>row(x.e,k==='none'?null:k,x.cont)).join('')+'</div>'}).join('')}
 function wkLbl(k){if(k==='none')return'No date';const a=new Date(k),b=new Date(k);b.setDate(b.getDate()+6);const f=d=>d.toLocaleString('en-US',{month:'short',day:'numeric'});return 'Week of '+f(a)+' \u2013 '+(a.getMonth()==b.getMonth()?b.getDate():f(b))}
 function totTog(b){const p=b.parentNode,o=!p.classList.contains('open');S.sv.tot=o;p.classList.toggle('open',o);b.setAttribute('aria-expanded',o?'true':'false')}
+function sortCtl(x){const cur=sortFor(x),L={dnew:'Newest',dold:'Oldest',chi:'High\u2013low',clo:'Low\u2013high',loc:'Location',cli:'Client'};return '<label class="svsb" aria-label="Sort"><span>'+(L[cur]||'Sort')+'</span><i aria-hidden="true"></i><select id="svsort" aria-label="Sort by" onchange="svSort(this.value)">'+(x?SORTS:SORTS_W).map(([v,l])=>'<option value="'+v+'"'+(cur==v?' selected':'')+'>'+l+'</option>').join('')+'</select></label>'}
 function svBody(){
  const x=S.sv.sec=='x',grp=!x&&/^d/.test(sortFor(x)),q=svSearching(),list=svList(),miss=list.filter(([r])=>!(r.imgs&&r.imgs.length)).length,tot=+list.reduce((s,[r])=>s+(recAmt(r)||0),0).toFixed(2),T=totals(),trow=(l,v)=>`<div class="srow"><div class="sm">${l}</div><b>${M(v)}</b></div>`,
  row=([r,i],wk,cont)=>{const pur=r.mode=='purchase',nm=esc((pur?niceMerch(r.merchant):r.client)||(pur?'Receipt':'Work invoice')),split=!pur&&wk!=null&&new Set(workDays(r).map(x=>+wkStart(x))).size>1,first=split&&Math.min(...workDays(r).map(x=>+wkStart(x)))===wk,sub=pur?[r.date,r.category].filter(Boolean).map(esc).join(' · '):dayPills(r,wk);
   return `<div class="srow tap" role="button" tabindex="0" onclick="openRec(${i})" onkeydown="if(event.key=='Enter')openRec(${i})"><div class="sm"><div class="s1">${nm}</div>${sub?`<div class="s2">${sub}</div>`:''}${r.imgs&&r.imgs.length?'':`<div class="s3">${pur?'No receipt':'No invoice'}</div>`}</div><b>${M(!pur&&wk!=null?wkAmt(r,wk):recAmt(r))}</b></div>`};
  let lbl;if(q)lbl=list.length+' match'+(list.length==1?'':'es')+(x&&S.sv.cat!='All'?' in '+S.sv.cat:'');else lbl=x&&S.sv.cat!='All'?list.length+' in '+S.sv.cat:list.length+' '+(x?'expense':'work invoice')+(list.length==1?'':'s');
  let none='';if(!list.length){if(q){const toks=svTok(S.sv.q),o=S.records.filter(r=>(r.mode=='purchase')!=x&&recMatch(r,toks)).length;none='<div class="empty2">No matches for “'+esc(S.sv.q.trim())+'”.'+(x&&S.sv.cat!='All'?'<br>Try the All category.':'')+(o?'<br><button onclick="svOther()" style="margin-top:10px">Show '+o+' in '+(x?'Work invoices':'Expenses')+'</button>':'')+'</div>'}else none='<div class="empty2">'+(x?'No expenses saved yet.':'No work invoices saved yet.')+'</div>'}
- return (list.length?'<div class="svsum"><span>'+lbl+(miss?'<em class="invm2"> \u00b7 '+miss+' without '+(x?'a receipt':'an invoice')+'</em>':'')+'</span><b>'+M(tot)+'</b></div>'+(grp?grpRows(list,row):'<div class="sl">'+list.map(row).join('')+'</div>'):none)
+ return (list.length?'<div class="svsum"><span>'+lbl+'</span><b>'+M(tot)+'</b></div>'+(miss?'<div class="invm">'+miss+' of '+list.length+' without '+(x?'a receipt':'an invoice')+'</div>':'')+(grp?grpRows(list,row):'<div class="sl">'+list.map(row).join('')+'</div>'):none)
  +(x&&T.n&&S.sv.cat=='All'&&!q?`<div class="sl tgl${S.sv.tot?' open':''}"><button type="button" class="tgh" aria-expanded="${S.sv.tot?'true':'false'}" onclick="totTog(this)"><span class="tgt">Expense totals</span><span class="tgv">${M(T.all)}</span><i class="tgc" aria-hidden="true"></i></button><div class="tgb"><div class="tgi">${T.months.map(([l,v])=>trow(l,v)).join('')}${T.years.length>1?T.years.map(([l,v])=>trow(l+' total',v)).join(''):''}${T.cats.map(([l,v])=>trow(l,v)).join('')}</div></div></div>`:'')
  +(list.length?'<div class="svact"><button class="pri" onclick="svCopy()">Copy '+(list.length==1?'record':list.length+' records')+'</button><button onclick="csvOpen()">Export CSV\u2026</button></div>':'')
  }
@@ -379,9 +380,9 @@ function renderRecs(){persist();try{dupWarn()}catch(e){}const nb=$('#m3');if(nb)
  const cats=[...CATS.filter(c=>cnt[c]),...Object.keys(cnt).filter(c=>!CATS.includes(c)&&c!='Uncategorized'),...(cnt.Uncategorized?['Uncategorized']:[])];
  if(S.sv.cat!='All'&&!cnt[S.sv.cat])S.sv.cat='All';
  el.innerHTML='<div class="sv">'+svSeg()
- +'<div class="svs"><input id="svq" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Search merchant, client or receipt #" aria-label="Search saved records" value="'+esc(S.sv.q)+'" oninput="svFind(this.value)"><button id="svclr" type="button" onclick="svClear()" aria-label="Clear search" style="'+(S.sv.q?'':'display:none')+'">✕</button></div>'
+ +'<div class="svq"><div class="svs"><input id="svq" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Merchant, client or receipt #" aria-label="Search saved records" value="'+esc(S.sv.q)+'" oninput="svFind(this.value)"><button id="svclr" type="button" onclick="svClear()" aria-label="Clear search" style="'+(S.sv.q?'':'display:none')+'">✕</button></div>'+sortCtl(x)+'</div>'
  +(x&&cats.length>1?'<div class="chips"><button class="'+(S.sv.cat=='All'?'on':'')+'" onclick="svCat(\'All\')">All</button>'+cats.map(c=>'<button class="'+(S.sv.cat==c?'on':'')+'" onclick="svCat(\''+c+'\')">'+c+'</button>').join('')+'</div>':'')
- +'<div class="srt"><label for="svsort">Sort</label><select id="svsort" onchange="svSort(this.value)">'+(x?SORTS:SORTS_W).map(([v,l])=>'<option value="'+v+'"'+(sortFor(x)==v?' selected':'')+'>'+l+'</option>').join('')+'</select></div>'
+ 
  +'<div id="svbody" class="sv">'+svBody()+'</div></div>'}
 
 function dl(f){const r=S.rec,o=compute(r);let d,n='record.'+f;if(f=='json')d=JSON.stringify({...r,calculated:o},null,1);else{const rows=r.mode=='purchase'?[['Item','Qty','Unit','Total'],...r.items.filter(i=>!i.off).map(i=>[i.n,i.q,i.p,i.t]),['Subtotal','','',o.sub],...(o.disc?[['Discount','','',-o.disc]]:[]),['Tax','','',N(r.tax)==null?'':o.tax],['Total','','',o.total]]:[['Field','Value'],...text(r).filter(l=>l.includes(': ')).map(l=>l.split(/: (.*)/s).slice(0,2))];d=rows.map(x=>x.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(',')).join('\n')}
@@ -1465,8 +1466,8 @@ window.csvGo=async function(){
    const PT_VER='v200'
    const PT_VER='vv200'
    ---------- */
-const PT_BUILD=236;
-const PT_LABEL='v35';
+const PT_BUILD=237;
+const PT_LABEL='v36';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
@@ -1580,10 +1581,15 @@ function deskewPage(c,ws){try{const W=c.width,H=c.height,t=skewOf(ws,W);if(t==nu
  '.tgb{display:grid;grid-template-rows:0fr;visibility:hidden;transition:grid-template-rows .3s cubic-bezier(.32,.72,0,1),visibility 0s .3s}',
  '.tgl.open .tgb{grid-template-rows:1fr;visibility:visible;transition:grid-template-rows .3s cubic-bezier(.32,.72,0,1),visibility 0s}',
  '.tgi{min-height:0;overflow:hidden}',
- '.sv .tgi .srow{padding:9px 0}.tgi .srow:first-child{border-top:1px solid var(--hair,var(--ln))}',
+ '.tgi .srow{padding:10px 0}.tgi .srow:first-child{border-top:1px solid var(--hair,var(--ln))}',
  '.onsaved .head{margin-bottom:6px;min-height:0}.onsaved .head h1:empty{display:none}',
- '#savedview .sv,#savedview .sv.sv{gap:8px}#savedview .sv .srow{padding:11px 0}#savedview .svsum{margin:2px 0 0!important}',
- '.invm2{font-style:normal;font-size:12px;font-weight:400;color:var(--amb)}',
+ '#savedview .seg{padding:3px}#savedview .seg button{padding:6px 4px;font-size:13.5px}',
+ '.svq{display:flex;gap:8px;align-items:stretch}.svq .svs{flex:1;min-width:0}.svq .svs input{margin:0;padding-top:9px;padding-bottom:9px}',
+ '.svsb{position:relative;flex:0 0 auto;display:flex;align-items:center;gap:5px;margin:0;padding:0 12px;border:1px solid var(--hair,var(--ln));border-radius:12px;background:var(--card);color:var(--fg);font:600 13px -apple-system,system-ui,sans-serif;letter-spacing:0;text-transform:none;white-space:nowrap}',
+ '.svsb i{width:6px;height:6px;border:solid var(--mut);border-width:0 2px 2px 0;transform:rotate(45deg) translate(-1px,-1px)}',
+ '.svsb select{position:absolute;inset:0;width:100%;height:100%;opacity:0;font-size:16px;margin:0;padding:0;border:0}',
+ '.chips{flex-wrap:nowrap!important;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;margin:0 -2px;padding:0 2px}.chips::-webkit-scrollbar{display:none}.chips button{flex:0 0 auto;padding:4px 11px!important}',
+ '.svact button{padding:9px 10px;min-height:0;font-size:14px}',
  '.svact{display:flex;gap:8px}.svact button{flex:1;width:auto;min-width:0}',
  '@media (prefers-reduced-motion:reduce){.sl[data-wt],.wtbd,.wtpop,.tgb,.tgc{transition:none!important}}'
  ].join('');document.head.appendChild(st)})();
