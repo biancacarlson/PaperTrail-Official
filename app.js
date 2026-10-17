@@ -962,7 +962,7 @@ window.installGuide=function(open){
  +'<li style="'+li+'">Choose <b>Add to Home Screen</b>. If it is not listed, tap <b>View More</b>.</li>'
  +'<li style="'+li+'">Make sure <b>Open as Web App</b> is on, then tap <b>Add</b>.</li>'
  +'<li style="'+li+'">Open PaperTrail from the new Home Screen icon and create your account there.</li></ol>'
- +'<p style="margin:10px 0 0"><b>Moving existing invoices?</b> In Safari, open Settings and tap <b>Download backup</b>. In the Home Screen app, tap <b>Restore from a backup file</b> on the sign-in screen.</p>'
+ +'<p style="margin:10px 0 0"><b>Moving existing invoices?</b> In Safari, open the <b>Data</b> menu and tap <b>Download backup</b>. In the Home Screen app, tap <b>Restore from a backup file</b> on the sign-in screen.</p>'
  +'<p style="margin:10px 0 0;font-weight:600">Save your recovery code. Your records are encrypted with your password, so the recovery code is your only way back in if you forget it.</p>'
  +'</div></details>';
 };
