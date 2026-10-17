@@ -203,13 +203,13 @@ function rows(r){if(r.mode=='summary')return sumRows(r);const o=compute(r),G=[],
   const d=g('det');r.items.filter(x=>!x.off).forEach(x=>d((String(x.n||'Item').replace(/\s*(\.{2,}|…)\s*$/,'').trim()),M(x.t)));
   const t=g('tot');t('Subtotal',M(o.sub));if(o.ship)t('Shipping',M(o.ship));if(o.disc)t('Discount','-'+M(o.disc));if(N(r.tax)!=null)t('Tax',M(o.tax));t('Total',M(o.total));
   return{t:'EXPENSE SUMMARY',G:G.filter(x=>x.rows.length)}}
- const i=g('info');i('Date',r.jobDate);i('Employer',r.employer);i('Client',r.client);i('Location',r.location);i('Invoice #',r.invoice);
- const hg=g('det'),fh=v=>v==null?null:(+(+v).toFixed(2))+' h';hg('Regular Hours',fh(N(r.hours)));hg('Overtime Hours',fh(N(r.overtime)));hg('Total Hours',fh(o.tot));
+ const i=g('info');i('Date',r.jobDate);i('Employer',r.employer);i('Client',r.client);
+ const fh=v=>v==null?null:(+(+v).toFixed(2))+' h';i('Total Hours',fh(o.tot));
  {const sg=g('det'),sh=(r.shifts||[]).filter(x=>x&&(N(x.hours)!=null||(x.start&&x.end))),days=[];sh.forEach(x=>{const k=shDate(x.date),y=days.find(d=>d.k==k);y?y.a.push(x):days.push({k,a:[x]})});
   days.forEach(d=>{d.a.forEach((x,j)=>{const tm=x.start&&x.end?t12(x.start)+' \u2013 '+t12(x.end):'',hr=N(x.hours)!=null?fh(N(x.hours)):'';sg([d.k||'Shift',tm].filter(Boolean).join(' \u00b7 '),hr)});
-   if(d.a.length>1)sg('Split shift total',fh(+d.a.reduce((s,x)=>s+(N(x.hours)||0),0).toFixed(2)))})}
- const d=g('det');d('Round-Trip Distance',o.rt!=null?o.rt.toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:1})+' mi':null);d('IRS Rate',o.rate!=null&&o.rt!=null?'$'+o.rate+'/mi':null);
- const t=g('tot');t('Amount Paid',fm(N(r.amount)));t('Mileage Deduction',fm(o.wear));
+   })}
+ const d=g('det');d('Round-Trip Distance',o.rt!=null?o.rt.toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:1})+' mi':null);d('Mileage Deduction',fm(o.wear));
+ const t=g('tot');t('Amount Paid',fm(N(r.amount)));
  return{t:'INVOICE SUMMARY',G:G.filter(x=>x.rows.length)}}
 /* plain text (print + fallback) */
 function text(r){const{t,G}=rows(r),out=['~ '+t+' ~'];G.forEach(x=>{out.push('');x.rows.forEach(([l,v])=>out.push(l+': '+v))});return out}
@@ -361,12 +361,12 @@ function grpRows(list,row){const dc={},m=new Map();
  const pl=(n,w)=>n+' '+w+(n==1?'':'s');
  return keys.map(k=>{const rs=m.get(k).slice();if(k!=='none')rs.sort((a,b)=>desc?b.t-a.t:a.t-b.t);const sum=+rs.reduce((t,x)=>t+((k==='none'?recAmt(x.e[0]):wkAmt(x.e[0],k))||0),0).toFixed(2);return '<div class="wkh"><span>'+wkTitle(k)+'</span><span>'+M(sum)+'</span></div><div class="sl">'+rs.map(x=>row(x.e,k==='none'?null:k,x.cont)).join('')+'</div>'}).join('')}
 function svBody(){
- const x=S.sv.sec=='x',grp=!x&&/^d/.test(sortFor(x)),q=svSearching(),list=svList(),tot=+list.reduce((s,[r])=>s+(recAmt(r)||0),0).toFixed(2),T=totals(),trow=(l,v)=>`<div class="srow"><div class="sm">${l}</div><b>${M(v)}</b></div>`,
+ const x=S.sv.sec=='x',grp=!x&&/^d/.test(sortFor(x)),q=svSearching(),list=svList(),miss=list.filter(([r])=>!(r.imgs&&r.imgs.length)).length,tot=+list.reduce((s,[r])=>s+(recAmt(r)||0),0).toFixed(2),T=totals(),trow=(l,v)=>`<div class="srow"><div class="sm">${l}</div><b>${M(v)}</b></div>`,
  row=([r,i],wk,cont)=>{const pur=r.mode=='purchase',nm=esc((pur?niceMerch(r.merchant):r.client)||(pur?'Receipt':'Work invoice')),split=!pur&&wk!=null&&new Set(workDays(r).map(x=>+wkStart(x))).size>1,first=split&&Math.min(...workDays(r).map(x=>+wkStart(x)))===wk,sub=pur?[r.date,r.category].filter(Boolean).map(esc).join(' · '):dayPills(r,wk);
-  return `<div class="srow tap" role="button" tabindex="0" onclick="openRec(${i})" onkeydown="if(event.key=='Enter')openRec(${i})"><div class="sm"><div class="s1">${nm}</div>${sub?`<div class="s2">${sub}</div>`:''}</div><b>${M(!pur&&wk!=null?wkAmt(r,wk):recAmt(r))}</b></div>`};
+  return `<div class="srow tap" role="button" tabindex="0" onclick="openRec(${i})" onkeydown="if(event.key=='Enter')openRec(${i})"><div class="sm"><div class="s1">${nm}</div>${sub?`<div class="s2">${sub}</div>`:''}${r.imgs&&r.imgs.length?'':`<div class="s3">${pur?'No receipt attached':'No invoice attached'}</div>`}</div><b>${M(!pur&&wk!=null?wkAmt(r,wk):recAmt(r))}</b></div>`};
  let lbl;if(q)lbl=list.length+' match'+(list.length==1?'':'es')+(x&&S.sv.cat!='All'?' in '+S.sv.cat:'');else lbl=x&&S.sv.cat!='All'?list.length+' in '+S.sv.cat:list.length+' '+(x?'expense':'work invoice')+(list.length==1?'':'s');
  let none='';if(!list.length){if(q){const toks=svTok(S.sv.q),o=S.records.filter(r=>(r.mode=='purchase')!=x&&recMatch(r,toks)).length;none='<div class="empty2">No matches for “'+esc(S.sv.q.trim())+'”.'+(x&&S.sv.cat!='All'?'<br>Try the All category.':'')+(o?'<br><button onclick="svOther()" style="margin-top:10px">Show '+o+' in '+(x?'Work invoices':'Expenses')+'</button>':'')+'</div>'}else none='<div class="empty2">'+(x?'No expenses saved yet.':'No work invoices saved yet.')+'</div>'}
- return (list.length?'<div class="svsum"><span>'+lbl+'</span><b>'+M(tot)+'</b></div>'+(grp?grpRows(list,row):'<div class="sl">'+list.map(row).join('')+'</div>'):none)
+ return (list.length?'<div class="svsum"><span>'+lbl+'</span><b>'+M(tot)+'</b></div>'+(miss?'<div class="invm">\u26A0 '+miss+' of '+list.length+' missing '+(x?'a receipt':'an invoice')+'</div>':'<div class="invm ok">\u2713 '+(x?'Every receipt is attached':'Every invoice is attached')+'</div>')+(grp?grpRows(list,row):'<div class="sl">'+list.map(row).join('')+'</div>'):none)
  +(x&&T.n&&S.sv.cat=='All'&&!q?`<div class="sl"><h4>Expense totals</h4>${T.months.map(([l,v])=>trow(l,v)).join('')}${T.years.length>1?T.years.map(([l,v])=>trow(l+' total',v)).join(''):''}${T.cats.map(([l,v])=>trow(l,v)).join('')}${trow('Total expenses',T.all)}</div>`:'')
  +(list.length?'<button class="pri" onclick="svCopy()">Copy '+(list.length==1?'this record':'these '+list.length+' records')+'</button>':'')
  +(list.length?'<button onclick="csvOpen()">Export CSV…</button>':'')
@@ -464,6 +464,7 @@ async function readImg(f,opts){opts=opts||{};const src=typeof f=='function'?awai
  try{const bn=await barcodeNo(c);if(bn){best.t=best.t.replace(/\s+$/,'')+'\n'+bn.text;
    best.w=best.w.filter(w=>{const m=w.bbox;if(!m)return true;const cx=(m.x0+m.x1)/2,cy=(m.y0+m.y1)/2;return !(cx>=bn.box.x0&&cx<=bn.box.x1&&cy>=bn.box.y0&&cy<=bn.box.y1)});
    best.w.push({text:bn.text,confidence:bn.ok?90:50,bbox:{x0:bn.box.x0,y0:bn.box.y0,x1:bn.box.x1,y1:bn.box.y1}})}}catch(e){}
+ {const dk=deskewPage(c,best.w);if(dk)return{c:dk.c,text:best.t,words:dk.words,conf:best.c,alts,url:dk.c.toDataURL('image/jpeg',.85)}}
  return{c,text:best.t,words:best.w,conf:best.c,alts,url:c.toDataURL('image/jpeg',.85)}}
 /* ---------- v88: clean photo, banded read, barcode number ---------- */
 function cleanCanvas(c,z,soft){const w=Math.round(c.width*z),h=Math.round(c.height*z),o=document.createElement('canvas');o.width=w;o.height=h;const x=o.getContext('2d');x.imageSmoothingQuality='high';x.drawImage(c,0,0,w,h);
@@ -739,9 +740,15 @@ function syncRedactions(quiet){const r=S.rec;if(!r||r.mode!='purchase'||!r.items
  if(a.length||b.length){render();if(!quiet)snack(a.length?'Left out of the total: '+a.join(', '):'Back in the total: '+b.join(', '))}}
 function bandsFor(it){const O=[];S.rec.items.forEach(x=>[x.pos,...(x.alts||[])].filter(Boolean).forEach(p=>O.push({x,p})));const out=[],pad=.011;
  O.filter(o=>o.x===it).forEach(o=>{const pi=S.pages.findIndex(p=>p.id==o.p.pid),pg=S.pages[pi];if(!pg)return;
-  const same=O.filter(q=>q.p.pid==o.p.pid).sort((a,b)=>a.p.y0-b.p.y0),k=same.indexOf(o),top=Math.max(0,o.p.y0-pad),last=k==same.length-1;let bot;
-  if(!last)bot=same[k+1].p.y0-pad-.004;
-  else{const hs=same.slice(1).map((q,j)=>q.p.y0-same[j].p.y0).sort((a,b)=>a-b),med=hs.length?hs[hs.length>>1]:null,lim=totalsTop(pg,o.p.y1);bot=Math.min(lim,med?o.p.y0+med-pad-.004:o.p.y1+.06,1)}
+  const same=O.filter(q=>q.p.pid==o.p.pid).sort((a,b)=>a.p.y0-b.p.y0),k=same.indexOf(o),last=k==same.length-1,
+   hs=same.slice(1).map((q,j)=>q.p.y0-same[j].p.y0).sort((a,b)=>a-b),med=hs.length?hs[hs.length>>1]:null,
+   /* tightly packed rows (a paper receipt photo) get bars sized to the text line, not to a fixed margin */
+   dense=med!=null&&med<.045&&same.length>=3,hh=Math.max(.004,o.p.y1-o.p.y0),pd=dense?Math.min(pad,hh*.35):pad;
+  let top=Math.max(0,o.p.y0-pd),bot;
+  if(dense&&k>0)top=Math.max(0,o.p.y0-Math.min(pd,Math.max(0,(o.p.y0-same[k-1].p.y1)/2)));
+  if(dense){if(!last)bot=same[k+1].p.y0-Math.min(pd,Math.max(0,(same[k+1].p.y0-o.p.y1)/2));else bot=Math.min(totalsTop(pg,o.p.y1),o.p.y1+pd,1)}
+  else if(!last)bot=same[k+1].p.y0-pad-.004;
+  else{const lim=totalsTop(pg,o.p.y1);bot=Math.min(lim,med?o.p.y0+med-pad-.004:o.p.y1+.06,1)}
   if(bot-top>.01)out.push({pid:pg.id,y:top,h:bot-top});
   if(last){/* same item continues at the top of the next screenshot (overlapping scroll) */
    const np=S.pages[pi+1];if(np){const L=wLines(pg.words),sl=L.find(l=>l.y0/pg.h>=o.p.y1&&l.y0/pg.h<bot&&/^by\s+\S+/i.test(l.t)),sn=sl?nz(sl.t).replace(/^by\s+/,''):'';
@@ -888,7 +895,7 @@ function dupWarn(){const el=$('#dupwarn');if(!el)return;const r=S.rec,m=r&&r.loa
 function openRec(i){const r=S.records[i];if(!r)return;closeRec();const{t,G}=rows(r),
  h=G.map(g=>({...g,rows:g.rows.filter(x=>x[0]!=='Regular Hours')})).map(g=>'<div class="rg">'+g.rows.map(([l,v,hl])=>`<div class="rr${hl?' hl':''}${g.k=='tot'?' tt':''}"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join('')+'</div>').join(''),
  o=document.createElement('div');o.id='recmodal';o.className='rmo';o.onclick=e=>{if(e.target===o)closeRec()};
- o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${h}</div><div class="rmf"><button onclick="dlRec(${i})">Download PDF</button><button onclick="viewRec(${i})">View PDF</button>${r.imgs&&r.imgs.length?`<button onclick="attachRec(${i})">Replace invoice</button><button onclick="rmImg(${i})">Remove invoice</button>`:`<button onclick="attachRec(${i})">Attach invoice</button>`}<button onclick="editRec(${i})">Edit</button><button onclick="delOpen(${i})" style="color:#b3261e">Delete</button></div></div>`;
+ o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb"><div class="invm${r.imgs&&r.imgs.length?' ok':''}">${r.imgs&&r.imgs.length?'\u2713 '+(r.mode=='purchase'?'Receipt attached':'Invoice attached'):'\u26A0 '+(r.mode=='purchase'?'No receipt attached':'No invoice attached')}</div>${h}</div><div class="rmf"><button onclick="dlRec(${i})">Download PDF</button><button onclick="viewRec(${i})">View PDF</button>${r.imgs&&r.imgs.length?`<button onclick="attachRec(${i})">Replace invoice</button><button onclick="rmImg(${i})">Remove invoice</button>`:`<button onclick="attachRec(${i})">Attach invoice</button>`}<button onclick="editRec(${i})">Edit</button><button onclick="delOpen(${i})" style="color:#b3261e">Delete</button></div></div>`;
  document.body.appendChild(o);document.body.style.overflow='hidden'}
 function delOpen(i){if(!S.records[i])return;if(!confirm('Delete this saved record? This cannot be undone.'))return;S.records.splice(i,1);closeRec();renderRecs();store()}
 function closeRec(){const o=$('#recmodal');if(o)o.remove();document.body.style.overflow=''}
@@ -942,7 +949,7 @@ document.addEventListener('keydown',e=>{if(e.key=='Escape')closeRec()});
 const standalone=()=>{try{return navigator.standalone===true||matchMedia('(display-mode: standalone)').matches}catch(e){return false}};
 const li='margin:0 0 10px;padding-left:2px';
 window.installGuide=function(open){
- if(standalone())return '<div class="hint" style="font-size:14px;margin:12px 0;color:var(--gd)">&#10003; You are using the Home Screen app. Your saved records are protected from Safari clearing.</div>';
+ if(standalone())return '';
  return '<details'+(open?' open':'')+' style="margin:14px 0;background:var(--usr);border:1px solid #ecd3a8;border-radius:12px;padding:12px 14px"><summary style="font-weight:700;color:var(--fg);font-size:15px">Before you begin: add PaperTrail to your Home Screen</summary>'
  +'<div style="font-size:14px;line-height:1.5;margin-top:10px;color:var(--fg)">'
  +'<p style="margin:0 0 10px">Safari may delete a website\'s saved data after about a week without use. Installing PaperTrail on your Home Screen helps keep your invoices safe.</p>'
@@ -1245,15 +1252,16 @@ function bkRefresh(){
   bar.children[2].onclick=()=>{if(S.uid)sl(SNK+S.uid,Date.now()+SNOOZE_DAYS*DAY);bkRefresh()};
   const rc=$('#rcbar');m.insertBefore(bar,rc?rc.nextSibling:m.firstChild);
  }
- const n=bkNeed();
+ const n=S.tab=='saved'?bkNeed():null;
  if(!n){bar.style.display='none';return}
  bar.querySelector('.bk1').textContent=n.kind=='never'?'No backup yet':'Last backup: '+ago(n.bk);
  bar.querySelector('.bk2').textContent=n.kind=='never'
-  ?'Your records live only on this phone. A lost phone or cleared Safari data would erase them.'
+  ?'Your records live only on this phone.'
   :'You have saved or changed records since then.';
  bar.style.display='flex';
 }
 window.bkRefresh=bkRefresh;
+{const _sw=showWork,_ss=showSaved;showWork=function(){const r=_sw.apply(this,arguments);try{bkRefresh()}catch(e){}return r};showSaved=function(){const r=_ss.apply(this,arguments);try{bkRefresh()}catch(e){}return r}}
 window.bkChanged=function(){if(window.__bkBusy||!S.uid)return;sl(CHK+S.uid,Date.now());bkRefresh()};
 window.bkMark=function(){if(!S.uid)return;sl(BKK+S.uid,Date.now());try{localStorage.removeItem(SNK+S.uid)}catch(e){}bkRefresh()};
 window.bkRestored=function(uid,ms){if(uid&&ms)sl(BKK+uid,ms)};
@@ -1456,8 +1464,8 @@ window.csvGo=async function(){
    const PT_VER='v200'
    const PT_VER='vv200'
    ---------- */
-const PT_BUILD=226;
-const PT_LABEL='v25';
+const PT_BUILD=227;
+const PT_LABEL='v26';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
@@ -1489,3 +1497,36 @@ const PT_LABEL='v25';
 +'.dp{font-size:12px;padding:2px 9px;margin-top:6px;font-weight:600;background:var(--ext);color:var(--gd)}'
 +'.srow .s2{color:var(--mut)}';
 document.head.appendChild(st)})();
+
+
+/* ---------- v26: straighten tilted receipt photos so black bars and highlights sit on the text lines ---------- */
+/* Returns the tilt in radians (positive = lines slope down to the right), from chains of neighbouring words, or null when the page is already straight enough. */
+function skewOf(ws,W){const a=(ws||[]).filter(w=>w.bbox&&String(w.text||'').trim().length>=2).map(w=>({x:(w.bbox.x0+w.bbox.x1)/2,y:(w.bbox.y0+w.bbox.y1)/2,h:w.bbox.y1-w.bbox.y0})).sort((p,q)=>p.x-q.x);
+ if(a.length<12)return null;const nx=new Array(a.length).fill(-1),hasP=new Array(a.length).fill(false);
+ for(let i=0;i<a.length;i++){let bj=-1,bd=1e9;for(let j=i+1;j<a.length;j++){const dx=a[j].x-a[i].x;if(dx>a[i].h*9)break;if(dx<=0||hasP[j])continue;const dy=Math.abs(a[j].y-a[i].y);if(dy>Math.max(a[i].h,a[j].h)*.7)continue;const d=dx+dy*3;if(d<bd){bd=d;bj=j}}if(bj>=0){nx[i]=bj;hasP[bj]=true}}
+ const sl=[];for(let i=0;i<a.length;i++){if(hasP[i])continue;const ch=[];for(let j=i;j>=0;j=nx[j])ch.push(a[j]);if(ch.length<4)continue;const span=ch[ch.length-1].x-ch[0].x;if(span<W*.22)continue;
+  const n=ch.length,mx=ch.reduce((t,q)=>t+q.x,0)/n,my=ch.reduce((t,q)=>t+q.y,0)/n;let num=0,den=0;ch.forEach(q=>{num+=(q.x-mx)*(q.y-my);den+=(q.x-mx)*(q.x-mx)});if(den>0)sl.push(num/den)}
+ if(sl.length<2)return null;sl.sort((p,q)=>p-q);const m=sl[sl.length>>1],t=Math.atan(m);return Math.abs(t)<.0055||Math.abs(t)>.14?null:t}
+function deskewPage(c,ws){try{const W=c.width,H=c.height,t=skewOf(ws,W);if(t==null)return null;
+ const o=document.createElement('canvas');o.width=W;o.height=H;const x=o.getContext('2d'),g=c.getContext('2d');let r=0,gg=0,b=0,n=0;
+ const smp=(px,py)=>{const d=g.getImageData(Math.min(W-1,Math.max(0,px)),Math.min(H-1,Math.max(0,py)),1,1).data;r+=d[0];gg+=d[1];b+=d[2];n++};
+ for(let i=0;i<=12;i++){smp(Math.round(W*i/12),0);smp(Math.round(W*i/12),H-1);smp(0,Math.round(H*i/12));smp(W-1,Math.round(H*i/12))}
+ x.fillStyle='rgb('+Math.round(r/n)+','+Math.round(gg/n)+','+Math.round(b/n)+')';x.fillRect(0,0,W,H);x.imageSmoothingQuality='high';x.translate(W/2,H/2);x.rotate(-t);x.drawImage(c,-W/2,-H/2);
+ const cs=Math.cos(t),sn=Math.sin(t),cx=W/2,cy=H/2;
+ const words=(ws||[]).map(w=>{if(!w.bbox)return w;const q=w.bbox,mx=(q.x0+q.x1)/2-cx,my=(q.y0+q.y1)/2-cy,px=mx*cs+my*sn+cx,py=-mx*sn+my*cs+cy,hw=(q.x1-q.x0)/2,hh=(q.y1-q.y0)/2,sh=Math.max(hh*.6,hh-hw*Math.abs(sn));return{...w,bbox:{x0:px-hw,x1:px+hw,y0:py-sh,y1:py+sh}}});
+ return{c:o,words}}catch(e){return null}}
+
+/* ---------- v26: every big action asks first and can be undone ---------- */
+(function(){
+ const pl=(n,w)=>n+' '+w+(n==1?'':'s');
+ delRec=function(i){const r=S.records[i];if(!r)return;if(!confirm('Are you sure you want to delete this saved record?'))return;S.records.splice(i,1);renderRecs();store();snack('Record deleted',()=>{S.records.splice(Math.min(i,S.records.length),0,r);renderRecs();store()})};
+ delOpen=function(i){const r=S.records[i];if(!r)return;if(!confirm('Are you sure you want to delete this saved record?'))return;S.records.splice(i,1);closeRec();renderRecs();store();snack('Record deleted',()=>{S.records.splice(Math.min(i,S.records.length),0,r);renderRecs();store()})};
+ delAllRecs=function(){const old=S.records;if(!old.length)return;if(!confirm('Are you sure you want to delete all '+pl(old.length,'saved record')+' from this phone?'))return;S.records=[];renderRecs();store();snack('All '+pl(old.length,'record')+' deleted',()=>{S.records=old;renderRecs();store()})};
+ const _nuke=nuke;nuke=async function(){const old=S.records,learn=S.learn;if(!confirm('Are you sure you want to delete every saved record from this phone and clear the screen? Your passcode stays.'))return;try{await idb('del')}catch(e){}S.noStore=false;wipe();st('Saved data deleted.');window.bkRefresh&&window.bkRefresh();
+  snack('All saved data deleted',async()=>{S.records=old;S.learn=learn;S.noStore=false;st('');try{await store()}catch(e){}renderRecs()})};
+ const _ca=clearAll;clearAll=function(){if(S.rec&&(S.rec.loaded||S.pages.length)&&!confirm('Are you sure you want to clear this record from the screen?'))return;_ca()};
+ const _cm=clearMarks;clearMarks=function(){if(!S.pages.some(p=>p.marks.length))return;if(!confirm('Are you sure you want to remove every black bar and highlight on all pages?'))return;_cm()};
+ rmPage=function(i){if(!confirm('Are you sure you want to remove page '+(i+1)+' from the PDF?'))return;pushU();S.pages.splice(i,1);renderPages();snack('Page removed',undoMark)};
+ rmImg=function(i){const r=S.records[i];if(!r||!r.imgs)return;if(!confirm('Are you sure you want to remove the attached '+(r.mode=='purchase'?'receipt':'invoice')+' from this saved item? Its details stay.'))return;const old=r.imgs;delete r.imgs;store();renderRecs();openRec(i);snack((r.mode=='purchase'?'Receipt':'Invoice')+' removed',()=>{r.imgs=old;store();renderRecs();openRec(S.records.indexOf(r))})};
+ fixAll=function(){if(!confirm('Are you sure you want to forget every remembered fix? Saved records are not changed.'))return;const old=S.learn;S.learn={m:{},mi:{}};store();learnUI();fixOpen();snack('Remembered fixes cleared',()=>{S.learn=old;store();learnUI();fixOpen()})};
+ const st2=document.createElement('style');st2.textContent='.s3{font-size:12px;font-weight:600;color:var(--amb);margin-top:3px}.invm{font-size:13px;font-weight:600;color:var(--amb);margin:6px 2px 10px}.invm.ok{color:var(--gd)}.rmb .invm{margin:0 0 10px}';document.head.appendChild(st2)})();
