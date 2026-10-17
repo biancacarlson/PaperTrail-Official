@@ -172,7 +172,7 @@ window.ptMenu=function(ev,key){
  let left=btn.classList.contains('lkhelp')?r.left+(r.width-w)/2:r.right-w;
  left=Math.max(12,Math.min(left,vw-w-12));
  menu.style.left=left+'px';menu.style.top=(r.bottom+6)+'px';
- const first=menu.querySelector('.mi');if(first&&ev.detail===0)first.focus();
+ 
 };
 document.addEventListener('pointerdown',e=>{if(menu&&!menu.contains(e.target)&&!(trig&&trig.contains(e.target)))closeMenu()},true);
 document.addEventListener('keydown',e=>{
@@ -182,8 +182,15 @@ document.addEventListener('keydown',e=>{
   if(!l.length)return;e.preventDefault();
   l[(i+(e.key==='ArrowDown'?1:-1)+l.length)%l.length].focus()}
 });
-addEventListener('resize',()=>closeMenu());
-addEventListener('scroll',()=>closeMenu(),true);
+/* phones fire scroll/resize when the keyboard moves (the sign-in screen focuses the email box), so keep the menu open and just re-place it */
+function place(){
+ if(!menu||!trig)return;
+ const r=trig.getBoundingClientRect(),w=menu.offsetWidth,vw=document.documentElement.clientWidth;
+ let left=trig.classList.contains('lkhelp')?r.left+(r.width-w)/2:r.right-w;
+ menu.style.left=Math.max(12,Math.min(left,vw-w-12))+'px';menu.style.top=(r.bottom+6)+'px';
+}
+addEventListener('resize',place);
+addEventListener('scroll',place,true);
 
 /* ---------- Saved tab: Copy + Export CSV become one quiet menu ---------- */
 if(typeof svBody==='function'){
