@@ -73,6 +73,17 @@ const css=`
  #savedview .sv{gap:8px}
  #savedview .seg button{white-space:nowrap;font-size:13px;padding-inline:2px}
 }
+
+/* footer disclaimer */
+#ptfoot{max-width:1180px;margin:0 auto;padding:8px 20px calc(28px + env(safe-area-inset-bottom,0px));text-align:center;color:var(--mut)}
+#ptfoot .fb{width:auto;background:transparent;border:0;padding:8px 10px;font-size:12.5px;font-weight:400;color:var(--mut);display:inline-flex;align-items:center;gap:6px}
+#ptfoot .fb:hover{color:var(--fg)}
+#ptfoot .fb i{width:5px;height:5px;border:solid currentColor;border-width:0 1.5px 1.5px 0;transform:rotate(45deg) translate(-1px,-1px);transition:transform .15s}
+#ptfoot .fb[aria-expanded=true] i{transform:rotate(-135deg) translate(-1px,-1px)}
+#ptfoot .fv{font-size:12px;opacity:.7;margin-left:6px}
+#ptfoot .fd{text-align:left;max-width:640px;margin:6px auto 0}
+#ptfoot .dt{max-height:none;overflow:visible}
+@media(max-width:900px){#ptfoot{padding-inline:14px}}
 /* work screen: keep sticky helpers clear of the bar */
 #app .src{top:76px}
 #addbar{top:64px}
@@ -138,7 +149,7 @@ const brand=side.querySelector('.brand'),nav=side.querySelector('.nav');
 if(brand)inner.appendChild(brand);
 if(nav)inner.appendChild(nav);
 const mts=document.createElement('div');mts.className='mts';
-[['data','Data'],['help','Help'],['acct','Account']].forEach(([k,l])=>{
+[['data','Data'],['acct','Account']].forEach(([k,l])=>{
  const b=document.createElement('button');b.type='button';b.className='mt';b.setAttribute('aria-haspopup','menu');b.setAttribute('aria-expanded','false');
  b.innerHTML=l+'<i aria-hidden="true"></i>';b.onclick=e=>window.ptMenu(e,k);mts.appendChild(b)});
 inner.appendChild(mts);bar.appendChild(inner);shell.insertBefore(bar,shell.firstChild);
@@ -181,16 +192,16 @@ function sheet(title,html){
 }
 function closeInfo(){const o=$('#ptinfo');if(o){o.remove();document.body.style.overflow=''}}
 window.ptCloseInfo=closeInfo;
-function disclaimer(){const d=side.querySelector('.disc .dt');sheet('Disclaimer','<div class="dt">'+(d?d.innerHTML:'')+'</div>')}
 function homeScreen(){const h=window.installGuide?window.installGuide(true):'';sheet('Add to Home Screen',h||'<p>PaperTrail is already running from your Home Screen.</p>')}
 const installable=()=>{try{return !!(window.installGuide&&window.installGuide(false))}catch(e){return false}};
 const MENUS={
  acct:()=>[
   {head:S.email||''},
-  {t:'Change password',f:()=>window.authChangePw()},
-  {t:'Change password hint',f:()=>window.authChangeHint()},
+  {t:'Update password',f:()=>window.authChangePw()},
+  {t:'Update password hint',f:()=>window.authChangeHint()},
   {t:'Create a new recovery code',f:()=>window.authMakeCode()},
   {idle:true},
+  ...(installable()?[{t:'Add to Home Screen',f:homeScreen}]:[]),
   {hr:1},
   {t:'Log out',f:()=>lockNow()}],
  data:()=>[
@@ -202,11 +213,6 @@ const MENUS={
   {t:'Remembered fixes',f:()=>fixOpen()},
   {hr:1},
   {t:'Delete all saved records',danger:1,f:()=>nuke()}],
- help:()=>[
-  ...(installable()?[{t:'Add to Home Screen',f:homeScreen}]:[]),
-  {t:'Disclaimer',f:disclaimer},
-  {hr:1},
-  {foot:'PaperTrail '+verText()}],
  exp:()=>{const n=svList().length;return[
   {t:n==1?'Copy record':'Copy '+n+' records',f:()=>svCopy()},
   {t:'Export CSV\u2026',f:()=>csvOpen()}]},
@@ -270,6 +276,21 @@ if(typeof svBody==='function'){
   let h=_sb.apply(this,arguments);
   h=h.replace(/<div class="svact">[\s\S]*?<\/div>/,'');
   return h};
+}
+
+
+/* ---------- footer: grey Disclaimer link that expands in place ---------- */
+{
+ const f=document.createElement('footer');f.id='ptfoot';
+ f.innerHTML='<button type="button" class="fb" aria-expanded="false" aria-controls="ptdisc">Disclaimer<i aria-hidden="true"></i></button><span class="fv"></span><div id="ptdisc" class="fd" hidden></div>';
+ shell.appendChild(f);
+ const fb=f.querySelector('.fb'),fd=f.querySelector('.fd');
+ fb.onclick=()=>{
+  const open=fb.getAttribute('aria-expanded')!=='true';
+  if(open&&!fd.innerHTML){const d=side.querySelector('.disc .dt');fd.innerHTML='<div class="dt">'+(d?d.innerHTML:'')+'</div>'}
+  fb.setAttribute('aria-expanded',open?'true':'false');fd.hidden=!open;
+  if(open)setTimeout(()=>fd.scrollIntoView({block:'nearest',behavior:'smooth'}),50)};
+ const v=$('#ver');if(v)f.querySelector('.fv').textContent=v.textContent;
 }
 
 /* ---------- sign-in screen ---------- */

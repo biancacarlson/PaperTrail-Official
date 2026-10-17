@@ -1070,8 +1070,8 @@ function extras(){
  if(d&&!$('#rcbtn')){
   const mk=(id,txt,fn)=>{const b=document.createElement('button');b.id=id;b.type='button';b.textContent=txt;b.onclick=fn;d.appendChild(b)};
   mk('rcbtn','Create a new recovery code',()=>window.authMakeCode());
-  mk('pwbtn','Change password',()=>window.authChangePw());
-  mk('hintbtn','Change password hint',()=>window.authChangeHint());
+  mk('pwbtn','Update password',()=>window.authChangePw());
+  mk('hintbtn','Update password hint',()=>window.authChangeHint());
   mk('bkbtn','Download backup',()=>window.authBackup());
   tidySettings(d);
  }
@@ -1094,12 +1094,12 @@ window.authChangePw=function(){
  if(S.noStore){alert('Your saved records could not be opened, so the password cannot be changed safely.');return}
  const old=document.getElementById('pwov');if(old)old.remove();
  const ov=document.createElement('div');ov.id='pwov';ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px';
- ov.innerHTML='<div style="background:var(--card,#fff);color:var(--fg,#111);border-radius:16px;padding:18px;width:100%;max-width:380px;box-shadow:0 10px 40px rgba(0,0,0,.3)"><h2 style="margin:0 0 10px">Change password</h2>'
+ ov.innerHTML='<div style="background:var(--card,#fff);color:var(--fg,#111);border-radius:16px;padding:18px;width:100%;max-width:380px;box-shadow:0 10px 40px rgba(0,0,0,.3)"><h2 style="margin:0 0 10px">Update password</h2>'
   +'<input id="cp0" type="password" autocomplete="current-password" placeholder="Current password">'
   +'<input id="cp1" type="password" autocomplete="new-password" placeholder="New password (8+ characters)">'
   +'<input id="cp2" type="password" autocomplete="new-password" placeholder="Confirm new password">'
   +'<div id="cpm" style="color:#b3261e;min-height:20px;font-size:14px;margin:6px 0"></div>'
-  +'<div style="display:flex;gap:8px"><button type="button" id="cpx">Cancel</button><button type="button" class="pri" id="cps">Change password</button></div></div>';
+  +'<div style="display:flex;gap:8px"><button type="button" id="cpx">Cancel</button><button type="button" class="pri" id="cps">Update password</button></div></div>';
  document.body.appendChild(ov);
  const g=i=>document.getElementById(i),m=t=>{g('cpm').textContent=t||''};
  g('cpx').onclick=()=>ov.remove();
