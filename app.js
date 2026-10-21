@@ -1,6 +1,6 @@
 'use strict';
 const LS=(k,d)=>{try{return localStorage.getItem(k)||d}catch(e){return d}};
-const $=s=>document.querySelector(s),S={start:'North Park, San Diego, CA 92104',mode:'freelance',rec:null,records:[],sel:[],words:[],idle:15,img:null,z:1,x:0,y:0,tab:'new',learn:{m:{},mi:{}},sv:{sec:'w',cat:'All',sort:'dnew',q:''}};
+const $=s=>document.querySelector(s),S={start:'North Park, San Diego, CA 92104',mode:'freelance',rec:null,records:[],sel:[],words:[],idle:15,img:null,z:1,x:0,y:0,tab:'new',learn:{m:{},mi:{}},sv:{sec:'w',cat:'All',st:'All',sort:'dnew',q:''}};
 const est=r=>Parser.net30(r.endDate||r.jobDate);
 const chk=()=>S.rec.location?true:(st('Enter the job location first.'),false);
 const IOS=/iPhone|iPad|iPod/.test(navigator.userAgent);
@@ -9,7 +9,11 @@ const N=v=>{const n=parseFloat(String(v).replace(/[$,]/g,''));return isNaN(n)?nu
 const PF={purchase:[['date','Date'],['merchant','Merchant'],['location','Location (city, state)'],['number','Receipt/Invoice #'],['tax','Tax'],['extSub','Subtotal $'],['extTotal','Total $']],
 freelance:[['employer','Employer'],['client','Client'],['jobDate','Job date'],['endDate','Event end date'],['location','Job location'],['roundTrip','Round-trip miles'],['hours','Total regular'],['overtime','Total overtime'],['amount','Amount $'],['invoice','Invoice #'],['notes','Notes']]};
 function setMode(m){showWork();S.mode=m;S.rec=newRec();S.pages=[];S.undo=[];S.redo=[];{const dw=$('#docwrap');if(dw)dw.style.display='none'}$('.head h1').textContent=m=='purchase'?'':'';$('#m1').className=m=='purchase'?'on':'';$('#m2').className=m=='freelance'?'on':'';render();renderPages()}
-const newRec=()=>({mode:S.mode,items:[],src:{},edited:{},loaded:false,doc:false,employer:S.mode=='freelance'?'AVLancer':''});
+const newRec=()=>({mode:S.mode,items:[],src:{},edited:{},loaded:false,doc:false,employer:S.mode=='freelance'?'AVLancer':'',status:S.mode=='freelance'?'open':undefined});
+/* Open = the amount may still change (gigs entered ahead of time). Closed = final. Records saved before this existed have no status and count as closed. */
+const stOf=r=>r&&r.status=='open'?'open':'closed';
+function setStatus(v){const r=S.rec;if(!r)return;r.status=v=='open'?'open':'closed';render()}
+function flipStatus(i){const r=S.records[i];if(!r||r.mode=='purchase')return;r.status=stOf(r)=='open'?'closed':'open';store();closeRec();renderRecs();toast(r.status=='open'?'Marked open':'Marked closed')}
 function manual(){dismissRestore();S.rec.loaded=true;render()}
 /* ---------- lock (passcode hash via PBKDF2; screen lock only) ---------- */
 const hex=b=>[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');
@@ -120,8 +124,8 @@ function render(){const r=S.rec;{const pl=$('#pick');if(pl)pl.textContent=S.mode
  autoCat();const fs=PF[r.mode],sel=$('#addto');sel.innerHTML=fs.map(f=>`<option value="${f[0]}">${f[1]}</option>`).join('')+(r.mode=='purchase'?'<option value="+item">New item</option>':'');
  const lab=(k,l)=>`<label for="f_${k}">${l}${r.edited[k]?' (edited)':''}${miss(k)?' (needs review)':''}${r.low&&r.low[k]&&!r.edited[k]?' - low confidence, check':''}</label>`,
  W=['location','notes','number','client','employer','category'],
- fld=k=>{if(k=='category')return `<div class="f w"><label for="f_category">Category${r.edited.category?' (edited)':''}</label><select id="f_category" onchange="setCat(this.value);render()"><option value="">Select…</option>${CATS.map(c=>`<option${r.category==c?' selected':''}>${c}</option>`).join('')}</select></div>`;const l=(fs.find(f=>f[0]==k)||[])[1];return `<div class="f${W.includes(k)?' w':''}">`+lab(k,l)+(k=='notes'?`<textarea id="f_${k}" class="${String(r[k]??'').trim()?'ext':''}" rows="3" oninput="ed('${k}',this.value)">${esc(r[k])}</textarea>`:(inp=>k=='roundTrip'?`<div class="row" style="margin:0">${inp}<button class="pri" style="flex:0 0 auto" onclick="render()">Recalculate</button></div>`:inp)(`<input autocomplete="off" id="f_${k}" class="${String(r[k]??'').trim()?'ext':''}${miss(k)?' warn':''}" value="${esc(r[k])}" oninput="ed('${k}',this.value)" onchange="fldDone('${k}')">`))+fixDiv(k)+(k=='roundTrip'?`<div class="srch"><a id="gs" class="btn" target="_blank" rel="noopener noreferrer" href="${esc(gurl(r))}" onclick="return chk()">Search round-trip distance</a></div>`:'')+'</div>'},
- G=r.mode=='purchase'?[['Receipt',['date','merchant','location','number','category']],['Amounts',['tax','extSub','extTotal']]]:[['',['employer','client','invoice']],['',['jobDate','endDate','location']],['Mileage',['roundTrip']],['Hours & pay',['hours','overtime','amount']],['__shifts',[]],['',['notes']]];
+ fld=k=>{if(k=='status'){const o=stOf(r)=='open';return `<div class="f w"><label>Invoice status</label><div class="seg stseg" role="group" aria-label="Invoice status"><button type="button" class="${o?'on':''}" aria-pressed="${o}" onclick="setStatus('open')">Open</button><button type="button" class="${o?'':'on'}" aria-pressed="${!o}" onclick="setStatus('closed')">Closed</button></div><div class="hint" style="margin-top:6px">${o?'Open: the amount may still change. It is left out of your income totals.':'Closed: the amount is final and counts in your income totals.'}</div></div>`}if(k=='category')return `<div class="f w"><label for="f_category">Category${r.edited.category?' (edited)':''}</label><select id="f_category" onchange="setCat(this.value);render()"><option value="">Select…</option>${CATS.map(c=>`<option${r.category==c?' selected':''}>${c}</option>`).join('')}</select></div>`;const l=(fs.find(f=>f[0]==k)||[])[1];return `<div class="f${W.includes(k)?' w':''}">`+lab(k,l)+(k=='notes'?`<textarea id="f_${k}" class="${String(r[k]??'').trim()?'ext':''}" rows="3" oninput="ed('${k}',this.value)">${esc(r[k])}</textarea>`:(inp=>k=='roundTrip'?`<div class="row" style="margin:0">${inp}<button class="pri" style="flex:0 0 auto" onclick="render()">Recalculate</button></div>`:inp)(`<input autocomplete="off" id="f_${k}" class="${String(r[k]??'').trim()?'ext':''}${miss(k)?' warn':''}" value="${esc(r[k])}" oninput="ed('${k}',this.value)" onchange="fldDone('${k}')">`))+fixDiv(k)+(k=='roundTrip'?`<div class="srch"><a id="gs" class="btn" target="_blank" rel="noopener noreferrer" href="${esc(gurl(r))}" onclick="return chk()">Search round-trip distance</a></div>`:'')+'</div>'},
+ G=r.mode=='purchase'?[['Receipt',['date','merchant','location','number','category']],['Amounts',['tax','extSub','extTotal']]]:[['',['employer','client','invoice']],['',['jobDate','endDate','location']],['Mileage',['roundTrip']],['Hours & pay',['hours','overtime','amount','status']],['__shifts',[]],['',['notes']]];
  let h=G.map(([t,ks])=>t=='__shifts'?shiftsHtml():`<section class="grp${t=='Amounts'?' amt':''}">${t?`<h3>${t}</h3>`:''}<div class="fg">${ks.map(fld).join('')}</div></section>`).join('');
  if(r.mode=='purchase')h+=itemsHtml();
  $('#form').className=r.mode;$('#form').innerHTML=h;$('#actions').style.display='block';calc();renderRecs();refreshActs()}
@@ -291,24 +295,26 @@ function sortRecs(a,how){if(how=='loc'||how=='cli')return a.slice().sort((p,q)=>
 const svTok=q=>String(q||'').toLowerCase().split(/\s+/).map(t=>t.replace(/^#+/,'')).filter(Boolean);
 function recHay(r){const pur=r.mode=='purchase',txt=[pur?r.merchant:r.client,pur?niceMerch(r.merchant):'',pur?r.number:r.invoice].map(v=>String(v||'').toLowerCase()).join(' ');return{txt,key:nk(txt)}}
 function recMatch(r,toks){if(!toks.length)return true;const h=recHay(r);return toks.every(t=>h.txt.includes(t)||(nk(t).length>0&&h.key.includes(nk(t))))}
-function svList(){const x=S.sv.sec=='x',toks=svTok(S.sv.q),all=S.records.map((r,i)=>[r,i]).filter(([r])=>(r.mode=='purchase')==x&&recMatch(r,toks));
+function svList(){const x=S.sv.sec=='x',toks=svTok(S.sv.q),all=S.records.map((r,i)=>[r,i]).filter(([r])=>(r.mode=='purchase')==x&&recMatch(r,toks)&&(x||!S.sv.st||S.sv.st=='All'||stOf(r)==S.sv.st));
  return sortRecs(x&&S.sv.cat!='All'?all.filter(([r])=>recCat(r)==S.sv.cat):all,sortFor(x))}
 function svSearching(){return svTok(S.sv.q).length>0}
 function svSec(v){S.sv.sec=v;S.sv.cat='All';renderRecs()}
 function svCat(v){S.sv.cat=v;renderRecs()}
+function svSt(v){S.sv.st=v;renderRecs()}
 function svSort(v){S.sv.sort=v;renderRecs()}
 function svFind(v){S.sv.q=v;const b=$('#svbody');if(b)b.innerHTML=svBody();const c=$('#svclr');if(c)c.style.display=v?'':'none'}
 function svClear(){S.sv.q='';const i=$('#svq');if(i){i.value='';i.focus()}svFind('')}
 /* v85: Totals view. Expenses by category, income by client and the mileage deduction, month to date and year to date side by side. */
 function svSeg(){const c=S.sv.sec,b=(k,l)=>'<button class="'+(c==k?'on':'')+'" onclick="svSec(\''+k+'\')">'+l+'</button>';return '<div class="seg">'+b('x','Expenses')+b('w','Work invoices')+b('t','Totals')+'</div>'}
 function periodSums(now){now=now||new Date();const y=now.getFullYear(),mo=now.getMonth(),end=new Date(y,mo,now.getDate(),23,59,59,999).getTime(),lo=[new Date(y,mo,1).getTime(),new Date(y,0,1).getTime()],
- T={cat:{},cli:{},exp:[0,0],inc:[0,0],ded:[0,0],mi:[0,0],noMi:0,und:0,fut:0,lo,now};
+ T={cat:{},cli:{},exp:[0,0],inc:[0,0],opn:[0,0],nOpen:0,ded:[0,0],mi:[0,0],noMi:0,und:0,fut:0,lo,now};
  S.records.forEach(r=>{const d=recDate(r);if(d==null){T.und++;return}if(d>end){T.fut++;return}if(d<lo[1])return;
   const on=[d>=lo[0],true];
   if(r.mode=='purchase'){const t=recAmt(r)||0,k=recCat(r),a=T.cat[k]||(T.cat[k]=[0,0]);on.forEach((f,i)=>{if(f){a[i]+=t;T.exp[i]+=t}})}
   else{const o=compute(r),v=N(r.amount)||0,nm=String(r.client||'').trim(),k=nk(nm)||'-',a=T.cli[k]||(T.cli[k]={n:nm||'No client',v:[0,0]});
    if(o.rt==null)T.noMi++;
-   on.forEach((f,i)=>{if(f){a.v[i]+=v;T.inc[i]+=v;T.ded[i]+=o.wear||0;T.mi[i]+=o.rt||0}})}});
+   const isO=stOf(r)=='open';if(isO)T.nOpen++;
+   on.forEach((f,i)=>{if(f){if(isO)T.opn[i]+=v;else{a.v[i]+=v;T.inc[i]+=v}T.ded[i]+=o.wear||0;T.mi[i]+=o.rt||0}})}});
  return T}
 function totalsView(now){const T=periodSums(now),f=v=>+(+v).toFixed(2),sd=d=>d.toLocaleDateString('en-US',{month:'short',day:'numeric'}),
  rg=i=>{const a=new Date(T.lo[i]);return a.getMonth()==T.now.getMonth()&&a.getDate()==T.now.getDate()?sd(a):sd(a)+' \u2013 '+sd(T.now)},
@@ -321,10 +327,11 @@ function totalsView(now){const T=periodSums(now),f=v=>+(+v).toFixed(2),sd=d=>d.t
  if(!Object.keys(T.cat).length&&!Object.keys(T.cli).length)h+='<div class="empty2">Nothing dated this year yet.</div>';
  else{
   h+='<div class="sl">'+head('Expenses by category')+(cats.length?cats.map(([k,a])=>row(esc(k),a)).join('')+row('Total expenses',T.exp,'tot'):none('No expenses this year'))+'</div>';
-  h+='<div class="sl">'+head('Income by client')+(clis.length?clis.map(c=>row(esc(c.n),c.v)).join('')+row('Total income',T.inc,'tot'):none('No work invoices this year'))+'</div>';
+  h+='<div class="sl">'+head('Income by client')+(clis.length?clis.map(c=>row(esc(c.n),c.v)).join('')+row('Total income',T.inc,'tot'):none('No closed work invoices this year'))+(T.nOpen?row('Open (not counted)',T.opn,''):'')+'</div>';
   h+='<div class="sl">'+head('Mileage')+row('Mileage deduction',T.ded,'tot')+row('Miles driven',T.mi,'',miles)+'</div>'}
  const n=[];if(T.noMi)n.push(pl(T.noMi,'work invoice this year has','work invoices this year have')+' no round-trip miles, so no mileage deduction is counted.');
  const u=[];if(T.und)u.push(T.und+' undated');if(T.fut)u.push(T.fut+' dated after today');if(u.length)n.push('Not counted: '+u.join(', ')+'.');
+ if(T.nOpen)n.push(pl(T.nOpen,'open invoice is','open invoices are')+' left out of income until marked closed. Mileage still counts.');
  n.push('Expenses count by purchase date, income by job date (Amount Paid).');
  return h+'<div class="hint">'+n.join(' ')+'</div>'}
 function svOther(){S.sv.sec=S.sv.sec=='x'?'w':'x';S.sv.cat='All';renderRecs()}
@@ -367,9 +374,9 @@ function wdCount(list){const d=new Set();list.forEach(([r])=>{let w=workDays(r);
 function svBody(){
  const x=S.sv.sec=='x',grp=!x&&/^d/.test(sortFor(x)),q=svSearching(),list=svList(),miss=list.filter(([r])=>!(r.imgs&&r.imgs.length)).length,tot=+list.reduce((s,[r])=>s+(recAmt(r)||0),0).toFixed(2),T=totals(),trow=(l,v)=>`<div class="srow"><div class="sm">${l}</div><b>${M(v)}</b></div>`,
  row=([r,i],wk,cont)=>{const pur=r.mode=='purchase',nm=esc((pur?niceMerch(r.merchant):r.client)||(pur?'Receipt':'Work invoice')),split=!pur&&wk!=null&&new Set(workDays(r).map(x=>+wkStart(x))).size>1,first=split&&Math.min(...workDays(r).map(x=>+wkStart(x)))===wk,sub=pur?[r.date,r.category].filter(Boolean).map(esc).join(' · '):dayPills(r,wk);
-  return `<div class="srow tap" role="button" tabindex="0" onclick="openRec(${i})" onkeydown="if(event.key=='Enter')openRec(${i})"><div class="sm"><div class="s1">${nm}</div>${sub?`<div class="s2">${sub}</div>`:''}${r.imgs&&r.imgs.length?'':`<div class="s3">${pur?'No receipt':'No invoice'}</div>`}</div><b>${M(!pur&&wk!=null?wkAmt(r,wk):recAmt(r))}</b></div>`};
+  return `<div class="srow tap" role="button" tabindex="0" onclick="openRec(${i})" onkeydown="if(event.key=='Enter')openRec(${i})"><div class="sm"><div class="s1">${nm}${!pur&&stOf(r)=='open'?'<span class="stb">Open</span>':''}</div>${sub?`<div class="s2">${sub}</div>`:''}${r.imgs&&r.imgs.length?'':`<div class="s3">${pur?'No receipt':'No invoice'}</div>`}</div><b>${M(!pur&&wk!=null?wkAmt(r,wk):recAmt(r))}</b></div>`};
  let lbl;if(q)lbl=list.length+' match'+(list.length==1?'':'es')+(x&&S.sv.cat!='All'?' in '+S.sv.cat:'');else if(x)lbl=S.sv.cat!='All'?list.length+' in '+S.sv.cat:list.length+' expense'+(list.length==1?'':'s');else{const wd=wdCount(list);lbl=wd?wd+' working day'+(wd==1?'':'s'):list.length+' work invoice'+(list.length==1?'':'s')}
- let none='';if(!list.length){if(q){const toks=svTok(S.sv.q),o=S.records.filter(r=>(r.mode=='purchase')!=x&&recMatch(r,toks)).length;none='<div class="empty2">No matches for “'+esc(S.sv.q.trim())+'”.'+(x&&S.sv.cat!='All'?'<br>Try the All category.':'')+(o?'<br><button onclick="svOther()" style="margin-top:10px">Show '+o+' in '+(x?'Work invoices':'Expenses')+'</button>':'')+'</div>'}else none='<div class="empty2">'+(x?'No expenses saved yet.':'No work invoices saved yet.')+'</div>'}
+ let none='';if(!list.length){if(q){const toks=svTok(S.sv.q),o=S.records.filter(r=>(r.mode=='purchase')!=x&&recMatch(r,toks)).length;none='<div class="empty2">No matches for “'+esc(S.sv.q.trim())+'”.'+(x&&S.sv.cat!='All'?'<br>Try the All category.':'')+(o?'<br><button onclick="svOther()" style="margin-top:10px">Show '+o+' in '+(x?'Work invoices':'Expenses')+'</button>':'')+'</div>'}else none='<div class="empty2">'+(x?'No expenses saved yet.':S.sv.st&&S.sv.st!='All'?'No '+S.sv.st+' work invoices.':'No work invoices saved yet.')+'</div>'}
  return (list.length?'<div class="svsum"><span>'+lbl+'</span><b>'+M(tot)+'</b></div>'+(miss?'<div class="invm">'+miss+' of '+list.length+' without '+(x?'a receipt':'an invoice')+'</div>':'')+(grp?grpRows(list,row):'<div class="sl">'+list.map(row).join('')+'</div>'):none)
  +(x&&T.n&&S.sv.cat=='All'&&!q?`<div class="sl tgl${S.sv.tot?' open':''}"><button type="button" class="tgh" aria-expanded="${S.sv.tot?'true':'false'}" onclick="totTog(this)"><span class="tgt">Expense totals</span><span class="tgv">${M(T.all)}</span><i class="tgc" aria-hidden="true"></i></button><div class="tgb"><div class="tgi">${T.months.map(([l,v])=>trow(l,v)).join('')}${T.years.length>1?T.years.map(([l,v])=>trow(l+' total',v)).join(''):''}${T.cats.map(([l,v])=>trow(l,v)).join('')}</div></div></div>`:'')
  +(list.length?'<div class="svact"><button class="pri" onclick="svCopy()">Copy '+(list.length==1?'record':list.length+' records')+'</button><button onclick="csvOpen()">Export CSV\u2026</button></div>':'')
@@ -380,10 +387,12 @@ function renderRecs(){persist();try{dupWarn()}catch(e){}const nb=$('#m3');if(nb)
  const x=S.sv.sec=='x',cnt={};S.records.filter(r=>r.mode=='purchase').forEach(r=>{const c=recCat(r);cnt[c]=(cnt[c]||0)+1});
  const cats=[...CATS.filter(c=>cnt[c]),...Object.keys(cnt).filter(c=>!CATS.includes(c)&&c!='Uncategorized'),...(cnt.Uncategorized?['Uncategorized']:[])];
  if(S.sv.cat!='All'&&!cnt[S.sv.cat])S.sv.cat='All';
+ const nOpen=S.records.filter(r=>r.mode!='purchase'&&stOf(r)=='open').length;if(!nOpen&&S.sv.st!='All')S.sv.st='All';
  el.innerHTML='<div class="sv">'+svSeg()
  +'<div class="svq"><div class="svs"><input id="svq" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Merchant, client or receipt #" aria-label="Search saved records" value="'+esc(S.sv.q)+'" oninput="svFind(this.value)"><button id="svclr" type="button" onclick="svClear()" aria-label="Clear search" style="'+(S.sv.q?'':'display:none')+'">✕</button></div>'+sortCtl(x)+'</div>'
  +(x&&cats.length>1?'<div class="chips"><button class="'+(S.sv.cat=='All'?'on':'')+'" onclick="svCat(\'All\')">All</button>'+cats.map(c=>'<button class="'+(S.sv.cat==c?'on':'')+'" onclick="svCat(\''+c+'\')">'+c+'</button>').join('')+'</div>':'')
  
+ +(!x&&nOpen?'<div class="chips">'+[['All','All'],['open','Open ('+nOpen+')'],['closed','Closed']].map(([v,l])=>'<button class="'+((S.sv.st||'All')==v?'on':'')+'" onclick="svSt(\''+v+'\')">'+l+'</button>').join('')+'</div>':'')
  +'<div id="svbody" class="sv">'+svBody()+'</div></div>'}
 
 function dl(f){const r=S.rec,o=compute(r);let d,n='record.'+f;if(f=='json')d=JSON.stringify({...r,calculated:o},null,1);else{const rows=r.mode=='purchase'?[['Item','Qty','Unit','Total'],...r.items.filter(i=>!i.off).map(i=>[i.n,i.q,i.p,i.t]),['Subtotal','','',o.sub],...(o.disc?[['Discount','','',-o.disc]]:[]),['Tax','','',N(r.tax)==null?'':o.tax],['Total','','',o.total]]:[['Field','Value'],...text(r).filter(l=>l.includes(': ')).map(l=>l.split(/: (.*)/s).slice(0,2))];d=rows.map(x=>x.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(',')).join('\n')}
@@ -898,7 +907,7 @@ function dupWarn(){const el=$('#dupwarn');if(!el)return;const r=S.rec,m=r&&r.loa
 function openRec(i){const r=S.records[i];if(!r)return;closeRec();const{t,G}=rows(r),
  h=G.map(g=>({...g,rows:g.rows.filter(x=>x[0]!=='Regular Hours')})).map(g=>'<div class="rg">'+g.rows.map(([l,v,hl])=>`<div class="rr${hl?' hl':''}${g.k=='tot'?' tt':''}"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join('')+'</div>').join(''),
  o=document.createElement('div');o.id='recmodal';o.className='rmo';o.onclick=e=>{if(e.target===o)closeRec()};
- o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${r.imgs&&r.imgs.length?'':'<div class="invm">'+(r.mode=='purchase'?'No receipt attached':'No invoice attached')+'</div>'}${h}</div><div class="rmf"><button onclick="dlRec(${i})">Download PDF</button><button onclick="viewRec(${i})">View PDF</button>${r.imgs&&r.imgs.length?`<button onclick="cropRec(${i})">Crop</button><button onclick="attachRec(${i})">Replace invoice</button><button onclick="rmImg(${i})">Remove invoice</button>`:`<button onclick="attachRec(${i})">Attach invoice</button>`}<button onclick="editRec(${i})">Edit</button><button onclick="delOpen(${i})" style="color:#b3261e">Delete</button></div></div>`;
+ o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${r.mode!='purchase'&&stOf(r)=='open'?'<div class="stn"><span class="stb">Open</span> The amount may still change. It is not counted in your income totals.</div>':''}${r.imgs&&r.imgs.length?'':'<div class="invm">'+(r.mode=='purchase'?'No receipt attached':'No invoice attached')+'</div>'}${h}</div><div class="rmf">${r.mode!='purchase'?`<button class="pri" onclick="flipStatus(${i})">${stOf(r)=='open'?'Mark closed':'Reopen'}</button>`:''}<button onclick="dlRec(${i})">Download PDF</button><button onclick="viewRec(${i})">View PDF</button>${r.imgs&&r.imgs.length?`<button onclick="cropRec(${i})">Crop</button><button onclick="attachRec(${i})">Replace invoice</button><button onclick="rmImg(${i})">Remove invoice</button>`:`<button onclick="attachRec(${i})">Attach invoice</button>`}<button onclick="editRec(${i})">Edit</button><button onclick="delOpen(${i})" style="color:#b3261e">Delete</button></div></div>`;
  document.body.appendChild(o);document.body.style.overflow='hidden'}
 function delOpen(i){if(!S.records[i])return;if(!confirm('Delete this saved record? This cannot be undone.'))return;S.records.splice(i,1);closeRec();renderRecs();store()}
 function closeRec(){const o=$('#recmodal');if(o)o.remove();document.body.style.overflow=''}
@@ -1327,9 +1336,9 @@ const X={name:'expenses',
  tx:[0,1,2,3,4,5],
  row:r=>{const o=compute(r);return[dcell(r.date),niceMerch(r.merchant),r.location,r.category,r.number,(r.items||[]).filter(i=>!i.off).map(itemName).join('; '),n2(o.sub),o.ship?n2(o.ship):'',o.disc?n2(o.disc):'',N(r.tax)==null?'':n2(o.tax),n2(o.total),o.removed?n2(o.removed):'']}};
 const W={name:'work invoices',
- head:['Job date','Event end date','Employer','Client','Location','Invoice #','Regular hours','Overtime hours','Total hours','Shifts','Amount','Round-trip miles','IRS rate per mile','Mileage deduction','Net-30 payout date','Notes'],
+ head:['Job date','Event end date','Employer','Client','Location','Invoice #','Regular hours','Overtime hours','Total hours','Shifts','Amount','Round-trip miles','IRS rate per mile','Mileage deduction','Net-30 payout date','Notes','Status'],
  tx:[0,1,2,3,4,5,9,14,15],
- row:r=>{const o=compute(r);return[dcell(r.jobDate),dcell(r.endDate),r.employer,r.client,r.location,r.invoice,hrs(N(r.hours)),hrs(N(r.overtime)),o.tot==null?'':n2(o.tot),shiftsTxt(r),N(r.amount)==null?'':n2(N(r.amount)),o.rt==null?'':o.rt,o.rate==null||o.rt==null?'':o.rate,o.wear==null?'':n2(o.wear),est(r)||'',String(r.notes||'').replace(/\s+/g,' ').trim()]}};
+ row:r=>{const o=compute(r);return[dcell(r.jobDate),dcell(r.endDate),r.employer,r.client,r.location,r.invoice,hrs(N(r.hours)),hrs(N(r.overtime)),o.tot==null?'':n2(o.tot),shiftsTxt(r),N(r.amount)==null?'':n2(N(r.amount)),o.rt==null?'':o.rt,o.rate==null||o.rt==null?'':o.rate,o.wear==null?'':n2(o.wear),est(r)||'',String(r.notes||'').replace(/\s+/g,' ').trim(),stOf(r)=='open'?'Open':'Closed']}};
 
 const pdate=s=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(s||'');return m?new Date(+m[1],m[2]-1,+m[3]).getTime():null};
 function rangeOf(c){
@@ -1376,7 +1385,7 @@ window.csvOpen=function(){
  closeRec();
  const c=S.csv,o=document.createElement('div');o.id='recmodal';o.className='rmo';o.onclick=e=>{if(e.target===o)closeRec()};
  const opts='<option value="all">All dates</option>'+ys.map(y=>'<option value="'+y+'"'+(c.rng==y?' selected':'')+'>'+y+'</option>').join('')+'<option value="custom"'+(c.rng==='custom'?' selected':'')+'>Custom range\u2026</option>';
- const what=x?'Expenses'+(S.sv.cat!=='All'?' \u00b7 '+esc(S.sv.cat):''):'Work invoices';
+ const what=x?'Expenses'+(S.sv.cat!=='All'?' \u00b7 '+esc(S.sv.cat):''):'Work invoices'+(S.sv.st&&S.sv.st!=='All'?' \u00b7 '+(S.sv.st==='open'?'Open only':'Closed only'):'');
  o.innerHTML='<div class="rm" role="dialog" aria-modal="true" aria-label="Export CSV"><div class="rmh"><h3>Export CSV</h3><button class="x" onclick="closeRec()" aria-label="Close">\u2715</button></div>'
   +'<div class="rmb"><div style="display:flex;flex-direction:column;gap:12px">'
   +'<div class="hint">'+what+(x&&S.sv.cat!=='All'?' (change the category on the Saved tab)':'')+(svSearching()?' matching \u201c'+esc(S.sv.q.trim())+'\u201d (clear the search on the Saved tab for everything)':'')+'. Opens in Excel, Numbers or Google Sheets.</div>'
@@ -1510,8 +1519,8 @@ window.csvGo=async function(){
    const PT_VER='v200'
    const PT_VER='vv200'
    ---------- */
-const PT_BUILD=247;
-const PT_LABEL='v47';
+const PT_BUILD=248;
+const PT_LABEL='v48';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
@@ -1673,3 +1682,6 @@ async function cropApply(){if(!CR||!CR.im||!CR.sel)return;const r=S.records[CR.i
  const out={u:c.toDataURL('image/jpeg',.8),w:c.width,h:c.height},old=r.imgs[idx];r.imgs[idx]=out;store();cropClose();renderRecs();openRec(i);
  snack('Cropped',()=>{r.imgs[idx]=old;store();renderRecs();if($('#recmodal')){const q=S.records.indexOf(r);if(q>=0)openRec(q)}})}
 (function(){const st=document.createElement('style');st.textContent='.cmo{position:fixed;inset:0;z-index:10000;background:#000;display:flex;flex-direction:column;padding:max(10px,env(safe-area-inset-top)) 12px max(10px,env(safe-area-inset-bottom))}.cmh{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0 10px}.cmh span{font-size:13px;color:var(--mut)}.cmw{flex:1;display:flex;align-items:center;justify-content:center;min-height:0}.cmb{position:relative;padding:18px;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;box-sizing:content-box}.cmb img{display:block;pointer-events:none}.cms{position:absolute;border:2px solid #fff;box-sizing:border-box;box-shadow:0 0 0 9999px rgba(0,0,0,.6);touch-action:none;cursor:move}.cms i{position:absolute;width:40px;height:40px;margin:-20px 0 0 -20px;touch-action:none}.cms i::after{content:"";position:absolute;left:50%;top:50%;width:14px;height:14px;margin:-7px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.4)}.cms i[data-h=nw]{left:0;top:0}.cms i[data-h=n]{left:50%;top:0}.cms i[data-h=ne]{left:100%;top:0}.cms i[data-h=e]{left:100%;top:50%}.cms i[data-h=se]{left:100%;top:100%}.cms i[data-h=s]{left:50%;top:100%}.cms i[data-h=sw]{left:0;top:100%}.cms i[data-h=w]{left:0;top:50%}.cmf{display:flex;gap:10px;padding:10px 0}.cmf button{flex:1}';document.head.appendChild(st)})();
+
+/* v48: Open / Closed invoice status (badge, toggle, filter chip) */
+(function(){const c=document.createElement('style');c.textContent='.stb{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;font-size:11.5px;font-weight:700;letter-spacing:.02em;vertical-align:1px;background:rgba(217,154,78,.18);color:#d99a4e;border:1px solid rgba(217,154,78,.4)}'+'.stn{display:flex;align-items:center;gap:8px;margin:0 0 10px;padding:9px 12px;border-radius:12px;font-size:13px;color:var(--mut);background:rgba(217,154,78,.1);border:1px solid rgba(217,154,78,.3)}.stn .stb{margin:0;flex:0 0 auto}'+'.stseg{max-width:260px}';document.head.appendChild(c)})();
