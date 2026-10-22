@@ -19,7 +19,7 @@ const futureEv=r=>{try{const d=workDays(r);if(!d.length)return false;const t=new
 const autoSt=r=>r&&N(r.amount)>0&&!isEst(r)&&r.tp===1?'closed':'open';
 const stOf=r=>!r?'closed':r.stMan=='open'||r.stMan=='closed'?r.stMan:(r.status=='open'?'open':autoSt(r));
 /* v62: statuses are locked in. The first time a work invoice is seen without a saved status it gets one and it is stored on the record, so an update can no longer change it. New invoices: from the printed total. Records saved before the printed-total flag existed (no r.tp) only get a temporary guess (r.stGuess); rereadStatuses() then reads their attached invoice once and sets the real status. Only the switch, Replace invoice or that one re-read changes a locked status. */
-function lockStatuses(){let n=0;(S.records||[]).forEach(r=>{if(!r||r.mode=='purchase'||r.stMan=='open'||r.stMan=='closed')return;let v;if(r.status=='open')v='open';else if(r.tp===undefined){v=N(r.amount)>0&&!isEst(r)&&!futureEv(r)?'closed':'open';if(!r.rr)r.stGuess=1}else v=autoSt(r);r.stMan=v;r.status=v;n++});return n}
+function lockStatuses(){let n=0;(S.records||[]).forEach(r=>{if(!r||r.mode=='purchase'||r.stMan=='open'||r.stMan=='closed')return;let v;if(r.status=='open')v='open';else if(r.tp===undefined){v=N(r.amount)>0&&!isEst(r)&&!futureEv(r)?'closed':'open';if(!r.rr)r.stGuess=1}else v=autoSt(r);r.stMan=v;r.status=v;r.stBy='auto';r.stWhy=r.stGuess?'Reading the invoice to check for a printed total':v=='closed'?'The invoice shows a printed total':'The invoice has no printed total';n++});return n}
 /* v62: one-time re-read of older invoices (see lockStatuses). Closed only if the attached invoice itself shows a printed total above $0 that is not an estimate. If the invoice cannot be read now (offline, blank), the guess stays and it is tried again next time. */
 let REREAD=0;
 function imgCanvas(u){return new Promise((ok,no)=>{const im=new Image();im.onload=()=>{const c=document.createElement('canvas');c.width=im.naturalWidth;c.height=im.naturalHeight;c.getContext('2d').drawImage(im,0,0);ok(c)};im.onerror=()=>no(new Error('img'));im.src=u})}
@@ -27,16 +27,20 @@ async function readRecText(r){let t='';for(const g of (r.imgs||[])){if(!g||!g.u)
   if(x.trim().length<60){try{x=(await Promise.race([Tesseract.recognize(prep(c),'eng'),new Promise((_,j)=>setTimeout(()=>j(0),60000))])).data.text||x}catch(e){}}
   t+=x+'\n'}return t}
 function statusFromText(t){const F=Parser.parse(t,'freelance').fields||{},p={amount:F.amount,tp:F.tp?1:0,estTotal:F.estTotal,notes:F.notes};return autoSt(p)}
-async function rereadStatuses(readFn){if(REREAD)return;const todo=(S.records||[]).filter(r=>r&&r.mode!='purchase'&&r.stGuess&&!r.rr&&r.imgs&&r.imgs.length);if(!todo.length)return;REREAD=1;let done=0,chg=0;
- try{for(let k=0;k<todo.length;k++){const r=todo[k];if(!S.records.includes(r)||!r.stGuess)continue;try{toast('Checking invoice '+(k+1)+' of '+todo.length+'…')}catch(e){}
+async function rereadStatuses(readFn){if(REREAD)return;
+ /* v64: (1) older records still on a temporary guess; (2) records the v63 re-read left Open (that read missed some printed totals). For group 2 a printed total can only change Open to Closed, never the other way. */
+ const g2=r=>r.rr===1&&!r.rr2&&!r.stBy&&stOf(r)=='open',todo=(S.records||[]).filter(r=>r&&r.mode!='purchase'&&r.imgs&&r.imgs.length&&((r.stGuess&&!r.rr)||g2(r)));if(!todo.length)return;REREAD=1;let done=0,chg=0;
+ try{for(let k=0;k<todo.length;k++){const r=todo[k],two=g2(r);if(!S.records.includes(r)||(!r.stGuess&&!two))continue;try{toast('Checking invoice '+(k+1)+' of '+todo.length+'…')}catch(e){}
   let t='';try{t=await (readFn||readRecText)(r)}catch(e){}
   if(String(t||'').trim().length<40)continue;
-  if(!S.records.includes(r)||!r.stGuess)continue;
-  const v=statusFromText(t);if(v!=stOf(r))chg++;r.stMan=v;r.status=v;r.rr=1;delete r.stGuess;done++;
+  if(!S.records.includes(r)||(!r.stGuess&&!(r.rr===1&&!r.stBy)))continue;
+  const v=statusFromText(t);
+  if(two&&v!='closed'){r.rr2=1;r.stWhy='The invoice has no printed total';done++;try{await store()}catch(e){}continue}
+  if(v!=stOf(r))chg++;r.stMan=v;r.status=v;r.rr=1;r.rr2=1;r.stBy='auto';r.stWhy=v=='closed'?'The invoice shows a printed total':'The invoice has no printed total, or only an estimate';delete r.stGuess;done++;
   try{await store()}catch(e){}try{if(S.tab=='saved')renderRecs()}catch(e){}}}
  finally{REREAD=0}
  try{if(done)toast('Checked '+done+' invoice'+(done==1?'':'s')+(chg?' · '+chg+' changed':' · no changes'))}catch(e){}return{done,chg}}
-function putStatus(r,v){v=v=='open'?'open':'closed';r.stMan=v;r.status=v;delete r.stGuess}
+function putStatus(r,v){v=v=='open'?'open':'closed';r.stMan=v;r.status=v;r.stBy='you';r.stWhy='Set by you';delete r.stGuess}
 const swHtml=(r,fn)=>{const o=stOf(r)=='open';return `<div class="stsw"><span class="${o?'':'on'}">Closed</span><button type="button" class="sw${o?' on':''}" role="switch" aria-checked="${o}" aria-label="Invoice is open" onclick="${fn}"><i></i></button><span class="${o?'on':''}">Open</span></div>`};
 function setStatus(v){const r=S.rec;if(!r)return;putStatus(r,v);render()}
 function flipStatus(i){const r=S.records[i];if(!r||r.mode=='purchase')return;putStatus(r,stOf(r)=='open'?'closed':'open');store();renderRecs();openRec(i);toast(stOf(r)=='open'?'Marked open':'Marked closed')}
@@ -931,7 +935,7 @@ function dupWarn(){const el=$('#dupwarn');if(!el)return;const r=S.rec,m=r&&r.loa
 function openRec(i){const r=S.records[i];if(!r)return;closeRec();const{t,G}=rows(r),
  h=G.map(g=>({...g,rows:g.rows.filter(x=>x[0]!=='Regular Hours')})).map(g=>'<div class="rg">'+g.rows.map(([l,v,hl])=>`<div class="rr${hl?' hl':''}${g.k=='tot'?' tt':''}"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join('')+'</div>').join(''),
  o=document.createElement('div');o.id='recmodal';o.className='rmo';o.onclick=e=>{if(e.target===o)closeRec()};
- o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${r.mode!='purchase'?'<div class="stn'+(stOf(r)=='open'?'':' cl')+'">'+swHtml(r,'flipStatus('+i+')')+'</div>':''}${r.imgs&&r.imgs.length?'':'<div class="invm">'+(r.mode=='purchase'?'No receipt attached':'No invoice attached')+'</div>'}${h}</div><div class="rmf"><button onclick="dlRec(${i})">Download PDF</button><button onclick="viewRec(${i})">View PDF</button>${r.imgs&&r.imgs.length?`<button onclick="cropRec(${i})">Crop</button><button onclick="replaceInv(${i})">Replace invoice</button><button onclick="rmImg(${i})">Remove invoice</button>`:`<button onclick="attachRec(${i})">Attach invoice</button>`}<button onclick="editRec(${i})">Edit</button><button onclick="delOpen(${i})" style="color:#b3261e">Delete</button></div></div>`;
+ o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${r.mode!='purchase'?'<div class="stn'+(stOf(r)=='open'?'':' cl')+'">'+swHtml(r,'flipStatus('+i+')')+'</div>'+(r.stWhy?'<div class="stw">'+esc(r.stWhy)+'</div>':''):''}${r.imgs&&r.imgs.length?'':'<div class="invm">'+(r.mode=='purchase'?'No receipt attached':'No invoice attached')+'</div>'}${h}</div><div class="rmf"><button onclick="dlRec(${i})">Download PDF</button><button onclick="viewRec(${i})">View PDF</button>${r.imgs&&r.imgs.length?`<button onclick="cropRec(${i})">Crop</button><button onclick="replaceInv(${i})">Replace invoice</button><button onclick="rmImg(${i})">Remove invoice</button>`:`<button onclick="attachRec(${i})">Attach invoice</button>`}<button onclick="editRec(${i})">Edit</button><button onclick="delOpen(${i})" style="color:#b3261e">Delete</button></div></div>`;
  document.body.appendChild(o);document.body.style.overflow='hidden'}
 function delOpen(i){if(!S.records[i])return;if(!confirm('Delete this saved record? This cannot be undone.'))return;S.records.splice(i,1);closeRec();renderRecs();store()}
 function closeRec(){const o=$('#recmodal');if(o)o.remove();document.body.style.overflow=''}
@@ -1599,8 +1603,8 @@ window.csvGo=async function(){
    const PT_VER='v200'
    const PT_VER='vv200'
    ---------- */
-const PT_BUILD=261;
-const PT_LABEL='v63';
+const PT_BUILD=262;
+const PT_LABEL='v64';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
@@ -1767,3 +1771,4 @@ async function cropApply(){if(!CR||!CR.im||!CR.sel)return;const r=S.records[CR.i
 (function(){const c=document.createElement('style');c.textContent='.stb{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;font-size:11.5px;font-weight:700;letter-spacing:.02em;vertical-align:1px;background:rgba(214,69,69,.18);color:#e0544f;border:1px solid rgba(214,69,69,.4)}'+'.stn{display:flex;align-items:center;gap:8px;margin:0 0 10px;padding:9px 12px;border-radius:12px;font-size:13px;color:var(--mut);background:rgba(214,69,69,.1);border:1px solid rgba(214,69,69,.3)}.stn .stb{margin:0;flex:0 0 auto}'+'.stb.cl{background:rgba(46,125,90,.14);color:#2e7d5a;border-color:rgba(46,125,90,.4)}.stn.cl{background:rgba(46,125,90,.08);border-color:rgba(46,125,90,.3)}.stn .stsw{flex:0 0 auto}'+'.stsw{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600;color:var(--mut)}.stsw .on{color:var(--fg)}.sw{position:relative;width:52px;height:30px;padding:0;border-radius:999px;border:1px solid rgba(0,0,0,.15);background:#2e7d5a;cursor:pointer;flex:0 0 auto;transition:background .2s}.sw.on{background:#e0544f}.sw i{position:absolute;top:2px;left:2px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.35);transition:transform .2s}.sw.on i{transform:translateX(22px)}'+'.stb{background:none!important;border:0!important;padding:0!important;font-size:12px;font-weight:500!important;letter-spacing:0;color:#c9625d!important;opacity:.85}.stb{font-variant:small-caps;font-style:italic;letter-spacing:.04em;font-size:13px;font-weight:600!important;opacity:1}.stb::before{content:none!important}.stb.cl{color:#4a9d78!important}.stn,.stn.cl{background:none!important;border:0!important;padding:4px 0!important}.sw,.sw.on{background:rgba(128,128,128,.38)!important}.sw{border-color:transparent}';document.head.appendChild(c)})();
 
 (function(){const c=document.createElement('style');c.textContent='.srow .ra{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:0 0 auto}.srow .stb,.stn .stb{display:block;margin:0!important;padding:0!important;font:400 11.5px -apple-system,system-ui,sans-serif!important;font-variant:normal!important;font-style:normal!important;letter-spacing:0!important;color:var(--mut)!important;opacity:.85!important}.srow .stb.cl{opacity:.5!important}';document.head.appendChild(c)})();
+(function(){const c=document.createElement('style');c.textContent='.stw{margin:-4px 0 10px;font-size:12px;color:var(--mut);opacity:.85}';document.head.appendChild(c)})();

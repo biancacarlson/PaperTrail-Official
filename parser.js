@@ -1,13 +1,17 @@
 'use strict';
 /* self-update (V must match the ?v= number in index.html): the iPhone Home Screen app keeps its own cached copy of the page and ignores no-cache hints. On launch, ask the server (bypassing the cache) which version is current;
    if it is newer than this file, re-download every file once and reload. Runs from parser.js so even an old cached index.html picks it up. Once per session, so it can never loop. */
-(function(){var V=261;try{if(typeof window==='undefined'||!window.fetch||!navigator.onLine||sessionStorage.getItem('pt_upd'))return;
+(function(){var V=262;try{if(typeof window==='undefined'||!window.fetch||!navigator.onLine||sessionStorage.getItem('pt_upd'))return;
  fetch('index.html',{cache:'reload'}).then(function(r){return r.text()}).then(function(h){var m=h.match(/parser\.js\?v=(\d+)/);if(!m||+m[1]<=V)return;
   try{sessionStorage.setItem('pt_upd','1')}catch(e){}
   return Promise.all(['parser.js','scan.js','app.js'].map(function(f){return fetch(f+'?v='+m[1],{cache:'reload'})})).then(function(){location.reload()})}).catch(function(){})}catch(e){}})();
 /* Deterministic receipt/invoice parser. Pure function: parse(text, mode) -> {fields, items, found}. Never invents values. */
 (function(root){
 const fix=s=>s.replace(/(?<=\d)[Oo](?=\d|\b)/g,'0').replace(/(?<=\d)[lI](?=\d)/g,'1');
+/* v64: second way to find a printed total, used only when the main search found none. Looks for a total-type label (Total, Total Due, Balance Due, Payment Due, Amount Due, Grand Total, Invoice Total, Net Pay...) with a dollar amount on the same line or the next one. Subtotals, total hours/miles, tax and bare "Amount" column headers never count. */
+const TOTLAB=/\b(?:grand\s*total|invoice\s*total|total\s*(?:due|amount|invoice|charges?|pay(?:ment)?|compensation|earnings|owed|paid|cost|price)?|amount\s*(?:due|owed|payable)|balance\s*(?:due|owing)|payment\s*due|net\s*pay|pay\s*total)\b/i,TOTBAD=/sub\s*-?\s*tota|total\s*(?:hours?|hrs?|time|miles?|mileage|distance|days?|shifts?)\b|\btax\b|\brate\b/i;
+function printedTotal(L,fx){const f=fx||(s=>s),mon=s=>{const m=String(s).match(/\$\s?(\d[\d,]*(?:\.\d{1,2})?)|(\d[\d,]*\.\d{2})\b/g);if(!m)return null;const v=m[m.length-1].replace(/[$,\s]/g,'');return v&&!isNaN(+v)?(+v).toFixed(2):null};
+ for(let i=0;i<L.length;i++){const l=f(L[i]).replace(/\btota[1l|]\b/i,'total');if(!TOTLAB.test(l)||TOTBAD.test(l.replace(TOTLAB,'')))continue;let v=mon(l.slice(l.search(TOTLAB)));if(v==null&&i+1<L.length){const n=f(L[i+1]).trim();if(/^\$?\s?\d[\d,]*\.\d{2}$/.test(n))v=mon(n)}if(v!=null)return v}return null}
 const PRICE=/(-?\$?\s?\d{1,3}(?:,\d{3})*[.,]\d{2}|-?\$?\s?\d+[.,]\d{2})\s*-?\s*[A-Z]{0,2}\d?\s*$/;
 const num=s=>{let n=parseFloat(s.replace(/[$\s]/g,'').replace(/,(?=\d{3})/g,'').replace(',','.'));return isNaN(n)?null:n};
 const MON='(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\\.?';
@@ -294,7 +298,7 @@ function fallbackItem(L,F){if(!(F.extSub>0))return null;
   cand=si>=0?L.slice(si+1,si+4).find(l=>/[A-Za-z]{3}/.test(l)&&plain(l)&&!PRICE.test(fix(l))&&!NOTNAME.test(l)&&!SUMLBL.test(l)&&!/uant|antit|price|iscount|otal|^\W*sales/i.test(l)&&l.length<=40):null,
   nm=cand?cleanName(cand.replace(/^[^A-Za-z0-9(]+/,''),null,true):'',ok=readable(nm);
  return{n:ok?nm:'Item',full:ok?nm:'Item',cut:0,n0:ok?nm:'',q:1,p:F.extSub,ext:1,chk:1}}
-function parse1(text,mode){text=String(text||'').split(/^[ \t]*invoice summary[ \t]*$/im)[0];let guess=null;const L=pairColumns(pairSummary(lines(text))),F={},items=[],found={};const set=(k,v)=>{if(v!=null&&v!==''){F[k]=v;found[k]=1}};
+function parse1(text,mode){text=String(text||'');{const m=text.match(/^[ \t]*invoice summary[ \t]*\n(?:[^\n]*\n){0,4}?[ \t]*employer\b/im);if(m)text=text.slice(0,m.index)}let guess=null;const L=pairColumns(pairSummary(lines(text))),F={},items=[],found={};const set=(k,v)=>{if(v!=null&&v!==''){F[k]=v;found[k]=1}};
  const inv=invNo(L,mode==='purchase'),txf=taxFlags(text);
  if(mode==='purchase'){
   {const gm=guessMerchant(text,L);if(gm){set('merchant',gm.n);if(gm.sure)found.mk=1}}
@@ -385,6 +389,7 @@ function parse1(text,mode){text=String(text||'').split(/^[ \t]*invoice summary[ 
   set('hours',tot!=null&&!isNaN(+tot)?tot:hrs.length?String(hrs.reduce((a,b)=>a+b,0)):null);
   const ot=text.match(/\b(?:overtime|OT)\b\D{0,12}(\d+(?:\.\d+)?)/i);if(ot){F.notes='Overtime hours mentioned: '+ot[1]+' (verify).';found.notes=1}
   let amt=null;for(const re of [/amount paid|total paid|total pay|net pay|gross pay/i,/amount due|total due/i,/(?<!sub)\btotal\b/i]){for(const raw of L){const l=fix(raw);if(!re.test(l)||/\btax\b|\brate\b|hours|hrs|subt?\s?-?tota[l1jy|\]]/i.test(l.replace(re,'')))continue;const a=[...l.matchAll(/\$?\s?(\d[\d,]*\.\d{2})\b/g)];if(a.length){amt=a[a.length-1][1].replace(/,/g,'');if(/\best(?:imated|\.)?\s*(?:total|amount|pay)/i.test(l))F.estTotal=1}}if(amt)break}
+  if(!amt){const pt=printedTotal(L,fix);if(pt!=null)amt=pt}
   set('amount',amt);if(amt&&+String(amt).replace(/,/g,'')>0)F.tp=1}
   if(mode!=='purchase'){
    const sd=ev('start'),ed=ev('end');if(sd)set('jobDate',sd);if(ed)set('endDate',ed);
