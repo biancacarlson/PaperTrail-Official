@@ -22,26 +22,35 @@ const stOf=r=>!r?'closed':r.stMan=='open'||r.stMan=='closed'?r.stMan:(r.status==
 function lockStatuses(){let n=0;(S.records||[]).forEach(r=>{if(!r||r.mode=='purchase'||r.stMan=='open'||r.stMan=='closed')return;let v;if(r.status=='open')v='open';else if(r.tp===undefined){v=N(r.amount)>0&&!isEst(r)&&!futureEv(r)?'closed':'open';if(!r.rr)r.stGuess=1}else v=autoSt(r);r.stMan=v;r.status=v;r.stBy='auto';r.stWhy=r.stGuess?'Reading the invoice to check for a printed total':v=='closed'?'The invoice shows a printed total':'The invoice has no printed total';n++});return n}
 /* v62: one-time re-read of older invoices (see lockStatuses). Closed only if the attached invoice itself shows a printed total above $0 that is not an estimate. If the invoice cannot be read now (offline, blank), the guess stays and it is tried again next time. */
 let REREAD=0;
+/* v263: records an earlier version locked as Open (or Closed) by mistake. The uploaded invoice decides: a printed total above $0 = Closed; no total or $0 = Open. Only statuses the app set itself are touched (never ones you set with the switch). Runs on every sign-in for records that already carry their printed-total flag; the picture re-read below handles the rest once. */
+function resyncStatuses(){let n=0;(S.records||[]).forEach(r=>{if(!r||r.mode=='purchase'||r.stBy!=='auto'||r.tp===undefined)return;const v=autoSt(r);if(v=='open'&&!r.rr4)return;if(v!=stOf(r)){r.stMan=v;r.status=v;r.stWhy=v=='closed'?'The invoice shows a printed total':'The invoice has no printed total';n++}});return n}
 function imgCanvas(u){return new Promise((ok,no)=>{const im=new Image();im.onload=()=>{const c=document.createElement('canvas');c.width=im.naturalWidth;c.height=im.naturalHeight;c.getContext('2d').drawImage(im,0,0);ok(c)};im.onerror=()=>no(new Error('img'));im.src=u})}
 async function readRecText(r){let t='';for(const g of (r.imgs||[])){if(!g||!g.u)continue;const c=await imgCanvas(g.u);let x='';try{x=(await Promise.race([Tesseract.recognize(c,'eng'),new Promise((_,j)=>setTimeout(()=>j(0),60000))])).data.text||''}catch(e){}
   if(x.trim().length<60){try{x=(await Promise.race([Tesseract.recognize(prep(c),'eng'),new Promise((_,j)=>setTimeout(()=>j(0),60000))])).data.text||x}catch(e){}}
+  try{x=await findTotal(c,x)}catch(e){}
   t+=x+'\n'}return t}
+/* v264: faint gray 'Total' lines (small text, light color, highlighter) are often missed by the first read. When the text has no printed total, read the picture again bigger / with cleaner contrast and copy only the Total-type lines from the read that finds one. */
+const hasTot=t=>{try{return !!Parser.parse(t||'','freelance').fields.tp}catch(e){return false}};
+function upC(c,z){const o=document.createElement('canvas');o.width=Math.round(c.width*z);o.height=Math.round(c.height*z);const x=o.getContext('2d');x.imageSmoothingQuality='high';x.drawImage(c,0,0,o.width,o.height);return o}
+async function findTotal(c,t0){if(hasTot(t0))return t0;const m=Math.max(c.width,c.height),tries=[()=>upC(c,Math.min(2,2800/m)),()=>upC(c,Math.min(3,3400/m)),()=>prepUp(c)];
+ for(const mk of tries){try{const d=await ocrP(mk()),x=String(d.text||'');if(!hasTot(x))continue;const add=x.split('\n').filter(l=>/\b(?:total|balance|amount\s*due|net\s*pay)\b/i.test(l)).join('\n');return String(t0||'')+'\n'+add}catch(e){}}
+ return t0}
 function statusFromText(t){const F=Parser.parse(t,'freelance').fields||{},p={amount:F.amount,tp:F.tp?1:0,estTotal:F.estTotal,notes:F.notes};return autoSt(p)}
 async function rereadStatuses(readFn){if(REREAD)return;
  /* v64: (1) older records still on a temporary guess; (2) records the v63 re-read left Open (that read missed some printed totals). For group 2 a printed total can only change Open to Closed, never the other way. */
- const g2=r=>r.rr===1&&!r.rr2&&!r.stBy&&stOf(r)=='open',todo=(S.records||[]).filter(r=>r&&r.mode!='purchase'&&r.imgs&&r.imgs.length&&((r.stGuess&&!r.rr)||g2(r)));if(!todo.length)return;REREAD=1;let done=0,chg=0;
- try{for(let k=0;k<todo.length;k++){const r=todo[k],two=g2(r);if(!S.records.includes(r)||(!r.stGuess&&!two))continue;try{toast('Checking invoice '+(k+1)+' of '+todo.length+'…')}catch(e){}
+ const g2=r=>r.rr===1&&!r.rr2&&!r.stBy&&stOf(r)=='open',g3=r=>r.stBy==='auto'&&!r.rr4&&!r.stGuess,todo=(S.records||[]).filter(r=>r&&r.mode!='purchase'&&r.imgs&&r.imgs.length&&((r.stGuess&&!r.rr)||g2(r)||g3(r)));if(!todo.length)return;REREAD=1;let done=0,chg=0;
+ try{for(let k=0;k<todo.length;k++){const r=todo[k],two=g2(r);if(!S.records.includes(r)||(!r.stGuess&&!two&&!g3(r)))continue;try{toast('Checking invoice '+(k+1)+' of '+todo.length+'…')}catch(e){}
   let t='';try{t=await (readFn||readRecText)(r)}catch(e){}
   if(String(t||'').trim().length<40)continue;
-  if(!S.records.includes(r)||(!r.stGuess&&!(r.rr===1&&!r.stBy)))continue;
+  if(!S.records.includes(r)||(!r.stGuess&&!g3(r)&&!(r.rr===1&&!r.stBy)))continue;
   const v=statusFromText(t);
-  if(two&&v!='closed'){r.rr2=1;r.stWhy='The invoice has no printed total';done++;try{await store()}catch(e){}continue}
-  if(v!=stOf(r))chg++;r.stMan=v;r.status=v;r.rr=1;r.rr2=1;r.stBy='auto';r.stWhy=v=='closed'?'The invoice shows a printed total':'The invoice has no printed total, or only an estimate';delete r.stGuess;done++;
+  if(two&&!g3(r)&&v!='closed'){r.rr2=1;r.stWhy='The invoice has no printed total';done++;try{await store()}catch(e){}continue}
+  if(v!=stOf(r))chg++;r.stMan=v;r.status=v;r.rr=1;r.rr2=1;r.rr4=1;r.stBy='auto';r.stWhy=v=='closed'?'The invoice shows a printed total':'The invoice has no printed total, or only an estimate';delete r.stGuess;done++;
   try{await store()}catch(e){}try{if(S.tab=='saved')renderRecs()}catch(e){}}}
  finally{REREAD=0}
  try{if(done)toast('Checked '+done+' invoice'+(done==1?'':'s')+(chg?' · '+chg+' changed':' · no changes'))}catch(e){}return{done,chg}}
 function putStatus(r,v){v=v=='open'?'open':'closed';r.stMan=v;r.status=v;r.stBy='you';r.stWhy='Set by you';delete r.stGuess}
-const swHtml=(r,fn)=>{const o=stOf(r)=='open';return `<div class="stsw"><span class="${o?'':'on'}">Closed</span><button type="button" class="sw${o?' on':''}" role="switch" aria-checked="${o}" aria-label="Invoice is open" onclick="${fn}"><i></i></button><span class="${o?'on':''}">Open</span></div>`};
+const swHtml=(r,fn)=>{const o=stOf(r)=='open';return `<div class="stsw2" role="group" aria-label="Invoice status"><button type="button" class="stp o${o?' on':''}" aria-pressed="${o}"${o?'':` onclick="${fn}"`}>(Open)</button><button type="button" class="stp c${o?'':' on'}" aria-pressed="${!o}"${o?` onclick="${fn}"`:''}>(Closed)</button></div>`};
 function setStatus(v){const r=S.rec;if(!r)return;putStatus(r,v);render()}
 function flipStatus(i){const r=S.records[i];if(!r||r.mode=='purchase')return;putStatus(r,stOf(r)=='open'?'closed':'open');store();renderRecs();openRec(i);toast(stOf(r)=='open'?'Marked open':'Marked closed')}
 function manual(){dismissRestore();S.rec.loaded=true;render()}
@@ -100,11 +109,12 @@ async function handle(f){if(!f)return;S.rec=newRec();S.pages=[];S.undo=[];S.redo
  else if(/^image\//.test(f.type)){const b=await createImageBitmap(f),sc=Math.min(1,1600/Math.max(b.width,b.height));canvas=document.createElement('canvas');canvas.width=b.width*sc;canvas.height=b.height*sc;canvas.getContext('2d').drawImage(b,0,0,canvas.width,canvas.height)}
  else{return st('Unsupported file. Use PDF, JPG or PNG.')}
  S.img=canvas.toDataURL('image/jpeg',.85);S.dim=[canvas.width,canvas.height];showDoc(S.img);if(text&&pw.length){S.words=pw;drawWords(canvas.width,canvas.height)}
- {const key=S.rec.mode=='purchase'?['merchant','date','extTotal']:['jobDate','client','amount','location','hours'],cnt=t=>{const f=Parser.parse(t||'',S.rec.mode).found;return key.filter(k=>f[k]).length},need=S.rec.mode=='purchase'?Math.min(3,key.length):4;
+ {const key=S.rec.mode=='purchase'?['merchant','date','extTotal']:['jobDate','client','amount','location','hours'],cnt=t=>{const f=Parser.parse(t||'',S.rec.mode).found;return key.filter(k=>f[k]).length},wk=S.rec.mode!='purchase',okB=b=>b&&b.n>=need&&(!wk||hasTot(b.t)),need=S.rec.mode=='purchase'?Math.min(3,key.length):4;
   const ocr=async(c,z)=>{const r=await Promise.race([Tesseract.recognize(c,'eng'),new Promise((_,j)=>setTimeout(()=>j(0),60000))]);return {t:r.data.text,w:(r.data.words||[]).filter(w=>w.text.trim()).map(w=>z>1&&w.bbox?{...w,bbox:{x0:w.bbox.x0/z,y0:w.bbox.y0/z,x1:w.bbox.x1/z,y1:w.bbox.y1/z}}:w),c:r.data.confidence}};
   let best=text?{t:text,w:S.words,c:null,n:cnt(text)}:null;
-  for(const pre of (S.rec.mode=='purchase'?[0,1]:[0,2,1])){if(best&&best.n>=need)break;st('Running OCR on this device (first run downloads language data)…');try{const uz=pre==2?Math.min(2,2800/Math.max(canvas.width,canvas.height)):1,o=await ocr(pre==2?prepUp(canvas):pre?prep(canvas):canvas,uz),n=cnt(o.t);if(!best||n>best.n)best={t:o.t,w:o.w,c:o.c,n}}catch(e){}}
+  for(const pre of (S.rec.mode=='purchase'?[0,1]:[0,2,1])){if(okB(best))break;st('Running OCR on this device (first run downloads language data)…');try{const uz=pre==2?Math.min(2,2800/Math.max(canvas.width,canvas.height)):1,o=await ocr(pre==2?prepUp(canvas):pre?prep(canvas):canvas,uz),n=cnt(o.t);if(!best||n>best.n)best={t:o.t,w:o.w,c:o.c,n}}catch(e){}}
   if(best&&best.t!==text){document.querySelectorAll('.wb').forEach(e=>e.remove());text=best.t;S.words=best.w;S.conf=best.c;drawWords(canvas.width,canvas.height)}
+  if(wk&&canvas&&!hasTot(text)){st('Looking for the invoice total…');try{text=await findTotal(canvas,text)}catch(e){}}
   for(let k=0;k<more.length;k++){st('Reading page '+(k+2)+' of the PDF…');try{const c2=await more[k](),o2=await ocr(c2);text+='\n'+o2.t}catch(e){}}}
  $('#ocr').textContent=text;parse(text);if(S.rec.mode=='purchase'&&canvas){const td=topRightDate(S.words,canvas.width,canvas.height);if(td){S.rec.date=td;S.rec.src.date=1}}lowConf();if(S.rec.mode=='purchase'&&canvas){S.pages=[{id:++PGID,words:S.words,c:canvas,url:S.img,w:canvas.width,h:canvas.height,marks:autoHL(S.words,canvas.width,canvas.height)}];ex.forEach(e=>S.pages.push({id:++PGID,words:e.words,c:e.c,url:e.c.toDataURL('image/jpeg',.85),w:e.c.width,h:e.c.height,marks:autoHL(e.words,e.c.width,e.c.height,seenHL())}));S.pages.forEach(pg=>locate(pg,S.rec.items))}const q=[];if(S.conf!=null&&S.conf<70)q.push('Low scan quality ('+Math.round(S.conf)+'% confidence). Retake in good light if fields look wrong.');if(canvas&&Math.min(canvas.width,canvas.height)<500)q.push('Low-resolution image.');if(S.rec.mode=='purchase'&&/\bhours\b/i.test(text)&&/\brate\b/i.test(text)&&/position|event|crew|technician|labor/i.test(text))q.push('This looks like a work invoice. Tap Work Invoice above and upload again.');st(text.trim()?q.join(' ')||(Object.keys(S.rec.src).length?'':'Text was read but no fields matched. Enter values manually.'):'No text found. Enter values manually.');render();renderPages()
 }catch(e){st('Extraction failed ('+((e&&e.message)||e||'unknown')+'). Enter values manually or try a clearer file.');showOcr();render()}}
@@ -1062,7 +1072,7 @@ window.showLock=function(){S.uid=null;ui('in')};
 async function enter(uid,em,pw,o){
  S.uid=uid;S.email=em;S.pp=pp(em,pw);S.key=await dk(S.pp,o.e);S.records=[];S.learn={m:{},mi:{}};S.noStore=false;
  try{const x=await idb('get');if(x&&x.iv){try{const d=await dec(x);if(Array.isArray(d))S.records=d;else{S.records=d.records||[];S.learn={m:(d.learn&&d.learn.m)||{},mi:(d.learn&&d.learn.mi)||{}}}}catch(e){S.noStore=true;S.records=[]}}}catch(e){}
- try{if(lockStatuses())S.loaded=true,store()}catch(e){}
+ try{const a=lockStatuses(),b=resyncStatuses();if(a||b)S.loaded=true,store()}catch(e){}
  S.loaded=true;try{learnUI()}catch(e){}try{localStorage.setItem(LAST,em)}catch(e){}
  const v=$('#ver');if(v)v.title=em;
  open_();
@@ -1604,7 +1614,7 @@ window.csvGo=async function(){
    const PT_VER='vv200'
    ---------- */
 const PT_BUILD=262;
-const PT_LABEL='v64';
+const PT_LABEL='v65';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
@@ -1772,3 +1782,5 @@ async function cropApply(){if(!CR||!CR.im||!CR.sel)return;const r=S.records[CR.i
 
 (function(){const c=document.createElement('style');c.textContent='.srow .ra{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:0 0 auto}.srow .stb,.stn .stb{display:block;margin:0!important;padding:0!important;font:400 11.5px -apple-system,system-ui,sans-serif!important;font-variant:normal!important;font-style:normal!important;letter-spacing:0!important;color:var(--mut)!important;opacity:.85!important}.srow .stb.cl{opacity:.5!important}';document.head.appendChild(c)})();
 (function(){const c=document.createElement('style');c.textContent='.stw{margin:-4px 0 10px;font-size:12px;color:var(--mut);opacity:.85}';document.head.appendChild(c)})();
+/* v263: Open / Closed look. Written in parentheses (no bullet, no switch): Open in amber, Closed in green, set in small caps. In the invoice window the two words sit side by side and the current one is lit. */
+(function(){const c=document.createElement('style');c.textContent='.srow .stb,.stn .stb{font:600 12.5px/1.2 Georgia,"Times New Roman",serif!important;font-variant:small-caps!important;letter-spacing:.06em!important;opacity:1!important;color:#d9953a!important}.srow .stb.cl{color:#4a9d78!important;opacity:1!important}.stsw2{display:flex;align-items:center;gap:18px}.stsw2 .stp{background:none;border:0;padding:6px 0;margin:0;min-height:36px;cursor:pointer;font:600 16px/1 Georgia,"Times New Roman",serif;font-variant:small-caps;letter-spacing:.06em;color:var(--mut);opacity:.5;border-bottom:2px solid transparent;border-radius:0}.stsw2 .stp.on{opacity:1;cursor:default}.stsw2 .stp.o.on{color:#d9953a;border-bottom-color:#d9953a}.stsw2 .stp.c.on{color:#4a9d78;border-bottom-color:#4a9d78}';document.head.appendChild(c)})();
