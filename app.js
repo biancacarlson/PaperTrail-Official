@@ -12,10 +12,12 @@ function setMode(m){showWork();S.mode=m;S.rec=newRec();S.pages=[];S.undo=[];S.re
 const newRec=()=>({mode:S.mode,items:[],src:{},edited:{},loaded:false,doc:false,employer:S.mode=='freelance'?'AVLancer':''});
 /* Open = the amount may still change. Closed = final. It is worked out from the invoice: a printed TOTAL means closed; an estimated total or no total means open.
    The switch overrides that (r.stMan). An old record explicitly marked closed before this existed keeps that choice. */
-const isEst=r=>!!(r&&(r.estTotal||/invoice is an estimate|estimated total/i.test(String(r.notes||''))));
-const autoSt=r=>r&&N(r.amount)>0&&!isEst(r)?'closed':'open';
-const stOf=r=>!r?'closed':r.stMan=='open'||r.stMan=='closed'?r.stMan:(r.stMan===undefined&&r.status=='closed'?'closed':autoSt(r));
-function putStatus(r,v){v=v=='open'?'open':'closed';if(v==autoSt(r))delete r.stMan;else r.stMan=v;r.status=v}
+const isEst=r=>!!(r&&(r.estTotal||/invoice is an estimate|estimated total|printed total was \$0\.00/i.test(String(r.notes||''))));
+/* v51: Closed needs a real printed total. r.tp=1 means the invoice had a printed total above $0; r.tp=0 means there was none (or $0), so any amount came from adding up line items. Older saved records have no r.tp: they are Closed unless the event hasn't happened yet. */
+const futureEv=r=>{try{const d=workDays(r);if(!d.length)return false;const t=new Date();t.setHours(0,0,0,0);const e=Parser.pd(r.endDate)||d[d.length-1];return +e>+t}catch(x){return false}};
+const autoSt=r=>r&&N(r.amount)>0&&!isEst(r)&&(r.tp===1||(r.tp===undefined&&!futureEv(r)))?'closed':'open';
+const stOf=r=>!r?'closed':r.stMan=='open'||r.stMan=='closed'?r.stMan:(r.status=='open'||r.status=='closed'?r.status:autoSt(r));
+function putStatus(r,v){v=v=='open'?'open':'closed';r.stMan=v;r.status=v}
 const swHtml=(r,fn)=>{const o=stOf(r)=='open';return `<div class="stsw"><span class="${o?'':'on'}">Closed</span><button type="button" class="sw${o?' on':''}" role="switch" aria-checked="${o}" aria-label="Invoice is open" onclick="${fn}"><i></i></button><span class="${o?'on':''}">Open</span></div>`};
 function setStatus(v){const r=S.rec;if(!r)return;putStatus(r,v);render()}
 function flipStatus(i){const r=S.records[i];if(!r||r.mode=='purchase')return;putStatus(r,stOf(r)=='open'?'closed':'open');store();renderRecs();openRec(i);toast(stOf(r)=='open'?'Marked open':'Marked closed')}
@@ -121,7 +123,7 @@ function showDoc(u){showOcr();const v=$('#view');v.style.height='';v.innerHTML='
   ap();if(S.z<=1)fit()};
  if(!window.__dvr){window.__dvr=1;addEventListener('resize',()=>{const l=$('#layer'),w=$('#view');if(l&&w&&S.z<=1&&l.offsetHeight)w.style.height=l.offsetHeight+'px'})}}
 /* ---------- parsing (deterministic) ---------- */
-function parse(t){const r=S.rec,o=Parser.parse(t,r.mode);delete r.estTotal;Object.assign(r,o.fields);r.src=Object.assign(r.src,o.found);if(r.mode!='purchase'&&o.shifts&&o.shifts.length)r.shifts=o.shifts;if(r.mode=='purchase'){r.items=o.items;if(o.guess)r.gname=o.guess;ensureItem(r)}applyLearned(r)}
+function parse(t){const r=S.rec,o=Parser.parse(t,r.mode);delete r.estTotal;delete r.tp;Object.assign(r,o.fields);if(r.mode!='purchase')r.tp=r.tp?1:0;r.src=Object.assign(r.src,o.found);if(r.mode!='purchase'&&o.shifts&&o.shifts.length)r.shifts=o.shifts;if(r.mode=='purchase'){r.items=o.items;if(o.guess)r.gname=o.guess;ensureItem(r)}applyLearned(r)}
 /* Only a subtotal was readable (no per-item lines): keep the totals reconcilable with one clearly-flagged combined line. */
 function ensureItem(r){if(r.mode=='purchase'&&!r.items.length&&N(r.extSub)>0)r.items.push({n:r.gname||'',q:1,p:N(r.extSub),guess:1,ext:1})}
 /* ---------- form ---------- */
@@ -392,11 +394,9 @@ function renderRecs(){persist();try{dupWarn()}catch(e){}const nb=$('#m3');if(nb)
  const cats=[...CATS.filter(c=>cnt[c]),...Object.keys(cnt).filter(c=>!CATS.includes(c)&&c!='Uncategorized'),...(cnt.Uncategorized?['Uncategorized']:[])];
  if(S.sv.cat!='All'&&!cnt[S.sv.cat])S.sv.cat='All';
  const nOpen=S.records.filter(r=>r.mode!='purchase'&&stOf(r)=='open').length,nWork=S.records.filter(r=>r.mode!='purchase').length,nCl=nWork-nOpen;if(!nWork&&S.sv.st!='All')S.sv.st='All';
+const chipsH=(x&&cats.length>1?'<div class="chips"><button class="'+(S.sv.cat=='All'?'on':'')+'" onclick="svCat(\'All\')">All</button>'+cats.map(c=>'<button class="'+(S.sv.cat==c?'on':'')+'" onclick="svCat(\''+c+'\')">'+c+'</button>').join('')+'</div>':'')+(!x&&nWork?'<div class="chips">'+[['All','All'],['open','Open ('+nOpen+')'],['closed','Closed ('+nCl+')']].map(([v,l])=>'<button data-k="'+v+'" class="'+((S.sv.st||'All')==v?'on':'')+'" onclick="svSt(\''+v+'\')">'+l+'</button>').join('')+'</div>':'');
  el.innerHTML='<div class="sv">'+svSeg()
- +'<div class="svq"><div class="svs"><input id="svq" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Merchant, client or receipt #" aria-label="Search saved records" value="'+esc(S.sv.q)+'" oninput="svFind(this.value)"><button id="svclr" type="button" onclick="svClear()" aria-label="Clear search" style="'+(S.sv.q?'':'display:none')+'">✕</button></div>'+sortCtl(x)+'</div>'
- +(x&&cats.length>1?'<div class="chips"><button class="'+(S.sv.cat=='All'?'on':'')+'" onclick="svCat(\'All\')">All</button>'+cats.map(c=>'<button class="'+(S.sv.cat==c?'on':'')+'" onclick="svCat(\''+c+'\')">'+c+'</button>').join('')+'</div>':'')
- 
- +(!x&&nWork?'<div class="chips">'+[['All','All'],['open','Open ('+nOpen+')'],['closed','Closed ('+nCl+')']].map(([v,l])=>'<button class="'+((S.sv.st||'All')==v?'on':'')+'" onclick="svSt(\''+v+'\')">'+l+'</button>').join('')+'</div>':'')
+ +'<div class="svq svrow"><div class="svs"><input id="svq" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Merchant, client or receipt #" aria-label="Search saved records" value="'+esc(S.sv.q)+'" oninput="svFind(this.value)"><button id="svclr" type="button" onclick="svClear()" aria-label="Clear search" style="'+(S.sv.q?'':'display:none')+'">✕</button></div>'+chipsH+sortCtl(x)+'</div>'
  +'<div id="svbody" class="sv">'+svBody()+'</div></div>'}
 
 function dl(f){const r=S.rec,o=compute(r);let d,n='record.'+f;if(f=='json')d=JSON.stringify({...r,calculated:o},null,1);else{const rows=r.mode=='purchase'?[['Item','Qty','Unit','Total'],...r.items.filter(i=>!i.off).map(i=>[i.n,i.q,i.p,i.t]),['Subtotal','','',o.sub],...(o.disc?[['Discount','','',-o.disc]]:[]),['Tax','','',N(r.tax)==null?'':o.tax],['Total','','',o.total]]:[['Field','Value'],...text(r).filter(l=>l.includes(': ')).map(l=>l.split(/: (.*)/s).slice(0,2))];d=rows.map(x=>x.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(',')).join('\n')}
@@ -875,7 +875,7 @@ function applyLearned(r){if(!r)return;r.fix=r.fix||{};
  else fillMiles(r)}
 /* a field was finished (the change event fires when you leave it, so nothing is learned from half-typed text) */
 function fldDone(k){const r=S.rec;if(!r||!r.loaded)return;
- if(k=='amount'&&r.mode!='purchase'){delete r.estTotal;render();return}
+ if(k=='amount'&&r.mode!='purchase'){delete r.estTotal;r.tp=N(r.amount)>0?1:0;render();return}
  if(k=='location'&&r.mode!='purchase'){if(fillMiles(r)){const e=$('#f_roundTrip');if(e){e.value=r.roundTrip??'';e.classList.toggle('ext',String(r.roundTrip??'').trim()!=='')}paintFix('roundTrip');calc()}}
  if(k=='merchant'||k=='roundTrip')learnRec(r)}
 function fixText(k){const r=S.rec;if(!r||!r.fix||!r.fix[k]||(r.edited&&r.edited[k]))return'';
@@ -1000,7 +1000,7 @@ const unhex=h=>new Uint8Array(h.match(/../g).map(x=>parseInt(x,16)));
 const uidOf=async em=>hex(await crypto.subtle.digest('SHA-256',new TextEncoder().encode('papertrail:'+em))).slice(0,24);
 /* email is mixed into the passphrase so the same password on two accounts still gives two different keys */
 const pp=(em,pw)=>em+'\u0000'+pw;
-const msg=t=>{const m=$('#lm');if(m)m.textContent=t||''};
+const msg=(t,ok)=>{const m=$('#lm');if(m){m.textContent=t||'';m.style.color=ok?'#35a56f':''}};
 const esc=v=>String(v||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
 
 function ui(tab){
@@ -1052,19 +1052,18 @@ const setAcct=(uid,o)=>localStorage.setItem(AK+uid,JSON.stringify(o));
 function sheetText(code){return 'PaperTrail recovery sheet\n\nAccount email: '+(S.email||'')+'\nRecovery code: '+code+'\nCreated: '+new Date().toLocaleDateString()+'\n\nWhat this is: a spare key. If you forget your PaperTrail password, this code lets you set a new one without losing your saved records.\n\nHow to use it: on the PaperTrail sign-in screen tap "Forgot password?", then enter your email, this code and a new password.\n\nKeep this private. Anyone who has this code and your phone can reset your password.\n'}
 function showCode(code,next,title){
  const B='style="flex:1;min-width:0"';
- lockUI('<h2>'+title+'</h2>'
- +'<p style="margin:0 0 10px;font-size:15px;line-height:1.5"><b>Think of this as a spare key.</b> Your invoices are locked with your password, and nothing ever leaves this phone, so PaperTrail cannot reset the password for you. If you forget it, this code lets you set a new one and keep everything.</p>'
+ lockUI('<h2 style="margin-top:0">'+title+'</h2>'
+ +'<p style="margin:0 0 10px;font-size:15px;line-height:1.5"><b>This recovery code is your one spare key.</b> Access to all invoices is password-protected. If you forget the password, you\u2019ll need this code to create a new one. Store it somewhere safe.</p>'
  +'<div style="font:600 18px var(--mono);letter-spacing:.04em;background:var(--card);border:1px solid var(--ln);border-radius:12px;padding:16px 10px;text-align:center;user-select:all;-webkit-user-select:all;word-break:break-all">'+code+'</div>'
- +'<p style="margin:14px 0 6px;font-size:14px;font-weight:600">Step 1: save it somewhere outside this app</p>'
- +'<div style="display:flex;gap:8px"><button type="button" '+B+' onclick="authSaveFile()">Save as file</button><button type="button" '+B+' onclick="authEmail()">Email to myself</button><button type="button" '+B+' onclick="authCopy()">Copy</button></div>'
- +'<p style="margin:6px 0 0;font-size:12.5px;line-height:1.4;color:var(--mut)">Save as file lets you pick Files or Notes. A screenshot or a photo of this screen works too.</p>'
- +'<p style="margin:14px 0 6px;font-size:14px;font-weight:600">Step 2: type it here to check you saved it correctly</p>'
+ +'<p style="margin:14px 0 6px;font-size:14px;font-weight:600">Step 1: Save your recovery code outside this app</p>'
+ +'<div style="display:flex;gap:8px"><button type="button" '+B+' onclick="authSaveFile()">Save as file</button><button type="button" '+B+' onclick="authEmail()">Email</button><button type="button" '+B+' onclick="authCopy()">Copy</button></div>'
+ +'<p style="margin:14px 0 6px;font-size:14px;font-weight:600">Step 2: Paste it here to confirm you copied it correctly</p>'
  +'<input id="rcheck" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX" style="font-family:var(--mono)">'
  +'<button class="pri" type="button" onclick="authCodeDone()" style="margin-top:6px">Continue</button><div id="lm" class="msg" style="margin-top:10px"></div>');
  window.__rc=code;
  window.authCodeDone=()=>{if(cn($('#rcheck').value)!==cn(code))return msg('That does not match yet. Compare it with the code above, or paste what you saved.');window.__rc=null;next()};
 }
-window.authCopy=async function(){try{await navigator.clipboard.writeText(window.__rc);msg('Copied. Paste it into Notes or a password manager.')}catch(e){try{const r=document.createRange();r.selectNodeContents($('#lock div[style*="mono"]'));const g=getSelection();g.removeAllRanges();g.addRange(r);msg('Selected. Tap Copy in the menu that appears.')}catch(x){msg('Press and hold the code to copy it.')}}};
+window.authCopy=async function(){try{await navigator.clipboard.writeText(window.__rc);msg('Copied successfully. Paste in a safe place',1)}catch(e){try{const r=document.createRange();r.selectNodeContents($('#lock div[style*="mono"]'));const g=getSelection();g.removeAllRanges();g.addRange(r);msg('Selected. Tap Copy in the menu that appears.')}catch(x){msg('Press and hold the code to copy it.')}}};
 window.authSaveFile=async function(){const t=sheetText(window.__rc),f=new File([t],'PaperTrail recovery sheet.txt',{type:'text/plain'});
  try{if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f]});return}}catch(e){if(e&&e.name=='AbortError')return}
  try{const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=f.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);msg('Saved to your downloads.')}catch(e){msg('Could not save a file here. Use Copy instead.')}};
@@ -1084,8 +1083,7 @@ function extras(){
  if(d&&!$('#rcbtn')){
   const mk=(id,txt,fn)=>{const b=document.createElement('button');b.id=id;b.type='button';b.textContent=txt;b.onclick=fn;d.appendChild(b)};
   mk('rcbtn','Create a new recovery code',()=>window.authMakeCode());
-  mk('pwbtn','Update password',()=>window.authChangePw());
-  mk('hintbtn','Update password hint',()=>window.authChangeHint());
+  mk('pwbtn','Password & hint',()=>window.authPwHint());
   mk('bkbtn','Download backup',()=>window.authBackup());
   tidySettings(d);
  }
@@ -1138,6 +1136,51 @@ window.authHint=async function(){
  const em=norm(($('#em')||{}).value);if(!em)return msg('Enter your email first.');
  const o=getAcct(await uidOf(em));
  msg(o?(o.hint?'Hint: '+o.hint:'No hint was set for this account. Tap Forgot password? to use your recovery code.'):'No account for this email on this device.');
+};
+/* v53: one "Password & hint" dialog (replaces the separate Update password / Update password hint buttons). Leave the password boxes empty to change only the hint. */
+window.authPwHint=function(){
+ const o=S.uid&&getAcct(S.uid);if(!o||!S.pp)return;
+ const old=document.getElementById('pwov');if(old)old.remove();
+ const ov=document.createElement('div');ov.id='pwov';ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto';
+ const LB='style="margin:10px 0 2px;font-size:13px;font-weight:600;color:var(--mut)"';
+ ov.innerHTML='<div style="background:var(--card,#fff);color:var(--fg,#111);border-radius:16px;padding:18px;width:100%;max-width:380px;box-shadow:0 10px 40px rgba(0,0,0,.3)"><h2 style="margin:0 0 4px">Password &amp; hint</h2>'
+  +'<div '+LB+'>Change password</div>'
+  +'<input id="cp0" type="password" autocomplete="current-password" placeholder="Current password">'
+  +'<input id="cp1" type="password" autocomplete="new-password" placeholder="New password (8+ characters)">'
+  +'<input id="cp2" type="password" autocomplete="new-password" placeholder="Confirm new password">'
+  +'<div '+LB+'>Password hint</div>'
+  +'<input id="hn1" type="text" maxlength="100" autocomplete="off" spellcheck="false" placeholder="Password hint (optional)" value="'+esc(o.hint||'')+'">'
+  +'<div id="cpm" style="color:#b3261e;min-height:20px;font-size:14px;margin:6px 0"></div>'
+  +'<div style="display:flex;gap:8px"><button type="button" id="cpx">Cancel</button><button type="button" class="pri" id="cps">Save</button></div></div>';
+ document.body.appendChild(ov);
+ const g=i=>document.getElementById(i),m=t=>{g('cpm').textContent=t||''};
+ g('cpx').onclick=()=>ov.remove();
+ g('cps').onclick=async()=>{const a=g('cp0').value,b=g('cp1').value,c=g('cp2').value,h=g('hn1').value.trim(),chg=!!(a||b||c),hintChg=h!==String(o.hint||'');
+  if(!chg&&!hintChg){ov.remove();return}
+  if(chg){
+   if(S.noStore)return m('Your saved records could not be opened, so the password cannot be changed safely.');
+   if(!a||!b||!c)return m('Fill in all three password boxes, or leave them empty to change only the hint.');
+   if(b.length<8)return m('New password needs 8 or more characters.');
+   if(b!==c)return m('The new passwords do not match.');
+   if(b===a)return m('Choose a different password.');
+  }
+  const pw=chg?b:S.pp.split('\u0000').slice(1).join('\u0000');
+  if(h&&pw&&h.toLowerCase().includes(pw.toLowerCase()))return m('The hint can not contain your password.');
+  if(!chg){const cur=getAcct(S.uid);if(!cur){ov.remove();return}
+   if(h)cur.hint=h;else delete cur.hint;
+   setAcct(S.uid,cur);ov.remove();
+   try{window.bkChanged&&window.bkChanged()}catch(e){}
+   try{toast(h?'Hint saved':'Hint removed')}catch(e){}return}
+  const btn=g('cps');btn.disabled=true;
+  try{
+   if(await hash(pp(S.email,a),unhex(o.s))!==o.h){btn.disabled=false;return m('Current password is not right.')}
+   const np=pp(S.email,b),salt=rnd(16),n={s:salt,h:await hash(np,unhex(salt)),e:rnd(16),...(h?{hint:h}:{})},nk=await dk(np,n.e),
+    iv=crypto.getRandomValues(new Uint8Array(12)),ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},nk,new TextEncoder().encode(JSON.stringify(learnPack())));
+   await idb('put',{iv,c:ct});setAcct(S.uid,n);S.pp=np;S.key=nk;
+   let code=null;if(o.rw){code=newCode();n.rw=await wrap(code,np);setAcct(S.uid,n)}
+   ov.remove();try{window.bkChanged&&window.bkChanged()}catch(e){}
+   if(code)showCode(code,()=>{open_();extras()},'Password changed. Save your new recovery code');else{try{toast('Password changed')}catch(e){}extras()}
+  }catch(e){btn.disabled=false;m('Could not change the password. Nothing was changed.')}}
 };
 /* change (or remove) the hint while signed in, same place as Change password */
 window.authChangeHint=function(){
@@ -1524,8 +1567,8 @@ window.csvGo=async function(){
    const PT_VER='v200'
    const PT_VER='vv200'
    ---------- */
-const PT_BUILD=248;
-const PT_LABEL='v50';
+const PT_BUILD=252;
+const PT_LABEL='v54';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
@@ -1689,4 +1732,4 @@ async function cropApply(){if(!CR||!CR.im||!CR.sel)return;const r=S.records[CR.i
 (function(){const st=document.createElement('style');st.textContent='.cmo{position:fixed;inset:0;z-index:10000;background:#000;display:flex;flex-direction:column;padding:max(10px,env(safe-area-inset-top)) 12px max(10px,env(safe-area-inset-bottom))}.cmh{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0 10px}.cmh span{font-size:13px;color:var(--mut)}.cmw{flex:1;display:flex;align-items:center;justify-content:center;min-height:0}.cmb{position:relative;padding:18px;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;box-sizing:content-box}.cmb img{display:block;pointer-events:none}.cms{position:absolute;border:2px solid #fff;box-sizing:border-box;box-shadow:0 0 0 9999px rgba(0,0,0,.6);touch-action:none;cursor:move}.cms i{position:absolute;width:40px;height:40px;margin:-20px 0 0 -20px;touch-action:none}.cms i::after{content:"";position:absolute;left:50%;top:50%;width:14px;height:14px;margin:-7px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.4)}.cms i[data-h=nw]{left:0;top:0}.cms i[data-h=n]{left:50%;top:0}.cms i[data-h=ne]{left:100%;top:0}.cms i[data-h=e]{left:100%;top:50%}.cms i[data-h=se]{left:100%;top:100%}.cms i[data-h=s]{left:50%;top:100%}.cms i[data-h=sw]{left:0;top:100%}.cms i[data-h=w]{left:0;top:50%}.cmf{display:flex;gap:10px;padding:10px 0}.cmf button{flex:1}';document.head.appendChild(st)})();
 
 /* v48: Open / Closed invoice status (badge, toggle, filter chip) */
-(function(){const c=document.createElement('style');c.textContent='.stb{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;font-size:11.5px;font-weight:700;letter-spacing:.02em;vertical-align:1px;background:rgba(217,154,78,.18);color:#d99a4e;border:1px solid rgba(217,154,78,.4)}'+'.stn{display:flex;align-items:center;gap:8px;margin:0 0 10px;padding:9px 12px;border-radius:12px;font-size:13px;color:var(--mut);background:rgba(217,154,78,.1);border:1px solid rgba(217,154,78,.3)}.stn .stb{margin:0;flex:0 0 auto}'+'.stb.cl{background:rgba(46,125,90,.14);color:#2e7d5a;border-color:rgba(46,125,90,.4)}.stn.cl{background:rgba(46,125,90,.08);border-color:rgba(46,125,90,.3)}.stn .stsw{flex:0 0 auto}'+'.stsw{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600;color:var(--mut)}.stsw .on{color:var(--fg)}.sw{position:relative;width:52px;height:30px;padding:0;border-radius:999px;border:1px solid rgba(0,0,0,.15);background:#2e7d5a;cursor:pointer;flex:0 0 auto;transition:background .2s}.sw.on{background:#d99a4e}.sw i{position:absolute;top:2px;left:2px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.35);transition:transform .2s}.sw.on i{transform:translateX(22px)}';document.head.appendChild(c)})();
+(function(){const c=document.createElement('style');c.textContent='.stb{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;font-size:11.5px;font-weight:700;letter-spacing:.02em;vertical-align:1px;background:rgba(214,69,69,.18);color:#e0544f;border:1px solid rgba(214,69,69,.4)}'+'.stn{display:flex;align-items:center;gap:8px;margin:0 0 10px;padding:9px 12px;border-radius:12px;font-size:13px;color:var(--mut);background:rgba(214,69,69,.1);border:1px solid rgba(214,69,69,.3)}.stn .stb{margin:0;flex:0 0 auto}'+'.stb.cl{background:rgba(46,125,90,.14);color:#2e7d5a;border-color:rgba(46,125,90,.4)}.stn.cl{background:rgba(46,125,90,.08);border-color:rgba(46,125,90,.3)}.stn .stsw{flex:0 0 auto}'+'.stsw{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600;color:var(--mut)}.stsw .on{color:var(--fg)}.sw{position:relative;width:52px;height:30px;padding:0;border-radius:999px;border:1px solid rgba(0,0,0,.15);background:#2e7d5a;cursor:pointer;flex:0 0 auto;transition:background .2s}.sw.on{background:#e0544f}.sw i{position:absolute;top:2px;left:2px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.35);transition:transform .2s}.sw.on i{transform:translateX(22px)}';document.head.appendChild(c)})();

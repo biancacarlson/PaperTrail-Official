@@ -1,7 +1,7 @@
 'use strict';
 /* self-update (V must match the ?v= number in index.html): the iPhone Home Screen app keeps its own cached copy of the page and ignores no-cache hints. On launch, ask the server (bypassing the cache) which version is current;
    if it is newer than this file, re-download every file once and reload. Runs from parser.js so even an old cached index.html picks it up. Once per session, so it can never loop. */
-(function(){var V=248;try{if(typeof window==='undefined'||!window.fetch||!navigator.onLine||sessionStorage.getItem('pt_upd'))return;
+(function(){var V=252;try{if(typeof window==='undefined'||!window.fetch||!navigator.onLine||sessionStorage.getItem('pt_upd'))return;
  fetch('index.html',{cache:'reload'}).then(function(r){return r.text()}).then(function(h){var m=h.match(/parser\.js\?v=(\d+)/);if(!m||+m[1]<=V)return;
   try{sessionStorage.setItem('pt_upd','1')}catch(e){}
   return Promise.all(['parser.js','scan.js','app.js'].map(function(f){return fetch(f+'?v='+m[1],{cache:'reload'})})).then(function(){location.reload()})}).catch(function(){})}catch(e){}})();
@@ -385,7 +385,7 @@ function parse1(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(
   set('hours',tot!=null&&!isNaN(+tot)?tot:hrs.length?String(hrs.reduce((a,b)=>a+b,0)):null);
   const ot=text.match(/\b(?:overtime|OT)\b\D{0,12}(\d+(?:\.\d+)?)/i);if(ot){F.notes='Overtime hours mentioned: '+ot[1]+' (verify).';found.notes=1}
   let amt=null;for(const re of [/amount paid|total paid|total pay|net pay|gross pay/i,/amount due|total due/i,/(?<!sub)\btotal\b/i]){for(const raw of L){const l=fix(raw);if(!re.test(l)||/\btax\b|\brate\b|hours|hrs|subt?\s?-?tota[l1jy|\]]/i.test(l.replace(re,'')))continue;const a=[...l.matchAll(/\$?\s?(\d[\d,]*\.\d{2})\b/g)];if(a.length){amt=a[a.length-1][1].replace(/,/g,'');if(/\best(?:imated|\.)?\s*(?:total|amount|pay)/i.test(l))F.estTotal=1}}if(amt)break}
-  set('amount',amt)}
+  set('amount',amt);if(amt&&+String(amt).replace(/,/g,'')>0)F.tp=1}
   if(mode!=='purchase'){
    const sd=ev('start'),ed=ev('end');if(sd)set('jobDate',sd);if(ed)set('endDate',ed);
    if(!sd||!ed){const l=L.find(l=>/\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\s+\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\s*$/.test(l));if(l){const d=l.match(/(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})\s+(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})\s*$/);if(!sd)set('jobDate',d[1]);if(!ed)set('endDate',d[2])}}
@@ -400,7 +400,7 @@ function parse1(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(
    const nv=re=>{for(const raw of L){const m=fix(raw).match(re);if(m)return m}return null};
    {const m=nv(/^(?:(round[\s-]*trip|one[\s-]*way)(?:\s*(?:miles?|mileage|distance))?|mileage|miles|distance)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(?:mi\b|miles?\b)?(.*)$/i);if(m){let v=+m[2];if(/one/i.test(m[1]||'')||/one[\s-]*way/i.test(m[3]||''))v=v*2;set('roundTrip',String(+v.toFixed(2)))}}
    if(drow.length){const r=drow.map(l=>l.match(tri)),h=r.reduce((a,m)=>a+ +m[1],0),amt=r.reduce((a,m)=>a+ +m[3].replace(/,/g,''),0),low=Math.min(...r.map(m=>+m[2].replace(/,/g,'')));
-    set('hours',String(h));if(!found.amount||(!(+String(F.amount).replace(/,/g,'')>0)&&amt>0))set('amount',amt.toFixed(2));
+    set('hours',String(h));if(!found.amount||(!(+String(F.amount).replace(/,/g,'')>0)&&amt>0)){set('amount',amt.toFixed(2));delete F.tp;F.estTotal=1}
     const ot=L.filter(l=>!/^\d{1,2}\/\d{1,2}\/\d{2,4}/.test(l)&&tri.test(l)).map(l=>l.match(tri)).filter(m=>+m[2].replace(/,/g,'')>low+.01).reduce((a,m)=>a+ +m[1],0);
     const sub=L.filter(l=>!/^\d{1,2}\/\d{1,2}\/\d{2,4}/.test(l)&&tri.test(l)).map(l=>l.match(tri)),money=v=>'$'+(+v.replace(/,/g,'')).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
     if(ot){set('overtime',String(ot));set('hours',String(+(h-ot).toFixed(2)));delete F.notes;delete found.notes;
@@ -410,7 +410,7 @@ function parse1(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(
   if(tr2.length){const reg=tr2.filter(r=>!r.ot),ot2=tr2.filter(r=>r.ot),sm=(a,k)=>+a.reduce((t,r)=>t+r[k],0).toFixed(2);
    if(reg.length)set('hours',String(sm(reg,'h')));if(ot2.length)set('overtime',String(sm(ot2,'h')));
    const sum=sm(tr2,'a'),zero=found.amount&&!(+String(F.amount).replace(/,/g,'')>0);
-   if(!found.amount||(zero&&sum>0))set('amount',sum.toFixed(2));
+   if(!found.amount||(zero&&sum>0)){set('amount',sum.toFixed(2));delete F.tp;F.estTotal=1}
    if(/\bestimate\b/i.test(text)&&/\best\.?\s*\$?\d/i.test(text)&&!F.notes)set('notes','Invoice is an estimate ("est."): hours and pay may change when final.');
    if(zero&&sum>0)F.notes=(F.notes?F.notes+' ':'')+'Printed total was $0.00, so the amount is the sum of the line items.'}}
  var shifts=[];

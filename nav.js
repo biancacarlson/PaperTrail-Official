@@ -51,6 +51,18 @@ const css=`
 #topbar .tbsw.open .tbx{display:inline-block}
 #savedview .svs{display:none}
 #savedview .svq{justify-content:flex-end}
+/* v52: calmer Saved header: flat underline tabs, filters + sort share one row */
+#savedview .seg{background:transparent!important;border:0!important;border-radius:0!important;padding:0!important;gap:0;border-bottom:1px solid var(--hair,var(--ln))!important;margin:0 0 2px!important}
+#savedview .seg button{background:transparent!important;border:0!important;border-bottom:2px solid transparent!important;border-radius:0!important;box-shadow:none!important;color:var(--mut);font-weight:500;padding:10px 4px!important;margin-bottom:-1px}
+#savedview .seg button.on{color:var(--gd);border-bottom-color:var(--gd)!important;font-weight:600}
+#savedview .svrow{display:flex;align-items:center;gap:10px}
+#savedview .svrow .chips{flex:1 1 auto;min-width:0}
+#savedview .svrow .svsb{padding:5px 12px;border-radius:999px;background:transparent;font-weight:500;color:var(--mut)}
+#savedview .svrow .svsb span{color:var(--fg)}
+#savedview .chips button{border-color:transparent!important;background:rgba(255,255,255,.05)!important;color:var(--mut)}
+#savedview .chips button.on{background:#1b1d20!important;color:var(--fg)!important;border-color:var(--hair,#2a2d31)!important}
+#savedview .chips button[data-k=open].on{color:#e0544f!important;border-color:rgba(224,84,79,.45)!important;background:rgba(214,69,69,.12)!important}
+#savedview .chips button[data-k=closed].on{color:#35a56f!important;border-color:rgba(53,165,111,.45)!important;background:rgba(46,125,90,.14)!important}
 @media(max-width:900px){
  #topbar .tbsw{margin-left:auto}
  #topbar .tbsw.open{position:absolute;left:14px;right:14px;top:max(8px,env(safe-area-inset-top));margin:0;z-index:2;background:#0b0d0f;height:36px}
@@ -153,7 +165,7 @@ const brand=side.querySelector('.brand'),nav=side.querySelector('.nav');
 if(brand)inner.appendChild(brand);
 if(nav)inner.appendChild(nav);
 const mts=document.createElement('div');mts.className='mts';
-[['data','Data'],['acct','Account']].forEach(([k,l])=>{
+[['data','Data'],['acct','Settings']].forEach(([k,l])=>{
  const b=document.createElement('button');b.type='button';b.className='mt';b.setAttribute('aria-haspopup','menu');b.setAttribute('aria-expanded','false');
  b.innerHTML=l+'<i aria-hidden="true"></i>';b.onclick=e=>window.ptMenu(e,k);mts.appendChild(b)});
 inner.appendChild(mts);bar.appendChild(inner);shell.insertBefore(bar,shell.firstChild);
@@ -201,8 +213,7 @@ const installable=()=>{try{return !!(window.installGuide&&window.installGuide(fa
 const MENUS={
  acct:()=>[
   {head:S.email||''},
-  {t:'Update password',f:()=>window.authChangePw()},
-  {t:'Update password hint',f:()=>window.authChangeHint()},
+  {t:'Password & hint',f:()=>window.authPwHint()},
   {t:'Create a new recovery code',f:()=>window.authMakeCode()},
   {idle:true},
   ...(installable()?[{t:'Add to Home Screen',f:homeScreen}]:[]),
@@ -210,7 +221,7 @@ const MENUS={
   {t:'Log out',f:()=>lockNow()}],
  data:()=>[
   ...(S.records&&S.records.length?[
-   {t:'Copy records',sub:'The list you are viewing in Saved',f:()=>{if(S.tab!='saved')showSaved();svCopy()}},
+   {t:'Copy records',f:()=>{if(S.tab!='saved')showSaved();svCopy()}},
    {t:'Export CSV\u2026',f:()=>{if(S.tab!='saved')showSaved();csvOpen()}},
    {hr:1}]:[]),
   {t:'Download backup',sub:bkText(),f:()=>window.authBackup()},
