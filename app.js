@@ -18,7 +18,25 @@ const futureEv=r=>{try{const d=workDays(r);if(!d.length)return false;const t=new
 /* v58: Closed ONLY with a printed total above $0 on the uploaded invoice. A passed date never closes it; records saved before r.tp existed stay Open until marked Closed. */
 const autoSt=r=>r&&N(r.amount)>0&&!isEst(r)&&r.tp===1?'closed':'open';
 const stOf=r=>!r?'closed':r.stMan=='open'||r.stMan=='closed'?r.stMan:(r.status=='open'?'open':autoSt(r));
-function putStatus(r,v){v=v=='open'?'open':'closed';r.stMan=v;r.status=v}
+/* v62: statuses are locked in. The first time a work invoice is seen without a saved status it gets one and it is stored on the record, so an update can no longer change it. New invoices: from the printed total. Records saved before the printed-total flag existed (no r.tp) only get a temporary guess (r.stGuess); rereadStatuses() then reads their attached invoice once and sets the real status. Only the switch, Replace invoice or that one re-read changes a locked status. */
+function lockStatuses(){let n=0;(S.records||[]).forEach(r=>{if(!r||r.mode=='purchase'||r.stMan=='open'||r.stMan=='closed')return;let v;if(r.status=='open')v='open';else if(r.tp===undefined){v=N(r.amount)>0&&!isEst(r)&&!futureEv(r)?'closed':'open';if(!r.rr)r.stGuess=1}else v=autoSt(r);r.stMan=v;r.status=v;n++});return n}
+/* v62: one-time re-read of older invoices (see lockStatuses). Closed only if the attached invoice itself shows a printed total above $0 that is not an estimate. If the invoice cannot be read now (offline, blank), the guess stays and it is tried again next time. */
+let REREAD=0;
+function imgCanvas(u){return new Promise((ok,no)=>{const im=new Image();im.onload=()=>{const c=document.createElement('canvas');c.width=im.naturalWidth;c.height=im.naturalHeight;c.getContext('2d').drawImage(im,0,0);ok(c)};im.onerror=()=>no(new Error('img'));im.src=u})}
+async function readRecText(r){let t='';for(const g of (r.imgs||[])){if(!g||!g.u)continue;const c=await imgCanvas(g.u);let x='';try{x=(await Promise.race([Tesseract.recognize(c,'eng'),new Promise((_,j)=>setTimeout(()=>j(0),60000))])).data.text||''}catch(e){}
+  if(x.trim().length<60){try{x=(await Promise.race([Tesseract.recognize(prep(c),'eng'),new Promise((_,j)=>setTimeout(()=>j(0),60000))])).data.text||x}catch(e){}}
+  t+=x+'\n'}return t}
+function statusFromText(t){const F=Parser.parse(t,'freelance').fields||{},p={amount:F.amount,tp:F.tp?1:0,estTotal:F.estTotal,notes:F.notes};return autoSt(p)}
+async function rereadStatuses(readFn){if(REREAD)return;const todo=(S.records||[]).filter(r=>r&&r.mode!='purchase'&&r.stGuess&&!r.rr&&r.imgs&&r.imgs.length);if(!todo.length)return;REREAD=1;let done=0,chg=0;
+ try{for(let k=0;k<todo.length;k++){const r=todo[k];if(!S.records.includes(r)||!r.stGuess)continue;try{toast('Checking invoice '+(k+1)+' of '+todo.length+'…')}catch(e){}
+  let t='';try{t=await (readFn||readRecText)(r)}catch(e){}
+  if(String(t||'').trim().length<40)continue;
+  if(!S.records.includes(r)||!r.stGuess)continue;
+  const v=statusFromText(t);if(v!=stOf(r))chg++;r.stMan=v;r.status=v;r.rr=1;delete r.stGuess;done++;
+  try{await store()}catch(e){}try{if(S.tab=='saved')renderRecs()}catch(e){}}}
+ finally{REREAD=0}
+ try{if(done)toast('Checked '+done+' invoice'+(done==1?'':'s')+(chg?' · '+chg+' changed':' · no changes'))}catch(e){}return{done,chg}}
+function putStatus(r,v){v=v=='open'?'open':'closed';r.stMan=v;r.status=v;delete r.stGuess}
 const swHtml=(r,fn)=>{const o=stOf(r)=='open';return `<div class="stsw"><span class="${o?'':'on'}">Closed</span><button type="button" class="sw${o?' on':''}" role="switch" aria-checked="${o}" aria-label="Invoice is open" onclick="${fn}"><i></i></button><span class="${o?'on':''}">Open</span></div>`};
 function setStatus(v){const r=S.rec;if(!r)return;putStatus(r,v);render()}
 function flipStatus(i){const r=S.records[i];if(!r||r.mode=='purchase')return;putStatus(r,stOf(r)=='open'?'closed':'open');store();renderRecs();openRec(i);toast(stOf(r)=='open'?'Marked open':'Marked closed')}
@@ -417,7 +435,7 @@ async function dk(p,e){const k=await crypto.subtle.importKey('raw',new TextEncod
 async function dec(x){return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:x.iv},S.key,x.c)))}
 let pt;function persist(){}
 /* saved records (text fields only, never the images) are encrypted with the passcode-derived key and kept on this device */
-async function store(){if(!S.key||!S.loaded||S.noStore)return;try{const iv=crypto.getRandomValues(new Uint8Array(12)),c=await crypto.subtle.encrypt({name:'AES-GCM',iv},S.key,new TextEncoder().encode(JSON.stringify(learnPack())));await idb('put',{iv,c});window.bkChanged&&window.bkChanged()}catch(e){}}
+async function store(){if(!S.key||!S.loaded||S.noStore)return;try{lockStatuses()}catch(e){}try{const iv=crypto.getRandomValues(new Uint8Array(12)),c=await crypto.subtle.encrypt({name:'AES-GCM',iv},S.key,new TextEncoder().encode(JSON.stringify(learnPack())));await idb('put',{iv,c});window.bkChanged&&window.bkChanged()}catch(e){}}
 async function flush(){}
 async function nuke(){if(!confirm('Delete every saved record from this phone and clear the screen? Your passcode stays.'))return;try{await idb('del')}catch(e){}S.noStore=false;wipe();st('Saved data deleted.');window.bkRefresh&&window.bkRefresh()}
 
@@ -1040,10 +1058,12 @@ window.showLock=function(){S.uid=null;ui('in')};
 async function enter(uid,em,pw,o){
  S.uid=uid;S.email=em;S.pp=pp(em,pw);S.key=await dk(S.pp,o.e);S.records=[];S.learn={m:{},mi:{}};S.noStore=false;
  try{const x=await idb('get');if(x&&x.iv){try{const d=await dec(x);if(Array.isArray(d))S.records=d;else{S.records=d.records||[];S.learn={m:(d.learn&&d.learn.m)||{},mi:(d.learn&&d.learn.mi)||{}}}}catch(e){S.noStore=true;S.records=[]}}}catch(e){}
+ try{if(lockStatuses())S.loaded=true,store()}catch(e){}
  S.loaded=true;try{learnUI()}catch(e){}try{localStorage.setItem(LAST,em)}catch(e){}
  const v=$('#ver');if(v)v.title=em;
  open_();
  try{renderRecs();if(S.noStore)st('Saved records could not be opened.')}catch(e){}
+ setTimeout(()=>{try{if(typeof Tesseract!='undefined')rereadStatuses()}catch(e){}},3000);
  extras();
 }
 
@@ -1579,8 +1599,8 @@ window.csvGo=async function(){
    const PT_VER='v200'
    const PT_VER='vv200'
    ---------- */
-const PT_BUILD=257;
-const PT_LABEL='v59';
+const PT_BUILD=260;
+const PT_LABEL='v62';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
