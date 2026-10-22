@@ -294,7 +294,7 @@ function fallbackItem(L,F){if(!(F.extSub>0))return null;
   cand=si>=0?L.slice(si+1,si+4).find(l=>/[A-Za-z]{3}/.test(l)&&plain(l)&&!PRICE.test(fix(l))&&!NOTNAME.test(l)&&!SUMLBL.test(l)&&!/uant|antit|price|iscount|otal|^\W*sales/i.test(l)&&l.length<=40):null,
   nm=cand?cleanName(cand.replace(/^[^A-Za-z0-9(]+/,''),null,true):'',ok=readable(nm);
  return{n:ok?nm:'Item',full:ok?nm:'Item',cut:0,n0:ok?nm:'',q:1,p:F.extSub,ext:1,chk:1}}
-function parse1(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(text))),F={},items=[],found={};const set=(k,v)=>{if(v!=null&&v!==''){F[k]=v;found[k]=1}};
+function parse1(text,mode){text=String(text||'').split(/^[ \t]*invoice summary[ \t]*$/im)[0];let guess=null;const L=pairColumns(pairSummary(lines(text))),F={},items=[],found={};const set=(k,v)=>{if(v!=null&&v!==''){F[k]=v;found[k]=1}};
  const inv=invNo(L,mode==='purchase'),txf=taxFlags(text);
  if(mode==='purchase'){
   {const gm=guessMerchant(text,L);if(gm){set('merchant',gm.n);if(gm.sure)found.mk=1}}
