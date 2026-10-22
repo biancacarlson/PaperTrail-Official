@@ -16,7 +16,7 @@ const isEst=r=>!!(r&&(r.estTotal||/invoice is an estimate|estimated total|printe
 /* v51: Closed needs a real printed total. r.tp=1 means the invoice had a printed total above $0; r.tp=0 means there was none (or $0), so any amount came from adding up line items. Older saved records have no r.tp: they are Closed unless the event hasn't happened yet. */
 const futureEv=r=>{try{const d=workDays(r);if(!d.length)return false;const t=new Date();t.setHours(0,0,0,0);const e=Parser.pd(r.endDate)||d[d.length-1];return +e>+t}catch(x){return false}};
 const autoSt=r=>r&&N(r.amount)>0&&!isEst(r)&&(r.tp===1||(r.tp===undefined&&!futureEv(r)))?'closed':'open';
-const stOf=r=>!r?'closed':r.stMan=='open'||r.stMan=='closed'?r.stMan:(r.status=='open'||r.status=='closed'?r.status:autoSt(r));
+const stOf=r=>!r?'closed':r.stMan=='open'||r.stMan=='closed'?r.stMan:(r.status=='open'?'open':autoSt(r));
 function putStatus(r,v){v=v=='open'?'open':'closed';r.stMan=v;r.status=v}
 const swHtml=(r,fn)=>{const o=stOf(r)=='open';return `<div class="stsw"><span class="${o?'':'on'}">Closed</span><button type="button" class="sw${o?' on':''}" role="switch" aria-checked="${o}" aria-label="Invoice is open" onclick="${fn}"><i></i></button><span class="${o?'on':''}">Open</span></div>`};
 function setStatus(v){const r=S.rec;if(!r)return;putStatus(r,v);render()}
@@ -912,7 +912,7 @@ function dupWarn(){const el=$('#dupwarn');if(!el)return;const r=S.rec,m=r&&r.loa
 function openRec(i){const r=S.records[i];if(!r)return;closeRec();const{t,G}=rows(r),
  h=G.map(g=>({...g,rows:g.rows.filter(x=>x[0]!=='Regular Hours')})).map(g=>'<div class="rg">'+g.rows.map(([l,v,hl])=>`<div class="rr${hl?' hl':''}${g.k=='tot'?' tt':''}"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join('')+'</div>').join(''),
  o=document.createElement('div');o.id='recmodal';o.className='rmo';o.onclick=e=>{if(e.target===o)closeRec()};
- o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${r.mode!='purchase'?'<div class="stn'+(stOf(r)=='open'?'':' cl')+'">'+swHtml(r,'flipStatus('+i+')')+'</div>':''}${r.imgs&&r.imgs.length?'':'<div class="invm">'+(r.mode=='purchase'?'No receipt attached':'No invoice attached')+'</div>'}${h}</div><div class="rmf"><button onclick="dlRec(${i})">Download PDF</button><button onclick="viewRec(${i})">View PDF</button>${r.imgs&&r.imgs.length?`<button onclick="cropRec(${i})">Crop</button><button onclick="attachRec(${i})">Replace invoice</button><button onclick="rmImg(${i})">Remove invoice</button>`:`<button onclick="attachRec(${i})">Attach invoice</button>`}<button onclick="editRec(${i})">Edit</button><button onclick="delOpen(${i})" style="color:#b3261e">Delete</button></div></div>`;
+ o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${r.mode!='purchase'?'<div class="stn'+(stOf(r)=='open'?'':' cl')+'">'+swHtml(r,'flipStatus('+i+')')+'</div>':''}${r.imgs&&r.imgs.length?'':'<div class="invm">'+(r.mode=='purchase'?'No receipt attached':'No invoice attached')+'</div>'}${h}</div><div class="rmf"><button onclick="dlRec(${i})">Download PDF</button><button onclick="viewRec(${i})">View PDF</button>${r.imgs&&r.imgs.length?`<button onclick="cropRec(${i})">Crop</button><button onclick="replaceInv(${i})">Replace invoice</button><button onclick="rmImg(${i})">Remove invoice</button>`:`<button onclick="attachRec(${i})">Attach invoice</button>`}<button onclick="editRec(${i})">Edit</button><button onclick="delOpen(${i})" style="color:#b3261e">Delete</button></div></div>`;
  document.body.appendChild(o);document.body.style.overflow='hidden'}
 function delOpen(i){if(!S.records[i])return;if(!confirm('Delete this saved record? This cannot be undone.'))return;S.records.splice(i,1);closeRec();renderRecs();store()}
 function closeRec(){const o=$('#recmodal');if(o)o.remove();document.body.style.overflow=''}
@@ -931,6 +931,16 @@ function attachRec(i){const r=S.records[i];if(!r)return;const inp=document.creat
    else return toast('Use a PDF, JPG or PNG');
    const out=(await Promise.all(cs.map(c=>shrinkImg(c.toDataURL('image/jpeg',.85))))).filter(Boolean);if(!out.length)return toast('Could not read that file');
    r.imgs=out;store();renderRecs();toast('Invoice added');openRec(i)}catch(e){toast('Could not add that file')}};
+ inp.click()}
+/* v56: Replace invoice on a work invoice re-reads the new file: hours, amount, dates and Open/Closed are worked out again from it. Review, then Save changes. */
+function replaceInv(i){const r=S.records[i];if(!r||r.mode=='purchase')return attachRec(i);
+ const inp=document.createElement('input');inp.type='file';inp.accept='application/pdf,image/*';inp.style.cssText='position:fixed;left:-9999px;opacity:0';document.body.appendChild(inp);
+ inp.onchange=async()=>{const f=inp.files&&inp.files[0];inp.remove();if(!f)return;
+  editRec(i);const prev=S.rec;if(!prev||prev.rid!==r.rid)return;
+  await handle(f);const nr=S.rec;if(!nr||nr===prev||!nr.doc)return;
+  const skip=new Set(['src','low','shots','doc','loaded','imgs','tp','estTotal','shifts','hours','overtime','amount','jobDate','endDate','stMan','status','edited','rid']);
+  Object.keys(prev).forEach(k=>{if(skip.has(k))return;const v=nr[k];if(v==null||v===''||(typeof v=='object'&&!Array.isArray(v)&&!Object.keys(v).length))nr[k]=prev[k]});
+  nr.rid=prev.rid;nr.loaded=true;render();toast('New invoice read. Check the summary, then tap Save changes.')};
  inp.click()}
 function rmImg(i){const r=S.records[i];if(!r||!r.imgs)return;if(!confirm('Remove the attached invoice from this saved item? Its details stay.'))return;delete r.imgs;store();toast('Invoice removed');openRec(i)}
 function dlRec(i){const r=S.records[i];if(r)saveCombo(r)}
@@ -1013,7 +1023,7 @@ function ui(tab){
  +'<input id="pw" type="password" autocomplete="'+(up?'new-password':'current-password')+'" placeholder="Password'+(up?' (8+ characters)':'')+'">'
  +'<label style="display:flex;align-items:center;gap:8px;margin:0 0 10px;font:14px -apple-system,system-ui,sans-serif;letter-spacing:0;text-transform:none;color:var(--fg)"><input type="checkbox" style="width:auto;margin:0" onchange="[\'pw\',\'pw2\'].forEach(function(i){var e=document.getElementById(i);if(e)e.type=event.target.checked?\'text\':\'password\'})"> Show password</label>'
  +(up?'<input id="pw2" type="password" autocomplete="new-password" placeholder="Confirm password">'
-      +'<input id="ph" type="text" maxlength="100" autocomplete="off" autocapitalize="sentences" spellcheck="false" placeholder="Password hint (optional)">'
+      +'<input id="ph" type="text" maxlength="100" autocomplete="off" autocapitalize="sentences" spellcheck="false" placeholder="Password hint">'
       +'<div class="hint" style="font-size:12.5px;color:var(--mut);margin:-4px 0 8px">The hint shows on the sign-in screen to anyone holding this phone. Write something only you would get, not the password.</div>'
       +installGuide(true)
       +'<div class="hint" style="font-size:13px;color:var(--mut);margin:2px 0 8px">Your records are encrypted on this device with this password. On the next screen you will get a recovery code. Save it: it is the only way back in if you forget your password.</div>'
@@ -1281,6 +1291,7 @@ window.authUp=async function(){
   if(p1!==p2)return msg('The two passwords do not match.');
   const hint=(($('#ph')||{}).value||'').trim();
   if(hint&&hint.toLowerCase().includes(p1.toLowerCase()))return msg('The hint can not contain your password.');
+  if(!hint&&!confirm('You have not added a password hint. Create the account without one?')){const h=$('#ph');if(h)try{h.focus()}catch(e){}return msg('Add a password hint, then tap Create account.')}
   const uid=await uidOf(em);
   if(localStorage.getItem(AK+uid))return msg('This email already has an account on this device. Tap Sign in.');
   const salt=rnd(16),o={s:salt,h:await hash(pp(em,p1),unhex(salt)),e:rnd(16)},code=newCode();
@@ -1544,7 +1555,7 @@ window.csvGo=async function(){
   f.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2.5" width="14" height="19" rx="2.5"/><rect x="8" y="5.5" width="8" height="3.5" rx=".8"/><path d="M8.5 13h.01M12 13h.01M15.5 13h.01M8.5 16.5h.01M12 16.5h.01M15.5 16.5h.01"/></svg>';
   const b=document.createElement('div');b.id='calcbox';b.setAttribute('role','dialog');b.setAttribute('aria-label','Calculator');
   const K=[['C','fn','AC'],['N','fn','\u00b1'],['%','fn','%'],['/','op',SYM['/']],['7'],['8'],['9'],['*','op',SYM['*']],['4'],['5'],['6'],['-','op',SYM['-']],['1'],['2'],['3'],['+','op',SYM['+']],['0','z'],['.'],['=','op','=']];
-  b.innerHTML='<div class="cc"><span>Calculator</span><span class="cb"><button type="button" data-k="copy">Copy</button><button type="button" data-k="min" aria-label="Minimize calculator" style="width:34px;font-weight:700">\u2014</button></span></div><div class="ce"></div><div class="cw"><button type="button" class="bk" data-k="bs" aria-label="Delete last digit">\u232b</button><div class="cr">0</div></div><div class="ck">'
+  b.innerHTML='<div class="cc"><span></span><span class="cb"><button type="button" data-k="copy">Copy</button><button type="button" data-k="min" aria-label="Minimize calculator" style="width:34px;font-weight:700">\u2014</button></span></div><div class="ce"></div><div class="cw"><button type="button" class="bk" data-k="bs" aria-label="Delete last digit">\u232b</button><div class="cr">0</div></div><div class="ck">'
    +K.map(([k,c,t])=>'<button type="button" class="'+(c||'')+'" data-k="'+k+'">'+(t||k)+'</button>').join('')+'</div>';
   b.addEventListener('click',e=>{const t=e.target.closest('button');if(!t)return;const k=t.dataset.k;
    if(k=='min'){b.classList.remove('on');f.setAttribute('aria-expanded','false');return}
@@ -1567,8 +1578,8 @@ window.csvGo=async function(){
    const PT_VER='v200'
    const PT_VER='vv200'
    ---------- */
-const PT_BUILD=252;
-const PT_LABEL='v54';
+const PT_BUILD=255;
+const PT_LABEL='v57';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
@@ -1732,4 +1743,4 @@ async function cropApply(){if(!CR||!CR.im||!CR.sel)return;const r=S.records[CR.i
 (function(){const st=document.createElement('style');st.textContent='.cmo{position:fixed;inset:0;z-index:10000;background:#000;display:flex;flex-direction:column;padding:max(10px,env(safe-area-inset-top)) 12px max(10px,env(safe-area-inset-bottom))}.cmh{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0 10px}.cmh span{font-size:13px;color:var(--mut)}.cmw{flex:1;display:flex;align-items:center;justify-content:center;min-height:0}.cmb{position:relative;padding:18px;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;box-sizing:content-box}.cmb img{display:block;pointer-events:none}.cms{position:absolute;border:2px solid #fff;box-sizing:border-box;box-shadow:0 0 0 9999px rgba(0,0,0,.6);touch-action:none;cursor:move}.cms i{position:absolute;width:40px;height:40px;margin:-20px 0 0 -20px;touch-action:none}.cms i::after{content:"";position:absolute;left:50%;top:50%;width:14px;height:14px;margin:-7px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.4)}.cms i[data-h=nw]{left:0;top:0}.cms i[data-h=n]{left:50%;top:0}.cms i[data-h=ne]{left:100%;top:0}.cms i[data-h=e]{left:100%;top:50%}.cms i[data-h=se]{left:100%;top:100%}.cms i[data-h=s]{left:50%;top:100%}.cms i[data-h=sw]{left:0;top:100%}.cms i[data-h=w]{left:0;top:50%}.cmf{display:flex;gap:10px;padding:10px 0}.cmf button{flex:1}';document.head.appendChild(st)})();
 
 /* v48: Open / Closed invoice status (badge, toggle, filter chip) */
-(function(){const c=document.createElement('style');c.textContent='.stb{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;font-size:11.5px;font-weight:700;letter-spacing:.02em;vertical-align:1px;background:rgba(214,69,69,.18);color:#e0544f;border:1px solid rgba(214,69,69,.4)}'+'.stn{display:flex;align-items:center;gap:8px;margin:0 0 10px;padding:9px 12px;border-radius:12px;font-size:13px;color:var(--mut);background:rgba(214,69,69,.1);border:1px solid rgba(214,69,69,.3)}.stn .stb{margin:0;flex:0 0 auto}'+'.stb.cl{background:rgba(46,125,90,.14);color:#2e7d5a;border-color:rgba(46,125,90,.4)}.stn.cl{background:rgba(46,125,90,.08);border-color:rgba(46,125,90,.3)}.stn .stsw{flex:0 0 auto}'+'.stsw{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600;color:var(--mut)}.stsw .on{color:var(--fg)}.sw{position:relative;width:52px;height:30px;padding:0;border-radius:999px;border:1px solid rgba(0,0,0,.15);background:#2e7d5a;cursor:pointer;flex:0 0 auto;transition:background .2s}.sw.on{background:#e0544f}.sw i{position:absolute;top:2px;left:2px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.35);transition:transform .2s}.sw.on i{transform:translateX(22px)}';document.head.appendChild(c)})();
+(function(){const c=document.createElement('style');c.textContent='.stb{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;font-size:11.5px;font-weight:700;letter-spacing:.02em;vertical-align:1px;background:rgba(214,69,69,.18);color:#e0544f;border:1px solid rgba(214,69,69,.4)}'+'.stn{display:flex;align-items:center;gap:8px;margin:0 0 10px;padding:9px 12px;border-radius:12px;font-size:13px;color:var(--mut);background:rgba(214,69,69,.1);border:1px solid rgba(214,69,69,.3)}.stn .stb{margin:0;flex:0 0 auto}'+'.stb.cl{background:rgba(46,125,90,.14);color:#2e7d5a;border-color:rgba(46,125,90,.4)}.stn.cl{background:rgba(46,125,90,.08);border-color:rgba(46,125,90,.3)}.stn .stsw{flex:0 0 auto}'+'.stsw{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600;color:var(--mut)}.stsw .on{color:var(--fg)}.sw{position:relative;width:52px;height:30px;padding:0;border-radius:999px;border:1px solid rgba(0,0,0,.15);background:#2e7d5a;cursor:pointer;flex:0 0 auto;transition:background .2s}.sw.on{background:#e0544f}.sw i{position:absolute;top:2px;left:2px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.35);transition:transform .2s}.sw.on i{transform:translateX(22px)}'+'.stb{background:none!important;border:0!important;padding:0!important;font-size:12px;font-weight:500!important;letter-spacing:0;color:#c9625d!important;opacity:.85}.stb::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:currentColor;margin-right:5px;vertical-align:1px}.stb.cl{color:#4a9d78!important}.stn,.stn.cl{background:none!important;border:0!important;padding:4px 0!important}.sw,.sw.on{background:rgba(128,128,128,.38)!important}.sw{border-color:transparent}';document.head.appendChild(c)})();

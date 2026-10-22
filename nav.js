@@ -61,8 +61,6 @@ const css=`
 #savedview .svrow .svsb span{color:var(--fg)}
 #savedview .chips button{border-color:transparent!important;background:rgba(255,255,255,.05)!important;color:var(--mut)}
 #savedview .chips button.on{background:#1b1d20!important;color:var(--fg)!important;border-color:var(--hair,#2a2d31)!important}
-#savedview .chips button[data-k=open].on{color:#e0544f!important;border-color:rgba(224,84,79,.45)!important;background:rgba(214,69,69,.12)!important}
-#savedview .chips button[data-k=closed].on{color:#35a56f!important;border-color:rgba(53,165,111,.45)!important;background:rgba(46,125,90,.14)!important}
 @media(max-width:900px){
  #topbar .tbsw{margin-left:auto}
  #topbar .tbsw.open{position:absolute;left:14px;right:14px;top:max(8px,env(safe-area-inset-top));margin:0;z-index:2;background:#0b0d0f;height:36px}
