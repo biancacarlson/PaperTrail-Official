@@ -89,16 +89,16 @@ const css=`
 }
 
 /* v59: Data and Settings live in the footer; Sort sits under the list; filters are plain text */
-#ptfoot .mts{display:flex;justify-content:center;gap:6px;margin:0 0 2px}
-#ptfoot .mt{padding:8px 10px;font-size:13px;color:var(--mut)}
+#ptfoot .frow{display:flex;flex-wrap:nowrap;align-items:center;justify-content:space-between;gap:2px}#ptfoot .frow>*{flex:0 1 auto;min-width:0;white-space:nowrap}#ptfoot .fv{margin:0;font-size:12.5px;opacity:.7}
+#ptfoot .frow .mt,#ptfoot .frow .fb{padding:8px 6px;font-size:13px;font-weight:400;color:var(--mut);line-height:1.2;min-height:36px;margin:0}
 #savedview .chips button,#savedview .chips button.on{background:transparent!important;border:0!important;border-radius:0!important;padding:6px 12px 6px 0!important;font-size:14px;font-weight:500;color:var(--mut)!important}
 #savedview .chips button.on{color:var(--fg)!important;font-weight:600}
-#savedview .svfoot{display:flex;justify-content:center;padding:14px 0 2px}
-#savedview .svfoot .svsb{border:0;background:transparent;font-weight:500;color:var(--mut);padding:8px 10px}
+#savedview .svfoot{display:flex;justify-content:flex-end;margin:-4px 0 -2px}
+#savedview .svfoot .svsb{border:0;background:transparent;font-weight:500;color:var(--mut);padding:4px 0;font-size:13px}
 #savedview .svfoot .svsb::before{content:"Sort:";margin-right:4px}
 #savedview .svfoot .svsb span{color:var(--fg)}
 /* footer disclaimer */
-#ptfoot{max-width:1180px;margin:0 auto;padding:8px 20px calc(28px + env(safe-area-inset-bottom,0px));text-align:center;color:var(--mut)}
+#ptfoot{max-width:1180px;margin:0 auto;padding:8px 20px calc(84px + env(safe-area-inset-bottom,0px));text-align:center;color:var(--mut)}
 #ptfoot .fb{width:auto;background:transparent;border:0;padding:8px 10px;font-size:12.5px;font-weight:400;color:var(--mut);display:inline-flex;align-items:center;gap:6px}
 #ptfoot .fb:hover{color:var(--fg)}
 #ptfoot .fb i{width:5px;height:5px;border:solid currentColor;border-width:0 1.5px 1.5px 0;transform:rotate(45deg) translate(-1px,-1px);transition:transform .15s}
@@ -298,7 +298,7 @@ if(typeof svBody==='function'){
  svBody=function(){
   let h=_sb.apply(this,arguments);
   h=h.replace(/<div class="svact">[\s\S]*?<\/div>/,'');
-  if(S.sv.sec!='t'&&S.records&&S.records.length>1)h+='<div class="svfoot">'+_sortCtl(S.sv.sec=='x')+'</div>';
+  if(S.sv.sec!='t'&&S.records&&S.records.length>1&&/class="svsum"/.test(h))h=h.replace(/(<div class="svsum">[\s\S]*?<\/div>)/,'$1<div class="svfoot">'+_sortCtl(S.sv.sec=='x')+'</div>');
   return h};
 }
 
@@ -306,8 +306,8 @@ if(typeof svBody==='function'){
 /* ---------- footer: grey Disclaimer link that expands in place ---------- */
 {
  const f=document.createElement('footer');f.id='ptfoot';
- f.innerHTML='<div class="fm"></div><button type="button" class="fb" aria-expanded="false" aria-controls="ptdisc">Disclaimer<i aria-hidden="true"></i></button><span class="fv"></span><div id="ptdisc" class="fd" hidden></div>';
- f.querySelector('.fm').appendChild(mts);
+ f.innerHTML='<div class="frow"><button type="button" class="fb" aria-expanded="false" aria-controls="ptdisc">Disclaimer<i aria-hidden="true"></i></button><span class="fv"></span></div><div id="ptdisc" class="fd" hidden></div>';
+ {const row=f.querySelector('.frow'),d0=row.querySelector('.fb');[...mts.children].forEach(b=>row.insertBefore(b,d0))}
  shell.appendChild(f);
  const fb=f.querySelector('.fb'),fd=f.querySelector('.fd');
  fb.onclick=()=>{
