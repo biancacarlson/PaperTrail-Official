@@ -384,7 +384,7 @@ function parse1(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(
   const tot=label(L,/^(?:total\s*hours|hours\s*worked|hours)\s*[:\-]?\s*(\d+(?:\.\d+)?)\b(?!\s*[x×@])/i);
   set('hours',tot!=null&&!isNaN(+tot)?tot:hrs.length?String(hrs.reduce((a,b)=>a+b,0)):null);
   const ot=text.match(/\b(?:overtime|OT)\b\D{0,12}(\d+(?:\.\d+)?)/i);if(ot){F.notes='Overtime hours mentioned: '+ot[1]+' (verify).';found.notes=1}
-  let amt=null;for(const re of [/amount paid|total paid|total pay|net pay|gross pay/i,/amount due|total due/i,/(?<!sub)\btotal\b/i]){for(const raw of L){const l=fix(raw);if(!re.test(l)||/\btax\b|\brate\b|hours|hrs|subt?\s?-?tota[l1jy|\]]/i.test(l.replace(re,'')))continue;const a=[...l.matchAll(/\$?\s?(\d[\d,]*\.\d{2})\b/g)];if(a.length)amt=a[a.length-1][1].replace(/,/g,'')}if(amt)break}
+  let amt=null;for(const re of [/amount paid|total paid|total pay|net pay|gross pay/i,/amount due|total due/i,/(?<!sub)\btotal\b/i]){for(const raw of L){const l=fix(raw);if(!re.test(l)||/\btax\b|\brate\b|hours|hrs|subt?\s?-?tota[l1jy|\]]/i.test(l.replace(re,'')))continue;const a=[...l.matchAll(/\$?\s?(\d[\d,]*\.\d{2})\b/g)];if(a.length){amt=a[a.length-1][1].replace(/,/g,'');if(/\best(?:imated|\.)?\s*(?:total|amount|pay)/i.test(l))F.estTotal=1}}if(amt)break}
   set('amount',amt)}
   if(mode!=='purchase'){
    const sd=ev('start'),ed=ev('end');if(sd)set('jobDate',sd);if(ed)set('endDate',ed);

@@ -9,11 +9,16 @@ const N=v=>{const n=parseFloat(String(v).replace(/[$,]/g,''));return isNaN(n)?nu
 const PF={purchase:[['date','Date'],['merchant','Merchant'],['location','Location (city, state)'],['number','Receipt/Invoice #'],['tax','Tax'],['extSub','Subtotal $'],['extTotal','Total $']],
 freelance:[['employer','Employer'],['client','Client'],['jobDate','Job date'],['endDate','Event end date'],['location','Job location'],['roundTrip','Round-trip miles'],['hours','Total regular'],['overtime','Total overtime'],['amount','Amount $'],['invoice','Invoice #'],['notes','Notes']]};
 function setMode(m){showWork();S.mode=m;S.rec=newRec();S.pages=[];S.undo=[];S.redo=[];{const dw=$('#docwrap');if(dw)dw.style.display='none'}$('.head h1').textContent=m=='purchase'?'':'';$('#m1').className=m=='purchase'?'on':'';$('#m2').className=m=='freelance'?'on':'';render();renderPages()}
-const newRec=()=>({mode:S.mode,items:[],src:{},edited:{},loaded:false,doc:false,employer:S.mode=='freelance'?'AVLancer':'',status:S.mode=='freelance'?'open':undefined});
-/* Open = the amount may still change (gigs entered ahead of time). Closed = final. Records saved before this existed have no status and count as closed. */
-const stOf=r=>r&&r.status=='open'?'open':'closed';
-function setStatus(v){const r=S.rec;if(!r)return;r.status=v=='open'?'open':'closed';render()}
-function flipStatus(i){const r=S.records[i];if(!r||r.mode=='purchase')return;r.status=stOf(r)=='open'?'closed':'open';store();closeRec();renderRecs();toast(r.status=='open'?'Marked open':'Marked closed')}
+const newRec=()=>({mode:S.mode,items:[],src:{},edited:{},loaded:false,doc:false,employer:S.mode=='freelance'?'AVLancer':''});
+/* Open = the amount may still change. Closed = final. It is worked out from the invoice: a printed TOTAL means closed; an estimated total or no total means open.
+   The switch overrides that (r.stMan). An old record explicitly marked closed before this existed keeps that choice. */
+const isEst=r=>!!(r&&(r.estTotal||/invoice is an estimate|estimated total/i.test(String(r.notes||''))));
+const autoSt=r=>r&&N(r.amount)>0&&!isEst(r)?'closed':'open';
+const stOf=r=>!r?'closed':r.stMan=='open'||r.stMan=='closed'?r.stMan:(r.stMan===undefined&&r.status=='closed'?'closed':autoSt(r));
+function putStatus(r,v){v=v=='open'?'open':'closed';if(v==autoSt(r))delete r.stMan;else r.stMan=v;r.status=v}
+const swHtml=(r,fn)=>{const o=stOf(r)=='open';return `<div class="stsw"><span class="${o?'':'on'}">Closed</span><button type="button" class="sw${o?' on':''}" role="switch" aria-checked="${o}" aria-label="Invoice is open" onclick="${fn}"><i></i></button><span class="${o?'on':''}">Open</span></div>`};
+function setStatus(v){const r=S.rec;if(!r)return;putStatus(r,v);render()}
+function flipStatus(i){const r=S.records[i];if(!r||r.mode=='purchase')return;putStatus(r,stOf(r)=='open'?'closed':'open');store();renderRecs();openRec(i);toast(stOf(r)=='open'?'Marked open':'Marked closed')}
 function manual(){dismissRestore();S.rec.loaded=true;render()}
 /* ---------- lock (passcode hash via PBKDF2; screen lock only) ---------- */
 const hex=b=>[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');
@@ -116,7 +121,7 @@ function showDoc(u){showOcr();const v=$('#view');v.style.height='';v.innerHTML='
   ap();if(S.z<=1)fit()};
  if(!window.__dvr){window.__dvr=1;addEventListener('resize',()=>{const l=$('#layer'),w=$('#view');if(l&&w&&S.z<=1&&l.offsetHeight)w.style.height=l.offsetHeight+'px'})}}
 /* ---------- parsing (deterministic) ---------- */
-function parse(t){const r=S.rec,o=Parser.parse(t,r.mode);Object.assign(r,o.fields);r.src=Object.assign(r.src,o.found);if(r.mode!='purchase'&&o.shifts&&o.shifts.length)r.shifts=o.shifts;if(r.mode=='purchase'){r.items=o.items;if(o.guess)r.gname=o.guess;ensureItem(r)}applyLearned(r)}
+function parse(t){const r=S.rec,o=Parser.parse(t,r.mode);delete r.estTotal;Object.assign(r,o.fields);r.src=Object.assign(r.src,o.found);if(r.mode!='purchase'&&o.shifts&&o.shifts.length)r.shifts=o.shifts;if(r.mode=='purchase'){r.items=o.items;if(o.guess)r.gname=o.guess;ensureItem(r)}applyLearned(r)}
 /* Only a subtotal was readable (no per-item lines): keep the totals reconcilable with one clearly-flagged combined line. */
 function ensureItem(r){if(r.mode=='purchase'&&!r.items.length&&N(r.extSub)>0)r.items.push({n:r.gname||'',q:1,p:N(r.extSub),guess:1,ext:1})}
 /* ---------- form ---------- */
@@ -124,7 +129,7 @@ function render(){const r=S.rec;{const pl=$('#pick');if(pl)pl.textContent=S.mode
  autoCat();const fs=PF[r.mode],sel=$('#addto');sel.innerHTML=fs.map(f=>`<option value="${f[0]}">${f[1]}</option>`).join('')+(r.mode=='purchase'?'<option value="+item">New item</option>':'');
  const lab=(k,l)=>`<label for="f_${k}">${l}${r.edited[k]?' (edited)':''}${miss(k)?' (needs review)':''}${r.low&&r.low[k]&&!r.edited[k]?' - low confidence, check':''}</label>`,
  W=['location','notes','number','client','employer','category'],
- fld=k=>{if(k=='status'){const o=stOf(r)=='open';return `<div class="f w"><label>Invoice status</label><div class="seg stseg" role="group" aria-label="Invoice status"><button type="button" class="${o?'on':''}" aria-pressed="${o}" onclick="setStatus('open')">Open</button><button type="button" class="${o?'':'on'}" aria-pressed="${!o}" onclick="setStatus('closed')">Closed</button></div><div class="hint" style="margin-top:6px">${o?'Open: the amount may still change. It is left out of your income totals.':'Closed: the amount is final and counts in your income totals.'}</div></div>`}if(k=='category')return `<div class="f w"><label for="f_category">Category${r.edited.category?' (edited)':''}</label><select id="f_category" onchange="setCat(this.value);render()"><option value="">Select…</option>${CATS.map(c=>`<option${r.category==c?' selected':''}>${c}</option>`).join('')}</select></div>`;const l=(fs.find(f=>f[0]==k)||[])[1];return `<div class="f${W.includes(k)?' w':''}">`+lab(k,l)+(k=='notes'?`<textarea id="f_${k}" class="${String(r[k]??'').trim()?'ext':''}" rows="3" oninput="ed('${k}',this.value)">${esc(r[k])}</textarea>`:(inp=>k=='roundTrip'?`<div class="row" style="margin:0">${inp}<button class="pri" style="flex:0 0 auto" onclick="render()">Recalculate</button></div>`:inp)(`<input autocomplete="off" id="f_${k}" class="${String(r[k]??'').trim()?'ext':''}${miss(k)?' warn':''}" value="${esc(r[k])}" oninput="ed('${k}',this.value)" onchange="fldDone('${k}')">`))+fixDiv(k)+(k=='roundTrip'?`<div class="srch"><a id="gs" class="btn" target="_blank" rel="noopener noreferrer" href="${esc(gurl(r))}" onclick="return chk()">Search round-trip distance</a></div>`:'')+'</div>'},
+ fld=k=>{if(k=='status'){const o=stOf(r)=='open';return `<div class="f w"><label>Invoice status</label>${swHtml(r,"setStatus(stOf(S.rec)=='open'?'closed':'open')")}</div>`}if(k=='category')return `<div class="f w"><label for="f_category">Category${r.edited.category?' (edited)':''}</label><select id="f_category" onchange="setCat(this.value);render()"><option value="">Select…</option>${CATS.map(c=>`<option${r.category==c?' selected':''}>${c}</option>`).join('')}</select></div>`;const l=(fs.find(f=>f[0]==k)||[])[1];return `<div class="f${W.includes(k)?' w':''}">`+lab(k,l)+(k=='notes'?`<textarea id="f_${k}" class="${String(r[k]??'').trim()?'ext':''}" rows="3" oninput="ed('${k}',this.value)">${esc(r[k])}</textarea>`:(inp=>k=='roundTrip'?`<div class="row" style="margin:0">${inp}<button class="pri" style="flex:0 0 auto" onclick="render()">Recalculate</button></div>`:inp)(`<input autocomplete="off" id="f_${k}" class="${String(r[k]??'').trim()?'ext':''}${miss(k)?' warn':''}" value="${esc(r[k])}" oninput="ed('${k}',this.value)" onchange="fldDone('${k}')">`))+fixDiv(k)+(k=='roundTrip'?`<div class="srch"><a id="gs" class="btn" target="_blank" rel="noopener noreferrer" href="${esc(gurl(r))}" onclick="return chk()">Search round-trip distance</a></div>`:'')+'</div>'},
  G=r.mode=='purchase'?[['Receipt',['date','merchant','location','number','category']],['Amounts',['tax','extSub','extTotal']]]:[['',['employer','client','invoice']],['',['jobDate','endDate','location']],['Mileage',['roundTrip']],['Hours & pay',['hours','overtime','amount','status']],['__shifts',[]],['',['notes']]];
  let h=G.map(([t,ks])=>t=='__shifts'?shiftsHtml():`<section class="grp${t=='Amounts'?' amt':''}">${t?`<h3>${t}</h3>`:''}<div class="fg">${ks.map(fld).join('')}</div></section>`).join('');
  if(r.mode=='purchase')h+=itemsHtml();
@@ -311,11 +316,11 @@ function periodSums(now){now=now||new Date();const y=now.getFullYear(),mo=now.ge
  S.records.forEach(r=>{const d=recDate(r);if(d==null){T.und++;return}if(d>end){T.fut++;return}if(d<lo[1])return;
   const on=[d>=lo[0],true];
   if(r.mode=='purchase'){const t=recAmt(r)||0,k=recCat(r),a=T.cat[k]||(T.cat[k]=[0,0]);on.forEach((f,i)=>{if(f){a[i]+=t;T.exp[i]+=t}})}
-  else{const o=compute(r),v=N(r.amount)||0,nm=String(r.client||'').trim(),k=nk(nm)||'-',a=T.cli[k]||(T.cli[k]={n:nm||'No client',v:[0,0]});
+  else{if(S.sv.st&&S.sv.st!='All'&&stOf(r)!=S.sv.st)return;const o=compute(r),v=N(r.amount)||0,nm=String(r.client||'').trim(),k=nk(nm)||'-',a=T.cli[k]||(T.cli[k]={n:nm||'No client',v:[0,0]});
    if(o.rt==null)T.noMi++;
-   const isO=stOf(r)=='open';if(isO)T.nOpen++;
-   on.forEach((f,i)=>{if(f){if(isO)T.opn[i]+=v;else{a.v[i]+=v;T.inc[i]+=v}T.ded[i]+=o.wear||0;T.mi[i]+=o.rt||0}})}});
+   on.forEach((f,i)=>{if(f){a.v[i]+=v;T.inc[i]+=v;T.ded[i]+=o.wear||0;T.mi[i]+=o.rt||0}})}});
  return T}
+function stChips(){const w=S.records.filter(r=>r.mode!='purchase'),o=w.filter(r=>stOf(r)=='open').length;if(!w.length)return'';return '<div class="chips">'+[['All','All ('+w.length+')'],['open','Open ('+o+')'],['closed','Closed ('+(w.length-o)+')']].map(([v,l])=>'<button class="'+((S.sv.st||'All')==v?'on':'')+'" onclick="svSt(\''+v+'\')">'+l+'</button>').join('')+'</div>'}
 function totalsView(now){const T=periodSums(now),f=v=>+(+v).toFixed(2),sd=d=>d.toLocaleDateString('en-US',{month:'short',day:'numeric'}),
  rg=i=>{const a=new Date(T.lo[i]);return a.getMonth()==T.now.getMonth()&&a.getDate()==T.now.getDate()?sd(a):sd(a)+' \u2013 '+sd(T.now)},
  money=v=>v?'<b>'+M(f(v))+'</b>':'<b class="z">\u2013</b>',miles=v=>v?'<b>'+f(v).toLocaleString('en-US',{maximumFractionDigits:1})+' mi</b>':'<b class="z">\u2013</b>',
@@ -327,12 +332,11 @@ function totalsView(now){const T=periodSums(now),f=v=>+(+v).toFixed(2),sd=d=>d.t
  if(!Object.keys(T.cat).length&&!Object.keys(T.cli).length)h+='<div class="empty2">Nothing dated this year yet.</div>';
  else{
   h+='<div class="sl">'+head('Expenses by category')+(cats.length?cats.map(([k,a])=>row(esc(k),a)).join('')+row('Total expenses',T.exp,'tot'):none('No expenses this year'))+'</div>';
-  h+='<div class="sl">'+head('Income by client')+(clis.length?clis.map(c=>row(esc(c.n),c.v)).join('')+row('Total income',T.inc,'tot'):none('No closed work invoices this year'))+(T.nOpen?row('Open (not counted)',T.opn,''):'')+'</div>';
+  h+=stChips()+'<div class="sl">'+head('Income by client')+(clis.length?clis.map(c=>row(esc(c.n),c.v)).join('')+row('Total income',T.inc,'tot'):none('No work invoices this year'))+'</div>';
   h+='<div class="sl">'+head('Mileage')+row('Mileage deduction',T.ded,'tot')+row('Miles driven',T.mi,'',miles)+'</div>'}
  const n=[];if(T.noMi)n.push(pl(T.noMi,'work invoice this year has','work invoices this year have')+' no round-trip miles, so no mileage deduction is counted.');
  const u=[];if(T.und)u.push(T.und+' undated');if(T.fut)u.push(T.fut+' dated after today');if(u.length)n.push('Not counted: '+u.join(', ')+'.');
- if(T.nOpen)n.push(pl(T.nOpen,'open invoice is','open invoices are')+' left out of income until marked closed. Mileage still counts.');
- n.push('Expenses count by purchase date, income by job date (Amount Paid).');
+  n.push('Expenses count by purchase date, income by job date (Amount Paid).');
  return h+'<div class="hint">'+n.join(' ')+'</div>'}
 function svOther(){S.sv.sec=S.sv.sec=='x'?'w':'x';S.sv.cat='All';renderRecs()}
 function svCopy(){const l=svList().map(x=>x[0]).sort((p,q)=>key(p)-key(q));if(!l.length)return;if(S.sv.sec=='x'&&S.sv.cat=='All'&&!svSearching())l.push({mode:'summary'});copy(l)}
@@ -374,7 +378,7 @@ function wdCount(list){const d=new Set();list.forEach(([r])=>{let w=workDays(r);
 function svBody(){
  const x=S.sv.sec=='x',grp=!x&&/^d/.test(sortFor(x)),q=svSearching(),list=svList(),miss=list.filter(([r])=>!(r.imgs&&r.imgs.length)).length,tot=+list.reduce((s,[r])=>s+(recAmt(r)||0),0).toFixed(2),T=totals(),trow=(l,v)=>`<div class="srow"><div class="sm">${l}</div><b>${M(v)}</b></div>`,
  row=([r,i],wk,cont)=>{const pur=r.mode=='purchase',nm=esc((pur?niceMerch(r.merchant):r.client)||(pur?'Receipt':'Work invoice')),split=!pur&&wk!=null&&new Set(workDays(r).map(x=>+wkStart(x))).size>1,first=split&&Math.min(...workDays(r).map(x=>+wkStart(x)))===wk,sub=pur?[r.date,r.category].filter(Boolean).map(esc).join(' · '):dayPills(r,wk);
-  return `<div class="srow tap" role="button" tabindex="0" onclick="openRec(${i})" onkeydown="if(event.key=='Enter')openRec(${i})"><div class="sm"><div class="s1">${nm}${!pur&&stOf(r)=='open'?'<span class="stb">Open</span>':''}</div>${sub?`<div class="s2">${sub}</div>`:''}${r.imgs&&r.imgs.length?'':`<div class="s3">${pur?'No receipt':'No invoice'}</div>`}</div><b>${M(!pur&&wk!=null?wkAmt(r,wk):recAmt(r))}</b></div>`};
+  return `<div class="srow tap" role="button" tabindex="0" onclick="openRec(${i})" onkeydown="if(event.key=='Enter')openRec(${i})"><div class="sm"><div class="s1">${nm}${!pur?(stOf(r)=='open'?'<span class="stb">Open</span>':'<span class="stb cl">Closed</span>'):''}</div>${sub?`<div class="s2">${sub}</div>`:''}${r.imgs&&r.imgs.length?'':`<div class="s3">${pur?'No receipt':'No invoice'}</div>`}</div><b>${M(!pur&&wk!=null?wkAmt(r,wk):recAmt(r))}</b></div>`};
  let lbl;if(q)lbl=list.length+' match'+(list.length==1?'':'es')+(x&&S.sv.cat!='All'?' in '+S.sv.cat:'');else if(x)lbl=S.sv.cat!='All'?list.length+' in '+S.sv.cat:list.length+' expense'+(list.length==1?'':'s');else{const wd=wdCount(list);lbl=wd?wd+' working day'+(wd==1?'':'s'):list.length+' work invoice'+(list.length==1?'':'s')}
  let none='';if(!list.length){if(q){const toks=svTok(S.sv.q),o=S.records.filter(r=>(r.mode=='purchase')!=x&&recMatch(r,toks)).length;none='<div class="empty2">No matches for “'+esc(S.sv.q.trim())+'”.'+(x&&S.sv.cat!='All'?'<br>Try the All category.':'')+(o?'<br><button onclick="svOther()" style="margin-top:10px">Show '+o+' in '+(x?'Work invoices':'Expenses')+'</button>':'')+'</div>'}else none='<div class="empty2">'+(x?'No expenses saved yet.':S.sv.st&&S.sv.st!='All'?'No '+S.sv.st+' work invoices.':'No work invoices saved yet.')+'</div>'}
  return (list.length?'<div class="svsum"><span>'+lbl+'</span><b>'+M(tot)+'</b></div>'+(miss?'<div class="invm">'+miss+' of '+list.length+' without '+(x?'a receipt':'an invoice')+'</div>':'')+(grp?grpRows(list,row):'<div class="sl">'+list.map(row).join('')+'</div>'):none)
@@ -387,12 +391,12 @@ function renderRecs(){persist();try{dupWarn()}catch(e){}const nb=$('#m3');if(nb)
  const x=S.sv.sec=='x',cnt={};S.records.filter(r=>r.mode=='purchase').forEach(r=>{const c=recCat(r);cnt[c]=(cnt[c]||0)+1});
  const cats=[...CATS.filter(c=>cnt[c]),...Object.keys(cnt).filter(c=>!CATS.includes(c)&&c!='Uncategorized'),...(cnt.Uncategorized?['Uncategorized']:[])];
  if(S.sv.cat!='All'&&!cnt[S.sv.cat])S.sv.cat='All';
- const nOpen=S.records.filter(r=>r.mode!='purchase'&&stOf(r)=='open').length;if(!nOpen&&S.sv.st!='All')S.sv.st='All';
+ const nOpen=S.records.filter(r=>r.mode!='purchase'&&stOf(r)=='open').length,nWork=S.records.filter(r=>r.mode!='purchase').length,nCl=nWork-nOpen;if(!nWork&&S.sv.st!='All')S.sv.st='All';
  el.innerHTML='<div class="sv">'+svSeg()
  +'<div class="svq"><div class="svs"><input id="svq" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Merchant, client or receipt #" aria-label="Search saved records" value="'+esc(S.sv.q)+'" oninput="svFind(this.value)"><button id="svclr" type="button" onclick="svClear()" aria-label="Clear search" style="'+(S.sv.q?'':'display:none')+'">✕</button></div>'+sortCtl(x)+'</div>'
  +(x&&cats.length>1?'<div class="chips"><button class="'+(S.sv.cat=='All'?'on':'')+'" onclick="svCat(\'All\')">All</button>'+cats.map(c=>'<button class="'+(S.sv.cat==c?'on':'')+'" onclick="svCat(\''+c+'\')">'+c+'</button>').join('')+'</div>':'')
  
- +(!x&&nOpen?'<div class="chips">'+[['All','All'],['open','Open ('+nOpen+')'],['closed','Closed']].map(([v,l])=>'<button class="'+((S.sv.st||'All')==v?'on':'')+'" onclick="svSt(\''+v+'\')">'+l+'</button>').join('')+'</div>':'')
+ +(!x&&nWork?'<div class="chips">'+[['All','All'],['open','Open ('+nOpen+')'],['closed','Closed ('+nCl+')']].map(([v,l])=>'<button class="'+((S.sv.st||'All')==v?'on':'')+'" onclick="svSt(\''+v+'\')">'+l+'</button>').join('')+'</div>':'')
  +'<div id="svbody" class="sv">'+svBody()+'</div></div>'}
 
 function dl(f){const r=S.rec,o=compute(r);let d,n='record.'+f;if(f=='json')d=JSON.stringify({...r,calculated:o},null,1);else{const rows=r.mode=='purchase'?[['Item','Qty','Unit','Total'],...r.items.filter(i=>!i.off).map(i=>[i.n,i.q,i.p,i.t]),['Subtotal','','',o.sub],...(o.disc?[['Discount','','',-o.disc]]:[]),['Tax','','',N(r.tax)==null?'':o.tax],['Total','','',o.total]]:[['Field','Value'],...text(r).filter(l=>l.includes(': ')).map(l=>l.split(/: (.*)/s).slice(0,2))];d=rows.map(x=>x.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(',')).join('\n')}
@@ -871,6 +875,7 @@ function applyLearned(r){if(!r)return;r.fix=r.fix||{};
  else fillMiles(r)}
 /* a field was finished (the change event fires when you leave it, so nothing is learned from half-typed text) */
 function fldDone(k){const r=S.rec;if(!r||!r.loaded)return;
+ if(k=='amount'&&r.mode!='purchase'){delete r.estTotal;render();return}
  if(k=='location'&&r.mode!='purchase'){if(fillMiles(r)){const e=$('#f_roundTrip');if(e){e.value=r.roundTrip??'';e.classList.toggle('ext',String(r.roundTrip??'').trim()!=='')}paintFix('roundTrip');calc()}}
  if(k=='merchant'||k=='roundTrip')learnRec(r)}
 function fixText(k){const r=S.rec;if(!r||!r.fix||!r.fix[k]||(r.edited&&r.edited[k]))return'';
@@ -907,7 +912,7 @@ function dupWarn(){const el=$('#dupwarn');if(!el)return;const r=S.rec,m=r&&r.loa
 function openRec(i){const r=S.records[i];if(!r)return;closeRec();const{t,G}=rows(r),
  h=G.map(g=>({...g,rows:g.rows.filter(x=>x[0]!=='Regular Hours')})).map(g=>'<div class="rg">'+g.rows.map(([l,v,hl])=>`<div class="rr${hl?' hl':''}${g.k=='tot'?' tt':''}"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join('')+'</div>').join(''),
  o=document.createElement('div');o.id='recmodal';o.className='rmo';o.onclick=e=>{if(e.target===o)closeRec()};
- o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${r.mode!='purchase'&&stOf(r)=='open'?'<div class="stn"><span class="stb">Open</span> The amount may still change. It is not counted in your income totals.</div>':''}${r.imgs&&r.imgs.length?'':'<div class="invm">'+(r.mode=='purchase'?'No receipt attached':'No invoice attached')+'</div>'}${h}</div><div class="rmf">${r.mode!='purchase'?`<button class="pri" onclick="flipStatus(${i})">${stOf(r)=='open'?'Mark closed':'Reopen'}</button>`:''}<button onclick="dlRec(${i})">Download PDF</button><button onclick="viewRec(${i})">View PDF</button>${r.imgs&&r.imgs.length?`<button onclick="cropRec(${i})">Crop</button><button onclick="attachRec(${i})">Replace invoice</button><button onclick="rmImg(${i})">Remove invoice</button>`:`<button onclick="attachRec(${i})">Attach invoice</button>`}<button onclick="editRec(${i})">Edit</button><button onclick="delOpen(${i})" style="color:#b3261e">Delete</button></div></div>`;
+ o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${r.mode!='purchase'?'<div class="stn'+(stOf(r)=='open'?'':' cl')+'">'+swHtml(r,'flipStatus('+i+')')+'</div>':''}${r.imgs&&r.imgs.length?'':'<div class="invm">'+(r.mode=='purchase'?'No receipt attached':'No invoice attached')+'</div>'}${h}</div><div class="rmf"><button onclick="dlRec(${i})">Download PDF</button><button onclick="viewRec(${i})">View PDF</button>${r.imgs&&r.imgs.length?`<button onclick="cropRec(${i})">Crop</button><button onclick="attachRec(${i})">Replace invoice</button><button onclick="rmImg(${i})">Remove invoice</button>`:`<button onclick="attachRec(${i})">Attach invoice</button>`}<button onclick="editRec(${i})">Edit</button><button onclick="delOpen(${i})" style="color:#b3261e">Delete</button></div></div>`;
  document.body.appendChild(o);document.body.style.overflow='hidden'}
 function delOpen(i){if(!S.records[i])return;if(!confirm('Delete this saved record? This cannot be undone.'))return;S.records.splice(i,1);closeRec();renderRecs();store()}
 function closeRec(){const o=$('#recmodal');if(o)o.remove();document.body.style.overflow=''}
@@ -1520,7 +1525,7 @@ window.csvGo=async function(){
    const PT_VER='vv200'
    ---------- */
 const PT_BUILD=248;
-const PT_LABEL='v48';
+const PT_LABEL='v50';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
@@ -1684,4 +1689,4 @@ async function cropApply(){if(!CR||!CR.im||!CR.sel)return;const r=S.records[CR.i
 (function(){const st=document.createElement('style');st.textContent='.cmo{position:fixed;inset:0;z-index:10000;background:#000;display:flex;flex-direction:column;padding:max(10px,env(safe-area-inset-top)) 12px max(10px,env(safe-area-inset-bottom))}.cmh{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0 10px}.cmh span{font-size:13px;color:var(--mut)}.cmw{flex:1;display:flex;align-items:center;justify-content:center;min-height:0}.cmb{position:relative;padding:18px;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;box-sizing:content-box}.cmb img{display:block;pointer-events:none}.cms{position:absolute;border:2px solid #fff;box-sizing:border-box;box-shadow:0 0 0 9999px rgba(0,0,0,.6);touch-action:none;cursor:move}.cms i{position:absolute;width:40px;height:40px;margin:-20px 0 0 -20px;touch-action:none}.cms i::after{content:"";position:absolute;left:50%;top:50%;width:14px;height:14px;margin:-7px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.4)}.cms i[data-h=nw]{left:0;top:0}.cms i[data-h=n]{left:50%;top:0}.cms i[data-h=ne]{left:100%;top:0}.cms i[data-h=e]{left:100%;top:50%}.cms i[data-h=se]{left:100%;top:100%}.cms i[data-h=s]{left:50%;top:100%}.cms i[data-h=sw]{left:0;top:100%}.cms i[data-h=w]{left:0;top:50%}.cmf{display:flex;gap:10px;padding:10px 0}.cmf button{flex:1}';document.head.appendChild(st)})();
 
 /* v48: Open / Closed invoice status (badge, toggle, filter chip) */
-(function(){const c=document.createElement('style');c.textContent='.stb{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;font-size:11.5px;font-weight:700;letter-spacing:.02em;vertical-align:1px;background:rgba(217,154,78,.18);color:#d99a4e;border:1px solid rgba(217,154,78,.4)}'+'.stn{display:flex;align-items:center;gap:8px;margin:0 0 10px;padding:9px 12px;border-radius:12px;font-size:13px;color:var(--mut);background:rgba(217,154,78,.1);border:1px solid rgba(217,154,78,.3)}.stn .stb{margin:0;flex:0 0 auto}'+'.stseg{max-width:260px}';document.head.appendChild(c)})();
+(function(){const c=document.createElement('style');c.textContent='.stb{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;font-size:11.5px;font-weight:700;letter-spacing:.02em;vertical-align:1px;background:rgba(217,154,78,.18);color:#d99a4e;border:1px solid rgba(217,154,78,.4)}'+'.stn{display:flex;align-items:center;gap:8px;margin:0 0 10px;padding:9px 12px;border-radius:12px;font-size:13px;color:var(--mut);background:rgba(217,154,78,.1);border:1px solid rgba(217,154,78,.3)}.stn .stb{margin:0;flex:0 0 auto}'+'.stb.cl{background:rgba(46,125,90,.14);color:#2e7d5a;border-color:rgba(46,125,90,.4)}.stn.cl{background:rgba(46,125,90,.08);border-color:rgba(46,125,90,.3)}.stn .stsw{flex:0 0 auto}'+'.stsw{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600;color:var(--mut)}.stsw .on{color:var(--fg)}.sw{position:relative;width:52px;height:30px;padding:0;border-radius:999px;border:1px solid rgba(0,0,0,.15);background:#2e7d5a;cursor:pointer;flex:0 0 auto;transition:background .2s}.sw.on{background:#d99a4e}.sw i{position:absolute;top:2px;left:2px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.35);transition:transform .2s}.sw.on i{transform:translateX(22px)}';document.head.appendChild(c)})();
