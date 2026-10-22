@@ -56,7 +56,7 @@ async function rereadStatuses(readFn){if(REREAD)return;
  finally{REREAD=0}
  try{if(done)toast('Checked '+done+' invoice'+(done==1?'':'s')+(chg?' · '+chg+' changed':' · no changes'))}catch(e){}return{done,chg}}
 function putStatus(r,v){v=v=='open'?'open':'closed';r.stMan=v;r.status=v;r.stBy='you';r.stWhy='Set by you';delete r.stGuess}
-const swHtml=(r,fn)=>{const o=stOf(r)=='open';return `<div class="stsw2" role="group" aria-label="Invoice status"><button type="button" class="stp o${o?' on':''}" aria-pressed="${o}"${o?'':` onclick="${fn}"`}>(Open)</button><button type="button" class="stp c${o?'':' on'}" aria-pressed="${!o}"${o?` onclick="${fn}"`:''}>(Closed)</button></div>`};
+const swHtml=(r,fn)=>{const o=stOf(r)=='open';return `<div class="stsw"><span class="${o?'':'on'}">Closed</span><button type="button" class="sw${o?' on':''}" role="switch" aria-checked="${o}" aria-label="Invoice is open" onclick="${fn}"><i></i></button><span class="${o?'on':''}">Open</span></div>`};
 function setStatus(v){const r=S.rec;if(!r)return;putStatus(r,v);render()}
 function flipStatus(i){const r=S.records[i];if(!r||r.mode=='purchase')return;putStatus(r,stOf(r)=='open'?'closed':'open');store();renderRecs();openRec(i);toast(stOf(r)=='open'?'Marked open':'Marked closed')}
 function manual(){dismissRestore();S.rec.loaded=true;render()}
@@ -422,7 +422,7 @@ function svBody(){
   return `<div class="srow tap" role="button" tabindex="0" onclick="openRec(${i})" onkeydown="if(event.key=='Enter')openRec(${i})"><div class="sm"><div class="s1">${nm}</div>${sub?`<div class="s2">${sub}</div>`:''}${r.imgs&&r.imgs.length?'':`<div class="s3">${pur?'No receipt':'No invoice'}</div>`}</div><div class="ra"><b>${M(!pur&&wk!=null?wkAmt(r,wk):recAmt(r))}</b>${!pur?(stOf(r)=='open'?'<span class="stb">(Open)</span>':'<span class="stb cl">(Closed)</span>'):''}</div></div>`};
  let lbl;if(q)lbl=list.length+' match'+(list.length==1?'':'es')+(x&&S.sv.cat!='All'?' in '+S.sv.cat:'');else if(x)lbl=S.sv.cat!='All'?list.length+' in '+S.sv.cat:list.length+' expense'+(list.length==1?'':'s');else{const wd=wdCount(list);lbl=wd?wd+' working day'+(wd==1?'':'s'):list.length+' work invoice'+(list.length==1?'':'s')}
  let none='';if(!list.length){if(q){const toks=svTok(S.sv.q),o=S.records.filter(r=>(r.mode=='purchase')!=x&&recMatch(r,toks)).length;none='<div class="empty2">No matches for “'+esc(S.sv.q.trim())+'”.'+(x&&S.sv.cat!='All'?'<br>Try the All category.':'')+(o?'<br><button onclick="svOther()" style="margin-top:10px">Show '+o+' in '+(x?'Work invoices':'Expenses')+'</button>':'')+'</div>'}else none='<div class="empty2">'+(x?'No expenses saved yet.':S.sv.st&&S.sv.st!='All'?'No '+S.sv.st+' work invoices.':'No work invoices saved yet.')+'</div>'}
- return (list.length?'<div class="svsum"><span>'+lbl+'</span><b>'+M(tot)+'</b></div>'+(miss?'<div class="invm">'+miss+' of '+list.length+' without '+(x?'a receipt':'an invoice')+'</div>':'')+(grp?grpRows(list,row):'<div class="sl">'+list.map(row).join('')+'</div>'):none)
+ return (list.length?(miss?'<div class="invm">'+miss+' of '+list.length+' without '+(x?'a receipt':'an invoice')+'</div>':'')+(grp?grpRows(list,row):'<div class="sl">'+list.map(row).join('')+'</div>')+'<div class="svsum" style="margin-top:10px"><span>'+lbl+'</span><b>'+M(tot)+'</b></div>':none)
  +(x&&T.n&&S.sv.cat=='All'&&!q?`<div class="sl tgl${S.sv.tot?' open':''}"><button type="button" class="tgh" aria-expanded="${S.sv.tot?'true':'false'}" onclick="totTog(this)"><span class="tgt">Expense totals</span><span class="tgv">${M(T.all)}</span><i class="tgc" aria-hidden="true"></i></button><div class="tgb"><div class="tgi">${T.months.map(([l,v])=>trow(l,v)).join('')}${T.years.length>1?T.years.map(([l,v])=>trow(l+' total',v)).join(''):''}${T.cats.map(([l,v])=>trow(l,v)).join('')}</div></div></div>`:'')
  +(list.length?'<div class="svact"><button class="pri" onclick="svCopy()">Copy '+(list.length==1?'record':list.length+' records')+'</button><button onclick="csvOpen()">Export CSV\u2026</button></div>':'')
  }
@@ -1620,7 +1620,7 @@ window.csvGo=async function(){
    const PT_VER='vv200'
    ---------- */
 const PT_BUILD=262;
-const PT_LABEL='v66';
+const PT_LABEL='v69';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
