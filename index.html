@@ -75,7 +75,7 @@ input[type=file]{border:0;background:transparent;padding:0;width:100%;max-width:
 <div id="lock"></div>
 <div id="app"><div class="shell">
 <div class="side">
-<div class="brand"><span class="logo">$</span><b>PaperTrail</b><span class="pill" id="ver">v70</span></div>
+<div class="brand"><span class="logo">$</span><b>PaperTrail</b><span class="pill" id="ver">v71</span></div>
 <div class="nav"><div class="gt">Record type</div><button id="m1" onclick="goMode('purchase')">Expense</button><button id="m2" onclick="goMode('freelance')">Work Invoice</button><button id="m3" onclick="showSaved()">Saved</button></div>
 <div class="sp"></div>
 <details><summary>Settings</summary><label>Auto-logout after idle (minutes) - locks the app; saved records stay encrypted on this phone</label><input id="idle" type="number" min="1" value="15" onchange="setIdle()"><button onclick="fixOpen()">Remembered fixes<span id="fxcnt"></span></button><button onclick="nuke()">Delete all saved records</button></details>
@@ -220,7 +220,10 @@ h3,.gt,label{letter-spacing:.18em}
 :root{--sans:"ModistaPro",-apple-system,"SF Pro Text",system-ui,sans-serif;--mono:"ModistaPro",-apple-system,"SF Pro Text",system-ui,sans-serif;--title:"ZilapMono","ModistaPro",-apple-system,system-ui,sans-serif;--subj:"Alphacent","ModistaPro",-apple-system,system-ui,sans-serif}
 html body,html body button,html body input,html body select,html body textarea{font-family:var(--sans)}
 html body #copyta,html body #rcheck{font-family:var(--sans)}
-html body :is(h1,h2,h3,.gt,.th1,.pgh,.sl h4,.cal2 h3,#calc .res h3){font-family:var(--subj)!important;font-weight:400}
-html body .brand b,html body h2.ttl{font-family:var(--title)!important;font-weight:400;letter-spacing:.02em}
+html body :is(h1,h2):not(.ttl),html body #topbar .nav button,html body .nav button{font-family:var(--subj)!important;font-weight:400}
+html body :is(h3,.gt,.th1,.pgh,.sl h4,.cal2 h3,#calc .res h3){font-family:var(--sans)!important}
+html body .brand b,html body #topbar .brand b,html body h2.ttl{font-family:var(--title)!important;font-weight:400;letter-spacing:.02em}
+/* the phone layout hid the title (nav.js: #topbar .brand b{display:none}); show it */
+html body #topbar .brand b{display:inline-block!important;font-size:19px;line-height:1;white-space:nowrap;color:var(--fg)}
 </style>
-<script src="parser.js?v=270"></script><script src="scan.js?v=270"></script><script src="app.js?v=270"></script><script src="nav.js?v=270"></script></body></html>
+<script src="parser.js?v=271"></script><script src="scan.js?v=271"></script><script src="app.js?v=271"></script><script src="nav.js?v=271"></script></body></html>
