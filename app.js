@@ -32,8 +32,14 @@ async function readRecText(r){let t='';for(const g of (r.imgs||[])){if(!g||!g.u)
 /* v264: faint gray 'Total' lines (small text, light color, highlighter) are often missed by the first read. When the text has no printed total, read the picture again bigger / with cleaner contrast and copy only the Total-type lines from the read that finds one. */
 const hasTot=t=>{try{return !!Parser.parse(t||'','freelance').fields.tp}catch(e){return false}};
 function upC(c,z){const o=document.createElement('canvas');o.width=Math.round(c.width*z);o.height=Math.round(c.height*z);const x=o.getContext('2d');x.imageSmoothingQuality='high';x.drawImage(c,0,0,o.width,o.height);return o}
-async function findTotal(c,t0){if(hasTot(t0))return t0;const m=Math.max(c.width,c.height),tries=[()=>upC(c,Math.min(2,2800/m)),()=>upC(c,Math.min(3,3400/m)),()=>prepUp(c)];
- for(const mk of tries){try{const d=await ocrP(mk()),x=String(d.text||'');if(!hasTot(x))continue;const add=x.split('\n').filter(l=>/\b(?:total|balance|amount\s*due|net\s*pay)\b/i.test(l)).join('\n');return String(t0||'')+'\n'+add}catch(e){}}
+function redC(c,z){const o=upC(c,z),x=o.getContext('2d'),d=x.getImageData(0,0,o.width,o.height),p=d.data;for(let i=0;i<p.length;i+=4){p[i+1]=p[i+2]=p[i]}x.putImageData(d,0,0);return o}/* red channel only: a yellow highlighter is bright in red, so it disappears while gray text stays dark */
+function grayC(c,z){const o=upC(c,z),x=o.getContext('2d'),d=x.getImageData(0,0,o.width,o.height),p=d.data,n=o.width*o.height,h=new Uint32Array(256);for(let i=0;i<p.length;i+=4){const l=Math.round(.299*p[i]+.587*p[i+1]+.114*p[i+2]);p[i]=l;h[l]++}
+ let lo=0,hi=255,a=0;for(let v=0;v<256;v++){a+=h[v];if(a>=n*.01){lo=v;break}}a=0;for(let v=255;v>=0;v--){a+=h[v];if(a>=n*.2){hi=v;break}}if(hi-lo<40){lo=Math.max(0,hi-120)}
+ for(let i=0;i<p.length;i+=4){const v=Math.max(0,Math.min(255,Math.round((p[i]-lo)*255/Math.max(1,hi-lo))));p[i]=p[i+1]=p[i+2]=v;p[i+3]=255}x.putImageData(d,0,0);return o}
+async function findTotal(c,t0){if(hasTot(t0))return t0;const m=Math.max(c.width,c.height),z2=Math.min(2,3000/m),z3=Math.min(3,3600/m),
+ tries=[()=>redC(c,z2),()=>redC(c,z3),()=>grayC(c,z2),()=>grayC(c,z3),()=>upC(c,z2),()=>upC(c,z3),()=>prepUp(c)];
+ for(const mk of tries){for(const mode of [6,3]){try{const cv=mk();let x;if(mode==6)x=String((await ocrP(cv)).text||'');else x=String((await Promise.race([Tesseract.recognize(cv,'eng'),new Promise((_,j)=>setTimeout(()=>j(0),60000))])).data.text||'');
+  if(!hasTot(x))continue;const add=x.split('\n').filter(l=>/\b(?:total|balance|amount\s*due|net\s*pay)\b/i.test(l)).join('\n');return String(t0||'')+'\n'+add}catch(e){}}}
  return t0}
 function statusFromText(t){const F=Parser.parse(t,'freelance').fields||{},p={amount:F.amount,tp:F.tp?1:0,estTotal:F.estTotal,notes:F.notes};return autoSt(p)}
 async function rereadStatuses(readFn){if(REREAD)return;
@@ -1614,7 +1620,7 @@ window.csvGo=async function(){
    const PT_VER='vv200'
    ---------- */
 const PT_BUILD=262;
-const PT_LABEL='v65';
+const PT_LABEL='v66';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
@@ -1783,4 +1789,4 @@ async function cropApply(){if(!CR||!CR.im||!CR.sel)return;const r=S.records[CR.i
 (function(){const c=document.createElement('style');c.textContent='.srow .ra{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:0 0 auto}.srow .stb,.stn .stb{display:block;margin:0!important;padding:0!important;font:400 11.5px -apple-system,system-ui,sans-serif!important;font-variant:normal!important;font-style:normal!important;letter-spacing:0!important;color:var(--mut)!important;opacity:.85!important}.srow .stb.cl{opacity:.5!important}';document.head.appendChild(c)})();
 (function(){const c=document.createElement('style');c.textContent='.stw{margin:-4px 0 10px;font-size:12px;color:var(--mut);opacity:.85}';document.head.appendChild(c)})();
 /* v263: Open / Closed look. Written in parentheses (no bullet, no switch): Open in amber, Closed in green, set in small caps. In the invoice window the two words sit side by side and the current one is lit. */
-(function(){const c=document.createElement('style');c.textContent='.srow .stb,.stn .stb{font:600 12.5px/1.2 Georgia,"Times New Roman",serif!important;font-variant:small-caps!important;letter-spacing:.06em!important;opacity:1!important;color:#d9953a!important}.srow .stb.cl{color:#4a9d78!important;opacity:1!important}.stsw2{display:flex;align-items:center;gap:18px}.stsw2 .stp{background:none;border:0;padding:6px 0;margin:0;min-height:36px;cursor:pointer;font:600 16px/1 Georgia,"Times New Roman",serif;font-variant:small-caps;letter-spacing:.06em;color:var(--mut);opacity:.5;border-bottom:2px solid transparent;border-radius:0}.stsw2 .stp.on{opacity:1;cursor:default}.stsw2 .stp.o.on{color:#d9953a;border-bottom-color:#d9953a}.stsw2 .stp.c.on{color:#4a9d78;border-bottom-color:#4a9d78}';document.head.appendChild(c)})();
+(function(){const c=document.createElement('style');c.textContent='.srow .stb,.stn .stb{font:600 12.5px/1.2 -apple-system,system-ui,sans-serif!important;font-variant:small-caps!important;letter-spacing:.06em!important;opacity:1!important;color:#d9953a!important}.srow .stb.cl{color:#4a9d78!important;opacity:1!important}.stsw2{display:flex;align-items:center;gap:18px}.stsw2 .stp{background:none;border:0;padding:6px 0;margin:0;min-height:36px;cursor:pointer;font:600 16px/1 -apple-system,system-ui,sans-serif;font-variant:small-caps;letter-spacing:.06em;color:var(--mut);opacity:.5;border-bottom:2px solid transparent;border-radius:0}.stsw2 .stp.on{opacity:1;cursor:default}.stsw2 .stp.o.on{color:#d9953a;border-bottom-color:#d9953a}.stsw2 .stp.c.on{color:#4a9d78;border-bottom-color:#4a9d78}';document.head.appendChild(c)})();
