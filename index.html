@@ -75,7 +75,7 @@ input[type=file]{border:0;background:transparent;padding:0;width:100%;max-width:
 <div id="lock"></div>
 <div id="app"><div class="shell">
 <div class="side">
-<div class="brand"><span class="logo">$</span><b>PaperTrail</b><span class="pill" id="ver">v73</span></div>
+<div class="brand"><span class="logo">$</span><b>PaperTrail</b><span class="pill" id="ver">v74</span></div>
 <div class="nav"><div class="gt">Record type</div><button id="m1" onclick="goMode('purchase')">Expense</button><button id="m2" onclick="goMode('freelance')">Work Invoice</button><button id="m3" onclick="showSaved()">Saved</button></div>
 <div class="sp"></div>
 <details><summary>Settings</summary><label>Auto-logout after idle (minutes) - locks the app; saved records stay encrypted on this phone</label><input id="idle" type="number" min="1" value="15" onchange="setIdle()"><button onclick="fixOpen()">Remembered fixes<span id="fxcnt"></span></button><button onclick="nuke()">Delete all saved records</button></details>
@@ -236,5 +236,17 @@ html body #topbar .nav button.on{letter-spacing:.07em}
 html body :is(h1,h2):not(.ttl){letter-spacing:.05em}
 html body .head h1{font-size:18px}
 html body label{letter-spacing:.06em}
+/* v74 type scale: title 24, tabs 13 (Alphacent caps), every button/link 13 or less, receipt-style logo instead of "$" */
+html body #topbar .brand b{font-size:24px;letter-spacing:.06em;transform:translateY(1px)}
+html body .lkbrand b{font-size:26px;letter-spacing:.06em}
+html body #topbar .logo{width:36px;height:36px;border-radius:11px}
+html body .logo{font-size:0!important;color:transparent!important;line-height:0}
+html body .logo::before{content:"";display:block;width:20px;height:20px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 3h12v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5L6 21z'/%3E%3Cpath d='M9.5 8h5M9.5 12h5'/%3E%3C/svg%3E") center/contain no-repeat}
+html body #topbar .nav{gap:4px}
+html body #topbar .nav button,html body .nav button{flex:1 1 0;min-width:0;font-size:13px;letter-spacing:.03em;padding:12px 2px}
+html body #topbar .nav button.on{letter-spacing:.03em}
+html body{font-synthesis:none}
+html body :is(button.pri,a.btn,.seg button,#actions button,.row button,button.lnk){font-size:12px!important;font-weight:400!important;letter-spacing:.02em}
+html body :is(.hint,#ph,.ph,.empty){font-size:13px}
 </style>
-<script src="parser.js?v=273"></script><script src="scan.js?v=273"></script><script src="app.js?v=273"></script><script src="nav.js?v=273"></script></body></html>
+<script src="parser.js?v=274"></script><script src="scan.js?v=274"></script><script src="app.js?v=274"></script><script src="nav.js?v=274"></script></body></html>
