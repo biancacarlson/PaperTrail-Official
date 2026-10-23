@@ -1056,7 +1056,7 @@ function ui(tab){
  S.uid=null;S.email=null;S.pp=null;
  let last='';try{last=localStorage.getItem(LAST)||''}catch(e){}
  const up=tab=='up';
- lockUI('<h2 class="ttl">PaperTrail</h2>'
+ lockUI('<h2>PaperTrail</h2>'
  +'<div style="display:flex;gap:8px;margin:14px 0 4px"><button type="button" class="'+(up?'':'pri')+'" onclick="authTab(\'in\')">Sign in</button><button type="button" class="'+(up?'pri':'')+'" onclick="authTab(\'up\')">Create account</button></div>'
  +'<input id="em" type="email" inputmode="email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="Email" value="'+esc(up?'':last)+'">'
  +'<input id="pw" type="password" autocomplete="'+(up?'new-password':'current-password')+'" placeholder="Password'+(up?' (8+ characters)':'')+'">'
@@ -1619,8 +1619,8 @@ window.csvGo=async function(){
    const PT_VER='v200'
    const PT_VER='vv200'
    ---------- */
-const PT_BUILD=274;
-const PT_LABEL='v74';
+const PT_BUILD=275;
+const PT_LABEL='v75';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
