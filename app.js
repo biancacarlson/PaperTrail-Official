@@ -221,6 +221,7 @@ function calc(){const r=S.rec;if(!r)return;try{dupWarn()}catch(e){}const o=compu
  if(r.mode=='purchase')h+=row('Items ('+(r.items.length-o.nOff)+')',M(o.sub))+(o.ship?row('Shipping',M(o.ship)):'')+row('Tax',M(N(r.tax)==null?null:o.tax),o.nOff&&N(r.tax)?'adjusted to work items':'')+'<div class="hero tot"><span>'+(o.nOff?'Work-related total':'Total')+'</span><b>'+M(o.total)+'</b></div>'+o.warn.map(w=>'<div class="msg">⚠ '+w+'</div>').join('');
  else{const d=est(r);
   if(d)h+='<div class="hero"><span>Net-30 payout'+(r.endDate?'':' (estimate)')+'</span><b>'+us(d)+'</b><small>'+(r.endDate?'Net 30: same date, next month, after the event end date':'No event end date found, so counted from the job date')+'</small><button onclick="addCal()">Add to Calendar</button></div>';
+  if(workDays(r).length)h+='<div class="hero"><span>Work day'+(workDays(r).length>1?'s':'')+'</span><b>'+workDays(r).map(x=>(x.getMonth()+1)+'/'+x.getDate()).join(', ')+'</b><small>Reminder so you never miss the job, even if you entered the invoice ahead of time</small><button onclick="addWorkCal()">Add Work Day to Calendar</button></div>';
   h+=row('Mileage Deduction',M(o.wear),o.wear!=null?'$'+o.rate+'/mi<br>IRS standard mileage rate':o.rate==null&&o.rt!=null?'No IRS rate on file for this year':'')}
  $('#calc').innerHTML=h+'</div>';persist()}
 /* ---------- selection → field ---------- */
@@ -449,6 +450,27 @@ function addCal(){const r=S.rec,d=est(r);if(!d)return;const e=d.replace(/-/g,'')
  L=['Expected payment (net 30)','Amount: '+(amt||'not entered'),who?'Client: '+who:'',r.employer&&r.client&&r.employer!==r.client?'Employer: '+r.employer:'',r.invoice?'Invoice #: '+r.invoice:'',r.jobDate?'Job date: '+us(r.jobDate):'',r.endDate?'Event end date: '+us(r.endDate):'',r.location?'Location: '+r.location:'',hr!=null||ot!=null?'Hours: '+(hr||0)+' regular'+(ot?', '+ot+' overtime':''):'',r.notes?'Notes: '+String(r.notes).replace(/\s+/g,' ').trim():''].filter(Boolean),
  ics=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//PaperTrail//EN','BEGIN:VEVENT','UID:'+e+'-'+Date.now()+'@papertrail','DTSTAMP:'+new Date().toISOString().replace(/[-:]|\.\d+/g,''),'DTSTART;VALUE=DATE:'+e,'DTEND;VALUE=DATE:'+n,'SUMMARY:'+x('Net-30 payout'+(amt?' '+amt:'')+(who?' - '+who:'')),'DESCRIPTION:'+L.map(x).join('\\n'),'BEGIN:VALARM','TRIGGER:-PT15H','ACTION:DISPLAY','DESCRIPTION:'+x('Payout due'+(amt?': '+amt:'')+(who?' - '+who:'')),'END:VALARM','END:VEVENT','END:VCALENDAR'].join('\r\n'),
  a=document.createElement('a');a.href=URL.createObjectURL(new Blob([ics],{type:'text/calendar'}));a.download='payout.ics';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
+/* v83: work-day calendar events. One event per shift (timed) or per day (all-day), with alerts the evening before and the morning of. */
+function addWorkCal(){const r=S.rec;if(!r||r.mode=='purchase')return;
+ const x=t=>String(t).replace(/[\\;,]/g,'\\$&').replace(/\n/g,' '),p=n=>String(n).padStart(2,'0'),ds=d=>d.getFullYear()+p(d.getMonth()+1)+p(d.getDate()),
+  tm=v=>{const m=/^(\d{1,2}):(\d{2})/.exec(v||'');return m?p(m[1])+m[2]+'00':null},
+  nextDay=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate()+1),
+  who=r.client||r.employer||'',amt=r.amount!=null&&r.amount!==''&&N(r.amount)!=null?M(N(r.amount)):null,
+  info=[who?'Client: '+who:'',r.employer&&r.client&&r.employer!==r.client?'Employer: '+r.employer:'',r.invoice?'Invoice #: '+r.invoice:'',r.location?'Location: '+r.location:'',amt?'Invoice amount: '+amt:'',r.notes?'Notes: '+String(r.notes).replace(/\s+/g,' ').trim():''].filter(Boolean),
+  stamp=new Date().toISOString().replace(/[-:]|\.\d+/g,''),ev=[],
+  al=(t,d)=>['BEGIN:VALARM','TRIGGER:'+t,'ACTION:DISPLAY','DESCRIPTION:'+x(d),'END:VALARM'],
+  title='Work'+(who?': '+who:'')+(r.location?' @ '+r.location:''),
+  timed=(r.shifts||[]).filter(y=>y&&Parser.pd(y.date||r.jobDate)&&tm(y.start)&&tm(y.end));
+ let n=0;
+ timed.forEach(y=>{const d=Parser.pd(y.date||r.jobDate),a=tm(y.start),b=tm(y.end),e=b<=a?nextDay(d):d;
+  ev.push(['BEGIN:VEVENT','UID:work-'+ds(d)+a+'-'+(n++)+'-'+Date.now()+'@papertrail','DTSTAMP:'+stamp,'DTSTART:'+ds(d)+'T'+a,'DTEND:'+ds(e)+'T'+b,'SUMMARY:'+x(title),'DESCRIPTION:'+[t12(y.start)+' - '+t12(y.end)].concat(info).map(x).join('\\n'),...(r.location?['LOCATION:'+x(r.location)]:[]),...al('-P1D','Work tomorrow at '+t12(y.start)+(who?': '+who:'')),...al('-PT2H','Work starts at '+t12(y.start)+(who?': '+who:'')),'END:VEVENT'].join('\r\n'))});
+ /* days with no start/end time (or no shifts entered) become all-day events */
+ const timedDays=new Set(timed.map(y=>+Parser.pd(y.date||r.jobDate)));
+ workDays(r).filter(d=>!timedDays.has(+d)).forEach(d=>{
+  ev.push(['BEGIN:VEVENT','UID:work-'+ds(d)+'-'+(n++)+'-'+Date.now()+'@papertrail','DTSTAMP:'+stamp,'DTSTART;VALUE=DATE:'+ds(d),'DTEND;VALUE=DATE:'+ds(nextDay(d)),'SUMMARY:'+x(title),'DESCRIPTION:'+info.map(x).join('\\n'),...(r.location?['LOCATION:'+x(r.location)]:[]),...al('-PT6H','Work tomorrow'+(who?': '+who:'')),...al('PT8H','Work today'+(who?': '+who:'')),'END:VEVENT'].join('\r\n'))});
+ if(!ev.length){st('Enter a job date first.');return}
+ const ics=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//PaperTrail//EN',...ev,'END:VCALENDAR'].join('\r\n'),
+  a=document.createElement('a');a.href=URL.createObjectURL(new Blob([ics],{type:'text/calendar'}));a.download='work-days.ics';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
 function doPrint(){$('#print').textContent=text(S.rec).join('\n');print()}
 /* ---------- encrypted autosave (AES-GCM, key from passcode, IndexedDB on this device) ---------- */
 const idb=(m,v)=>new Promise((ok,no)=>{const q=indexedDB.open('bench',1);q.onupgradeneeded=()=>q.result.createObjectStore('s');q.onerror=()=>no(q.error);q.onsuccess=()=>{const d=q.result,tx=d.transaction('s',m=='get'?'readonly':'readwrite'),o=tx.objectStore('s'),K=S.uid?'state:'+S.uid:'state',r=m=='get'?o.get(K):m=='put'?o.put(v,K):o.delete(K);tx.oncomplete=()=>{d.close();ok(r.result)};tx.onerror=()=>no(tx.error)}});
@@ -1621,7 +1643,7 @@ window.csvGo=async function(){
    const PT_VER='vv200'
    ---------- */
 const PT_BUILD=282;
-const PT_LABEL='v82';
+const PT_LABEL='v83';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();

@@ -38,6 +38,7 @@ It runs in your browser. Upload a receipt, invoice, screenshot or photo, check t
 - **Shifts:** one row per shift (date, start, end, hours). A split shift is two rows on the same date. Regular and overtime hours are totaled, and saved records and PDFs show each shift plus a split-day total
 - **Wear and tear:** calculated from the IRS business mileage rate for the job date
 - **Net 30:** payout date is the same date one month after the event end date (10/21 becomes 11/21). **Add to Calendar** creates an event with the amount in the title (e.g. `Net-30 payout $1,250.00 - Client`), and the notes list amount, client, invoice #, job and end dates, location and hours
+- **Add Work Day to Calendar:** a second button under the Net 30 payout. Makes one event per shift (using start and end times) or one all-day event per worked day, with alerts the evening before and the morning of, so an invoice entered ahead of time still puts the job on your calendar
 - **Invoice viewer:** shown at full height, so dragging scrolls the page. Pinch or tap **Enlarge** to zoom; while zoomed, one finger pans. **Reset zoom** (or pinching out) goes back. Tapping a word still picks it
 
 **Mileage:** PaperTrail does not look up distance. Tap **Search in Safari** or **Search in Chrome**, then type the result into **Round-trip miles**.
