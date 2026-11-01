@@ -233,7 +233,7 @@ function calc(){const r=S.rec;if(!r)return;try{dupWarn()}catch(e){}const o=compu
  if(r.mode=='purchase')h+=row('Items ('+(r.items.length-o.nOff)+')',M(o.sub))+(o.ship?row('Shipping',M(o.ship)):'')+row('Tax',M(N(r.tax)==null?null:o.tax),o.nOff&&N(r.tax)?'adjusted to work items':'')+'<div class="hero tot"><span>'+(o.nOff?'Work-related total':'Total')+'</span><b>'+M(o.total)+'</b></div>'+o.warn.map(w=>'<div class="msg">⚠ '+w+'</div>').join('');
  else{const d=est(r);
   if(d)h+='<div class="hero"><span>Net-30 payout'+(r.endDate?'':' (estimate)')+'</span><b>'+us(d)+'</b><small>'+(r.endDate?'Net 30: same date, next month, after the event end date':'No event end date found, so counted from the job date')+'</small><button onclick="addCal()">Add to Calendar</button></div>';
-  if(workDays(r).length)h+='<div class="hero"><span>Work day'+(workDays(r).length>1?'s':'')+'</span><b>'+workDays(r).map(x=>(x.getMonth()+1)+'/'+x.getDate()).join(', ')+'</b><small>Reminder so you never miss the job, even if you entered the invoice ahead of time</small><button onclick="addWorkCal()">Add Work Day to Calendar</button></div>';
+  if(workDays(r).length)h+='<div class="hero"><span>Work day'+(workDays(r).length>1?'s':'')+'</span><b>'+workDays(r).map(x=>(x.getMonth()+1)+'/'+x.getDate()).join(', ')+'</b><small>Reminder so you never miss the job, even if you entered the invoice ahead of time</small><button onclick="addWorkCal()">Add Work Day'+(workDays(r).length>1?'s':'')+' to Calendar</button></div>';
   h+=row('Mileage Deduction',M(o.wear),o.wear!=null?'$'+o.rate+'/mi<br>IRS standard mileage rate':o.rate==null&&o.rt!=null?'No IRS rate on file for this year':'')}
  $('#calc').innerHTML=h+'</div>';persist()}
 /* ---------- selection → field ---------- */
@@ -943,7 +943,16 @@ function learnRec(r){if(!r||!r.loaded||!S.key||S.noStore)return;const L=lrn();le
  else{const loc=String(r.location||'').trim(),k=nk(loc),mi=N(r.roundTrip);
   if(k&&mi!=null&&mi>0){const c=L.mi[k];if(!c||c.v!==mi){L.mi[k]={l:loc,v:mi,ts:Date.now()};ch=true}}}
  if(ch){learnTrim(L.m,200);learnTrim(L.mi,300);store();learnUI()}}
-function fillMiles(r){const c=lrn().mi[nk(r.location)];r.fix=r.fix||{};
+/* v86: a place you entered miles for before is remembered, even if the address text differs a little. Looks at remembered distances first, then every saved work invoice (newest first). Matches the full text, or just the venue/street part before the first comma. */
+function milesFor(loc){const k=nk(loc);if(!k)return null;const seg=v=>nk(String(v||'').split(',')[0]),sk=seg(loc),L=lrn().mi||{},
+  hit=(key,txt)=>key===k||(sk.length>=6&&seg(txt)===sk)||(k.length>=10&&key.length>=10&&(key.startsWith(k)||k.startsWith(key)));
+ for(const key of Object.keys(L)){const e=L[key];if(e&&e.v>0&&key===k)return{v:e.v}}
+ let best=null;
+ for(let i=(S.records||[]).length-1;i>=0;i--){const x=S.records[i];if(!x||x.mode=='purchase')continue;const v=N(x.roundTrip);if(v!=null&&v>0&&hit(nk(x.location),x.location)){best={v};break}}
+ if(best)return best;
+ for(const key of Object.keys(L)){const e=L[key];if(e&&e.v>0&&hit(key,e.l))return{v:e.v}}
+ return null}
+function fillMiles(r){const c=milesFor(r.location);r.fix=r.fix||{};
  if(c&&!r.edited.roundTrip&&(r.fix.roundTrip||String(r.roundTrip??'').trim()==='')){const was=r.roundTrip;r.roundTrip=String(c.v);r.fix.roundTrip=1;return was!==r.roundTrip}
  if(!c&&r.fix.roundTrip&&!r.edited.roundTrip){r.roundTrip='';r.fix.roundTrip=0;return true}return false}
 function applyLearned(r){if(!r)return;r.fix=r.fix||{};
@@ -988,7 +997,7 @@ function dupWarn(){const el=$('#dupwarn');if(!el)return;const r=S.rec,m=r&&r.loa
 function openRec(i){const r=S.records[i];if(!r)return;closeRec();const{t,G}=rows(r),
  h=G.map(g=>({...g,rows:g.rows.filter(x=>x[0]!=='Regular Hours')})).map(g=>'<div class="rg">'+g.rows.map(([l,v,hl])=>`<div class="rr${hl?' hl':''}${g.k=='tot'?' tt':''}"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join('')+'</div>').join(''),
  o=document.createElement('div');o.id='recmodal';o.className='rmo';o.onclick=e=>{if(e.target===o)closeRec()};
- o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${r.mode!='purchase'?'<div class="stn'+(stOf(r)=='open'?'':' cl')+'">'+swHtml(r,'flipStatus('+i+')')+'</div>'+(r.stWhy?'<div class="stw">'+esc(r.stWhy)+'</div>':''):''}${r.imgs&&r.imgs.length?'':'<div class="invm">'+(r.mode=='purchase'?'No receipt attached':'No invoice attached')+'</div>'}${h}</div><div class="rmf">${r.mode!='purchase'&&upDays(r).length?`<button onclick="addWorkCal(${i})">Add shift to calendar</button>`:''}<button onclick="dlRec(${i})">Download PDF</button><button onclick="viewRec(${i})">View PDF</button>${r.imgs&&r.imgs.length?`<button onclick="cropRec(${i})">Crop</button><button onclick="replaceInv(${i})">Replace invoice</button><button onclick="rmImg(${i})">Remove invoice</button>`:`<button onclick="attachRec(${i})">Attach invoice</button>`}<button onclick="editRec(${i})">Edit</button><button onclick="delOpen(${i})" style="color:#b3261e">Delete</button></div></div>`;
+ o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${r.mode!='purchase'?'<div class="stn'+(stOf(r)=='open'?'':' cl')+'">'+swHtml(r,'flipStatus('+i+')')+'</div>'+(r.stWhy?'<div class="stw">'+esc(r.stWhy)+'</div>':''):''}${r.imgs&&r.imgs.length?'':'<div class="invm">'+(r.mode=='purchase'?'No receipt attached':'No invoice attached')+'</div>'}${h}</div><div class="rmf">${r.mode!='purchase'&&upDays(r).length?`<button onclick="addWorkCal(${i})">Add work day${upDays(r).length>1?'s':''} to calendar</button>`:''}<button onclick="dlRec(${i})">Download PDF</button><button onclick="viewRec(${i})">View PDF</button>${r.imgs&&r.imgs.length?`<button onclick="cropRec(${i})">Crop</button><button onclick="replaceInv(${i})">Replace invoice</button><button onclick="rmImg(${i})">Remove invoice</button>`:`<button onclick="attachRec(${i})">Attach invoice</button>`}<button onclick="editRec(${i})">Edit</button><button onclick="delOpen(${i})" style="color:#b3261e">Delete</button></div></div>`;
  document.body.appendChild(o);document.body.style.overflow='hidden'}
 function delOpen(i){if(!S.records[i])return;if(!confirm('Delete this saved record? This cannot be undone.'))return;S.records.splice(i,1);closeRec();renderRecs();store()}
 function closeRec(){const o=$('#recmodal');if(o)o.remove();document.body.style.overflow=''}
@@ -1656,8 +1665,8 @@ window.csvGo=async function(){
    const PT_VER='v200'
    const PT_VER='vv200'
    ---------- */
-const PT_BUILD=285;
-const PT_LABEL='v85';
+const PT_BUILD=286;
+const PT_LABEL='v86';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
