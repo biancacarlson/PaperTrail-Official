@@ -1,7 +1,7 @@
 'use strict';
 /* self-update (V must match the ?v= number in index.html): the iPhone Home Screen app keeps its own cached copy of the page and ignores no-cache hints. On launch, ask the server (bypassing the cache) which version is current;
    if it is newer than this file, re-download every file once and reload. Runs from parser.js so even an old cached index.html picks it up. Once per session, so it can never loop. */
-(function(){var V=286;try{if(typeof window==='undefined'||!window.fetch||!navigator.onLine||sessionStorage.getItem('pt_upd'))return;
+(function(){var V=288;try{if(typeof window==='undefined'||!window.fetch||!navigator.onLine||sessionStorage.getItem('pt_upd'))return;
  fetch('index.html',{cache:'reload'}).then(function(r){return r.text()}).then(function(h){var m=h.match(/parser\.js\?v=(\d+)/);if(!m||+m[1]<=V)return;
   try{sessionStorage.setItem('pt_upd','1')}catch(e){}
   return Promise.all(['parser.js','scan.js','app.js'].map(function(f){return fetch(f+'?v='+m[1],{cache:'reload'})})).then(function(){location.reload()})}).catch(function(){})}catch(e){}})();
@@ -445,6 +445,8 @@ function parse1(text,mode){text=String(text||'');{const m=text.match(/^[ \t]*inv
   if(!shifts.length&&typeof drow!=='undefined'&&drow.length)drow.forEach(l=>{const m=l.match(/^(\d{1,2}\/\d{1,2}\/\d{2,4})\b/),t=l.match(tri);if(m&&t)shifts.push({date:m[1],start:'',end:'',hours:+t[1]})});
  }
  if(mode!=='purchase'&&!F.hours&&shifts.length){const h=+shifts.reduce((a,s)=>a+s.hours,0).toFixed(2);if(h>0){F.hours=String(h);found.hours=1}}
+ /* v87: an event's start date is not the day you worked. When the shifts show the first real work day inside the event's start-to-end span, that day is the job date. */
+ if(mode!=='purchase'&&shifts.length&&F.jobDate&&F.endDate){const a=pd(F.jobDate),b=pd(F.endDate),c=shifts.filter(s=>s&&pd(s.date)).sort((x,y)=>pd(x.date)-pd(y.date))[0];if(a&&b&&c){const d=pd(c.date);if(d>a&&d<=b)F.jobDate=c.date}}
  try{items.forEach(it=>{if(it&&it.n)it.n=cleanItem(it.n);if(it&&it.full)it.full=cleanItem(it.full)})}catch(e){}
  return {fields:F,items,found,guess,shifts,L,recon:(typeof recon!=='undefined'?recon:null)}}
 /* Other reads of the same photo (different cleanup / layout) fill what the best read missed. Items and amounts stay with the best read. */

@@ -469,19 +469,19 @@ function addWorkCal(i){const r=i==null?S.rec:S.records[i],up=i!=null;if(!r||r.mo
  const x=t=>String(t).replace(/[\\;,]/g,'\\$&').replace(/\n/g,' '),p=n=>String(n).padStart(2,'0'),ds=d=>d.getFullYear()+p(d.getMonth()+1)+p(d.getDate()),
   tm=v=>{const m=/^(\d{1,2}):(\d{2})/.exec(v||'');return m?p(m[1])+m[2]+'00':null},
   nextDay=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate()+1),
-  who=r.client||r.employer||'',amt=r.amount!=null&&r.amount!==''&&N(r.amount)!=null?M(N(r.amount)):null,
-  info=[who?'Client: '+who:'',r.employer&&r.client&&r.employer!==r.client?'Employer: '+r.employer:'',r.invoice?'Invoice #: '+r.invoice:'',r.location?'Location: '+r.location:'',amt?'Invoice amount: '+amt:'',r.notes?'Notes: '+String(r.notes).replace(/\s+/g,' ').trim():''].filter(Boolean),
+  who=r.client||r.employer||'',A=r.amount!=null&&r.amount!==''&&N(r.amount)!=null?N(r.amount):null,tH=(r.shifts||[]).reduce((t,y)=>t+(N(y&&y.hours)||0),0),nD=workDays(r).length,pay=h=>A==null?null:nD<2?'Invoice amount: '+M(A):(h>0&&tH>0?'Est. pay for this day: '+M(+(A*h/tH).toFixed(2)):null),
+  info=[who?'Client: '+who:'',r.employer&&r.client&&r.employer!==r.client?'Employer: '+r.employer:'',r.invoice?'Invoice #: '+r.invoice:'',r.location?'Location: '+r.location:'',r.notes?'Notes: '+String(r.notes).replace(/\s+/g,' ').trim():''].filter(Boolean),
   stamp=new Date().toISOString().replace(/[-:]|\.\d+/g,''),ev=[],
   al=(t,d)=>['BEGIN:VALARM','TRIGGER:'+t,'ACTION:DISPLAY','DESCRIPTION:'+x(d),'END:VALARM'],
   title='Work'+(who?': '+who:'')+(r.location?' @ '+r.location:''),
   timed=(r.shifts||[]).filter(y=>y&&Parser.pd(y.date||r.jobDate)&&keep(Parser.pd(y.date||r.jobDate))&&tm(y.start)&&tm(y.end));
  let n=0;
  timed.forEach(y=>{const d=Parser.pd(y.date||r.jobDate),a=tm(y.start),b=tm(y.end),e=b<=a?nextDay(d):d;
-  ev.push(['BEGIN:VEVENT','UID:work-'+ds(d)+a+'-'+(n++)+'-'+Date.now()+'@papertrail','DTSTAMP:'+stamp,'DTSTART:'+ds(d)+'T'+a,'DTEND:'+ds(e)+'T'+b,'SUMMARY:'+x(title),'DESCRIPTION:'+[t12(y.start)+' - '+t12(y.end)].concat(info).map(x).join('\\n'),...(r.location?['LOCATION:'+x(r.location)]:[]),...al('-P1D','Work tomorrow at '+t12(y.start)+(who?': '+who:'')),...al('-PT2H','Work starts at '+t12(y.start)+(who?': '+who:'')),'END:VEVENT'].join('\r\n'))});
+  ev.push(['BEGIN:VEVENT','UID:work-'+ds(d)+a+'-'+(n++)+'-'+Date.now()+'@papertrail','DTSTAMP:'+stamp,'DTSTART:'+ds(d)+'T'+a,'DTEND:'+ds(e)+'T'+b,'SUMMARY:'+x(title),'DESCRIPTION:'+[t12(y.start)+' - '+t12(y.end)].concat(info,[pay(N(y.hours))].filter(Boolean)).map(x).join('\\n'),...(r.location?['LOCATION:'+x(r.location)]:[]),...al('-P1D','Work tomorrow at '+t12(y.start)+(who?': '+who:'')),...al('-PT2H','Work starts at '+t12(y.start)+(who?': '+who:'')),'END:VEVENT'].join('\r\n'))});
  /* days with no start/end time (or no shifts entered) become all-day events */
  const timedDays=new Set(timed.map(y=>+Parser.pd(y.date||r.jobDate)));
  workDays(r).filter(d=>keep(d)&&!timedDays.has(+d)).forEach(d=>{
-  ev.push(['BEGIN:VEVENT','UID:work-'+ds(d)+'-'+(n++)+'-'+Date.now()+'@papertrail','DTSTAMP:'+stamp,'DTSTART;VALUE=DATE:'+ds(d),'DTEND;VALUE=DATE:'+ds(nextDay(d)),'SUMMARY:'+x(title),'DESCRIPTION:'+info.map(x).join('\\n'),...(r.location?['LOCATION:'+x(r.location)]:[]),...al('-PT6H','Work tomorrow'+(who?': '+who:'')),...al('PT8H','Work today'+(who?': '+who:'')),'END:VEVENT'].join('\r\n'))});
+  ev.push(['BEGIN:VEVENT','UID:work-'+ds(d)+'-'+(n++)+'-'+Date.now()+'@papertrail','DTSTAMP:'+stamp,'DTSTART;VALUE=DATE:'+ds(d),'DTEND;VALUE=DATE:'+ds(nextDay(d)),'SUMMARY:'+x(title),'DESCRIPTION:'+info.concat([pay(0)].filter(Boolean)).map(x).join('\\n'),...(r.location?['LOCATION:'+x(r.location)]:[]),...al('-PT6H','Work tomorrow'+(who?': '+who:'')),...al('PT8H','Work today'+(who?': '+who:'')),'END:VEVENT'].join('\r\n'))});
  if(!ev.length){st(up?'No upcoming work days on this invoice.':'Enter a job date first.');return}
  const ics=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//PaperTrail//EN',...ev,'END:VCALENDAR'].join('\r\n'),
   a=document.createElement('a');a.href=URL.createObjectURL(new Blob([ics],{type:'text/calendar'}));a.download='work-days.ics';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
@@ -1665,8 +1665,8 @@ window.csvGo=async function(){
    const PT_VER='v200'
    const PT_VER='vv200'
    ---------- */
-const PT_BUILD=286;
-const PT_LABEL='v86';
+const PT_BUILD=288;
+const PT_LABEL='v88';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
