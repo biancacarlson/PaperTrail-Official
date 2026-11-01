@@ -451,7 +451,9 @@ function addCal(){const r=S.rec,d=est(r);if(!d)return;const e=d.replace(/-/g,'')
  ics=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//PaperTrail//EN','BEGIN:VEVENT','UID:'+e+'-'+Date.now()+'@papertrail','DTSTAMP:'+new Date().toISOString().replace(/[-:]|\.\d+/g,''),'DTSTART;VALUE=DATE:'+e,'DTEND;VALUE=DATE:'+n,'SUMMARY:'+x('Net-30 payout'+(amt?' '+amt:'')+(who?' - '+who:'')),'DESCRIPTION:'+L.map(x).join('\\n'),'BEGIN:VALARM','TRIGGER:-PT15H','ACTION:DISPLAY','DESCRIPTION:'+x('Payout due'+(amt?': '+amt:'')+(who?' - '+who:'')),'END:VALARM','END:VEVENT','END:VCALENDAR'].join('\r\n'),
  a=document.createElement('a');a.href=URL.createObjectURL(new Blob([ics],{type:'text/calendar'}));a.download='payout.ics';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
 /* v83: work-day calendar events. One event per shift (timed) or per day (all-day), with alerts the evening before and the morning of. */
-function addWorkCal(){const r=S.rec;if(!r||r.mode=='purchase')return;
+const upDays=r=>{const t=new Date();t.setHours(0,0,0,0);return workDays(r).filter(d=>d>=t)};
+function addWorkCal(i){const r=i==null?S.rec:S.records[i],up=i!=null;if(!r||r.mode=='purchase')return;
+ const keep=d=>!up||d>=new Date(new Date().setHours(0,0,0,0));
  const x=t=>String(t).replace(/[\\;,]/g,'\\$&').replace(/\n/g,' '),p=n=>String(n).padStart(2,'0'),ds=d=>d.getFullYear()+p(d.getMonth()+1)+p(d.getDate()),
   tm=v=>{const m=/^(\d{1,2}):(\d{2})/.exec(v||'');return m?p(m[1])+m[2]+'00':null},
   nextDay=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate()+1),
@@ -460,15 +462,15 @@ function addWorkCal(){const r=S.rec;if(!r||r.mode=='purchase')return;
   stamp=new Date().toISOString().replace(/[-:]|\.\d+/g,''),ev=[],
   al=(t,d)=>['BEGIN:VALARM','TRIGGER:'+t,'ACTION:DISPLAY','DESCRIPTION:'+x(d),'END:VALARM'],
   title='Work'+(who?': '+who:'')+(r.location?' @ '+r.location:''),
-  timed=(r.shifts||[]).filter(y=>y&&Parser.pd(y.date||r.jobDate)&&tm(y.start)&&tm(y.end));
+  timed=(r.shifts||[]).filter(y=>y&&Parser.pd(y.date||r.jobDate)&&keep(Parser.pd(y.date||r.jobDate))&&tm(y.start)&&tm(y.end));
  let n=0;
  timed.forEach(y=>{const d=Parser.pd(y.date||r.jobDate),a=tm(y.start),b=tm(y.end),e=b<=a?nextDay(d):d;
   ev.push(['BEGIN:VEVENT','UID:work-'+ds(d)+a+'-'+(n++)+'-'+Date.now()+'@papertrail','DTSTAMP:'+stamp,'DTSTART:'+ds(d)+'T'+a,'DTEND:'+ds(e)+'T'+b,'SUMMARY:'+x(title),'DESCRIPTION:'+[t12(y.start)+' - '+t12(y.end)].concat(info).map(x).join('\\n'),...(r.location?['LOCATION:'+x(r.location)]:[]),...al('-P1D','Work tomorrow at '+t12(y.start)+(who?': '+who:'')),...al('-PT2H','Work starts at '+t12(y.start)+(who?': '+who:'')),'END:VEVENT'].join('\r\n'))});
  /* days with no start/end time (or no shifts entered) become all-day events */
  const timedDays=new Set(timed.map(y=>+Parser.pd(y.date||r.jobDate)));
- workDays(r).filter(d=>!timedDays.has(+d)).forEach(d=>{
+ workDays(r).filter(d=>keep(d)&&!timedDays.has(+d)).forEach(d=>{
   ev.push(['BEGIN:VEVENT','UID:work-'+ds(d)+'-'+(n++)+'-'+Date.now()+'@papertrail','DTSTAMP:'+stamp,'DTSTART;VALUE=DATE:'+ds(d),'DTEND;VALUE=DATE:'+ds(nextDay(d)),'SUMMARY:'+x(title),'DESCRIPTION:'+info.map(x).join('\\n'),...(r.location?['LOCATION:'+x(r.location)]:[]),...al('-PT6H','Work tomorrow'+(who?': '+who:'')),...al('PT8H','Work today'+(who?': '+who:'')),'END:VEVENT'].join('\r\n'))});
- if(!ev.length){st('Enter a job date first.');return}
+ if(!ev.length){st(up?'No upcoming work days on this invoice.':'Enter a job date first.');return}
  const ics=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//PaperTrail//EN',...ev,'END:VCALENDAR'].join('\r\n'),
   a=document.createElement('a');a.href=URL.createObjectURL(new Blob([ics],{type:'text/calendar'}));a.download='work-days.ics';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
 function doPrint(){$('#print').textContent=text(S.rec).join('\n');print()}
@@ -974,7 +976,7 @@ function dupWarn(){const el=$('#dupwarn');if(!el)return;const r=S.rec,m=r&&r.loa
 function openRec(i){const r=S.records[i];if(!r)return;closeRec();const{t,G}=rows(r),
  h=G.map(g=>({...g,rows:g.rows.filter(x=>x[0]!=='Regular Hours')})).map(g=>'<div class="rg">'+g.rows.map(([l,v,hl])=>`<div class="rr${hl?' hl':''}${g.k=='tot'?' tt':''}"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join('')+'</div>').join(''),
  o=document.createElement('div');o.id='recmodal';o.className='rmo';o.onclick=e=>{if(e.target===o)closeRec()};
- o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${r.mode!='purchase'?'<div class="stn'+(stOf(r)=='open'?'':' cl')+'">'+swHtml(r,'flipStatus('+i+')')+'</div>'+(r.stWhy?'<div class="stw">'+esc(r.stWhy)+'</div>':''):''}${r.imgs&&r.imgs.length?'':'<div class="invm">'+(r.mode=='purchase'?'No receipt attached':'No invoice attached')+'</div>'}${h}</div><div class="rmf"><button onclick="dlRec(${i})">Download PDF</button><button onclick="viewRec(${i})">View PDF</button>${r.imgs&&r.imgs.length?`<button onclick="cropRec(${i})">Crop</button><button onclick="replaceInv(${i})">Replace invoice</button><button onclick="rmImg(${i})">Remove invoice</button>`:`<button onclick="attachRec(${i})">Attach invoice</button>`}<button onclick="editRec(${i})">Edit</button><button onclick="delOpen(${i})" style="color:#b3261e">Delete</button></div></div>`;
+ o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${r.mode!='purchase'?'<div class="stn'+(stOf(r)=='open'?'':' cl')+'">'+swHtml(r,'flipStatus('+i+')')+'</div>'+(r.stWhy?'<div class="stw">'+esc(r.stWhy)+'</div>':''):''}${r.imgs&&r.imgs.length?'':'<div class="invm">'+(r.mode=='purchase'?'No receipt attached':'No invoice attached')+'</div>'}${h}</div><div class="rmf">${r.mode!='purchase'&&upDays(r).length?`<button onclick="addWorkCal(${i})">Add shift to calendar</button>`:''}<button onclick="dlRec(${i})">Download PDF</button><button onclick="viewRec(${i})">View PDF</button>${r.imgs&&r.imgs.length?`<button onclick="cropRec(${i})">Crop</button><button onclick="replaceInv(${i})">Replace invoice</button><button onclick="rmImg(${i})">Remove invoice</button>`:`<button onclick="attachRec(${i})">Attach invoice</button>`}<button onclick="editRec(${i})">Edit</button><button onclick="delOpen(${i})" style="color:#b3261e">Delete</button></div></div>`;
  document.body.appendChild(o);document.body.style.overflow='hidden'}
 function delOpen(i){if(!S.records[i])return;if(!confirm('Delete this saved record? This cannot be undone.'))return;S.records.splice(i,1);closeRec();renderRecs();store()}
 function closeRec(){const o=$('#recmodal');if(o)o.remove();document.body.style.overflow=''}
@@ -1643,7 +1645,7 @@ window.csvGo=async function(){
    const PT_VER='vv200'
    ---------- */
 const PT_BUILD=282;
-const PT_LABEL='v83';
+const PT_LABEL='v84';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
