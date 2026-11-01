@@ -40,6 +40,7 @@ It runs in your browser. Upload a receipt, invoice, screenshot or photo, check t
 - **Net 30:** payout date is the same date one month after the event end date (10/21 becomes 11/21). **Add to Calendar** creates an event with the amount in the title (e.g. `Net-30 payout $1,250.00 - Client`), and the notes list amount, client, invoice #, job and end dates, location and hours
 - **Add Work Day to Calendar:** a second button under the Net 30 payout. Makes one event per shift (using start and end times) or one all-day event per worked day, with alerts the evening before and the morning of, so an invoice entered ahead of time still puts the job on your calendar
 - **Add shift to calendar (Saved):** open a saved work invoice that has an upcoming work day and tap **Add shift to calendar**. Only days that haven't passed are added
+- **Multi-page work invoices:** every page of a PDF is read (up to 10), and you can pick several photos or PDFs at once on the upload button. All pages are read together, shown under the first page, and saved and exported with the invoice
 - **Invoice viewer:** shown at full height, so dragging scrolls the page. Pinch or tap **Enlarge** to zoom; while zoomed, one finger pans. **Reset zoom** (or pinching out) goes back. Tapping a word still picks it
 
 **Mileage:** PaperTrail does not look up distance. Tap **Search in Safari** or **Search in Chrome**, then type the result into **Round-trip miles**.
