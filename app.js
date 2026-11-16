@@ -200,13 +200,13 @@ function shNew(){const r=S.rec;r.shifts=r.shifts||[];const l=r.shifts[r.shifts.l
 function shDel(i){S.rec.shifts.splice(i,1);render()}
 /* v90: the phone's time wheel fires 'change' on every spin; rebuilding the form then closed the picker mid-selection. Start/end now update the hours and totals in place and leave the inputs alone. */
 function shSumHtml(r){const sh=r.shifts||[],tot=shTotal(r),have=(N(r.hours)||0)+(N(r.overtime)||0);return sh.length?`<div class="hint" style="margin-top:10px">Shifts total: <b>${tot} h</b>${Math.abs(tot-have)>.01?` (Total regular + overtime above is ${+have.toFixed(2)} h)`:''}</div>`+(Math.abs(tot-have)>.01?'<button type="button" style="margin-top:8px" onclick="shUse()">Set Total regular from shifts</button>':''):''}
-function shSet(i,k,v){const x=(S.rec.shifts||[])[i];if(!x)return;x[k]=v;if(k=='start'||k=='end'){const h=shHrs(x.start,x.end);if(h!=null)x.hours=h;
+function shSet(i,k,v){const x=(S.rec.shifts||[])[i];if(!x)return;x[k]=v;if(k=='pay')return;if(k=='start'||k=='end'){const h=shHrs(x.start,x.end);if(h!=null)x.hours=h;
   const hi=document.querySelector('input[data-sh="'+i+'"]'),sm=document.getElementById('shsum');
   if(hi&&sm){hi.value=x.hours==null?'':x.hours;sm.innerHTML=shSumHtml(S.rec);try{calc()}catch(e){}return}}
  render()}
 function shUse(){const r=S.rec,ot=N(r.overtime)||0;r.hours=String(+(shTotal(r)-ot).toFixed(2));r.edited.hours=1;render()}
 function shiftsHtml(){const r=S.rec,sh=r.shifts||[],tot=shTotal(r),have=(N(r.hours)||0)+(N(r.overtime)||0);
- const card=(x,i)=>`<div class="shc"><div class="shh"><span>Shift ${i+1}</span><button type="button" class="shx" onclick="shDel(${i})" aria-label="Remove shift ${i+1}">Remove</button></div><div class="shf d"><label>Date</label><input aria-label="Shift date" value="${esc(shDate(x.date))}" placeholder="mm/dd/yyyy" inputmode="numeric" onchange="shSet(${i},'date',this.value)"></div><div class="shf"><label>Start</label><input type="time" value="${esc(x.start||'')}" onchange="shSet(${i},'start',this.value)"></div><div class="shf"><label>End</label><input type="time" value="${esc(x.end||'')}" onchange="shSet(${i},'end',this.value)"></div><div class="shf h"><label>Hours</label><input data-sh="${i}" inputmode="decimal" value="${esc(x.hours==null?'':x.hours)}" placeholder="0" onchange="shSet(${i},'hours',this.value)"></div></div>`;
+ const card=(x,i)=>`<div class="shc"><div class="shh"><span>Shift ${i+1}</span><button type="button" class="shx" onclick="shDel(${i})" aria-label="Remove shift ${i+1}">Remove</button></div><div class="shf d"><label>Date</label><input aria-label="Shift date" value="${esc(shDate(x.date))}" placeholder="mm/dd/yyyy" inputmode="numeric" onchange="shSet(${i},'date',this.value)"></div><div class="shf"><label>Start</label><input type="time" value="${esc(x.start||'')}" onchange="shSet(${i},'start',this.value)"></div><div class="shf"><label>End</label><input type="time" value="${esc(x.end||'')}" onchange="shSet(${i},'end',this.value)"></div><div class="shf h"><label>Hours</label><input data-sh="${i}" inputmode="decimal" value="${esc(x.hours==null?'':x.hours)}" placeholder="0" onchange="shSet(${i},'hours',this.value)"></div><div class="shf h"><label>Pay for this day $</label><input inputmode="decimal" value="${esc(x.pay==null?'':x.pay)}" placeholder="Not entered" onchange="shSet(${i},'pay',this.value)"></div></div>`;
  return `<section class="grp"><h3>Shifts</h3><div class="hint shn">Enter start and end times and the hours fill in for you. Split shift? Add another shift with the same date.</div>${sh.map(card).join('')}<button type="button" class="sha" onclick="shNew()">+ Add shift</button><div id="shsum">${shSumHtml(r)}</div></section>`}
 function rows(r){if(r.mode=='summary')return sumRows(r);const o=compute(r),G=[],g=k=>{const x={k,rows:[]};G.push(x);return(l,v,h)=>{if(v!=null&&String(v).trim()!=='')x.rows.push([l,String(v).trim(),!!h])}};
  if(r.mode=='purchase'){const i=g('info');i('Date',r.date);i('Merchant',niceMerch(r.merchant));i('Category',r.category);
@@ -414,7 +414,7 @@ function addCal(){const r=S.rec,d=est(r);if(!d)return;const e=d.replace(/-/g,'')
 function workIcs(r){const sh=(r.shifts||[]).filter(x=>x&&((x.start&&x.end)||N(x.hours)!=null));if(!sh.length)return null;
  const x=t=>String(t).replace(/[\\;,]/g,'\\$&').replace(/\n/g,' '),p2=n=>String(n).padStart(2,'0'),ymd=d=>d.getFullYear()+p2(d.getMonth()+1)+p2(d.getDate()),
  who=r.client||r.employer||'',tot=shTotal(r),amt=N(r.amount),st=new Date().toISOString().replace(/[-:]|\.\d+/g,''),al=m=>['BEGIN:VALARM','TRIGGER:'+m,'ACTION:DISPLAY','DESCRIPTION:Work','END:VALARM'];
- const ev=[];sh.forEach((s,i)=>{const d=Parser.pd(s.date||r.jobDate);if(!d)return;const hasT=s.start&&s.end,pay=s.pay!=null?+s.pay:(amt!=null&&tot>0&&N(s.hours)!=null&&Math.abs(tot-((N(r.hours)||0)+(N(r.overtime)||0)))<.01?amt*N(s.hours)/tot:null);
+ const ev=[];sh.forEach((s,i)=>{const d=Parser.pd(s.date||r.jobDate);if(!d)return;const hasT=s.start&&s.end,pay=N(s.pay);
   let a,b;if(hasT){const e=new Date(d);if(s.end<=s.start)e.setDate(e.getDate()+1);a='DTSTART:'+ymd(d)+'T'+s.start.replace(':','')+'00';b='DTEND:'+ymd(e)+'T'+s.end.replace(':','')+'00'}else{const e=new Date(d);e.setDate(e.getDate()+1);a='DTSTART;VALUE=DATE:'+ymd(d);b='DTEND;VALUE=DATE:'+ymd(e)}
   const L=[hasT?t12(s.start)+' - '+t12(s.end):'',who?'Client: '+who:'',r.employer&&r.employer!==r.client?'Employer: '+r.employer:'',r.invoice?'Invoice #: '+r.invoice:'',r.location?'Location: '+r.location:'',pay!=null?'Est. pay for this day: '+M(+pay.toFixed(2)):''].filter(Boolean);
   ev.push(['BEGIN:VEVENT','UID:work-'+String(r.invoice||r.rid||'job').replace(/[^A-Za-z0-9]/g,'')+'-'+ymd(d)+'-'+i+'@papertrail','DTSTAMP:'+st,a,b,'SUMMARY:'+x('Work: '+(who||'Job')+(r.location?' @ '+r.location:'')),r.location?'LOCATION:'+x(r.location):'','DESCRIPTION:'+L.map(x).join('\\n'),...al('-PT2H'),...al('-P1D'),'END:VEVENT'].filter(Boolean).join('\r\n'))});
@@ -1538,8 +1538,8 @@ window.csvGo=async function(){
    const PT_VER='v200'
    const PT_VER='vv200'
    ---------- */
-const PT_BUILD=251;
-const PT_LABEL='v53';
+const PT_BUILD=253;
+const PT_LABEL='v55';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();

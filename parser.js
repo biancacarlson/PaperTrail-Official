@@ -1,7 +1,7 @@
 'use strict';
 /* self-update (V must match the ?v= number in index.html): the iPhone Home Screen app keeps its own cached copy of the page and ignores no-cache hints. On launch, ask the server (bypassing the cache) which version is current;
    if it is newer than this file, re-download every file once and reload. Runs from parser.js so even an old cached index.html picks it up. Once per session, so it can never loop. */
-(function(){var V=251;try{if(typeof window==='undefined'||!window.fetch||!navigator.onLine||sessionStorage.getItem('pt_upd'))return;
+(function(){var V=253;try{if(typeof window==='undefined'||!window.fetch||!navigator.onLine||sessionStorage.getItem('pt_upd'))return;
  fetch('index.html',{cache:'reload'}).then(function(r){return r.text()}).then(function(h){var m=h.match(/parser\.js\?v=(\d+)/);if(!m||+m[1]<=V)return;
   try{sessionStorage.setItem('pt_upd','1')}catch(e){}
   return Promise.all(['parser.js','scan.js','app.js'].map(function(f){return fetch(f+'?v='+m[1],{cache:'reload'})})).then(function(){location.reload()})}).catch(function(){})}catch(e){}})();
@@ -410,11 +410,11 @@ function parse1(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(
   if(tr2.length){const reg=tr2.filter(r=>!r.ot),ot2=tr2.filter(r=>r.ot),sm=(a,k)=>+a.reduce((t,r)=>t+r[k],0).toFixed(2);
    if(reg.length)set('hours',String(sm(reg,'h')));if(ot2.length)set('overtime',String(sm(ot2,'h')));
    const sum=sm(tr2,'a'),zero=found.amount&&!(+String(F.amount).replace(/,/g,'')>0);
-   if(!found.amount||(zero&&sum>0))set('amount',sum.toFixed(2));
+   if(!found.amount||(zero&&sum>0)){set('amount',sum.toFixed(2));lineAmt=true}
    if((zero&&sum>0)||(/\bestimate\b/i.test(text)&&/\best\.?\s*\$?\d/i.test(text)))F.estTotal=1;
    if(/\bestimate\b/i.test(text)&&/\best\.?\s*\$?\d/i.test(text)&&!F.notes)set('notes','Invoice is an estimate ("est."): hours and pay may change when final.');
    if(zero&&sum>0)F.notes=(F.notes?F.notes+' ':'')+'Printed total was $0.00, so the amount is the sum of the line items.'}}
- var shifts=[];
+ var shifts=[],lineAmt;
  if(mode!=='purchase'){
   const T=/(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m?\.?\s*(?:-|–|—|to)\s*(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m?\.?|(\d{1,2}):(\d{2})\s*(?:-|–|—|to)\s*(\d{1,2}):(\d{2})|(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m?\.?\s*(?:-|–|—|to)\s*(\d{1,2})(?::(\d{2}))?(?!\s*[:\d]|\s*[ap]\.?m)/gi;
   const to24=(h,m,ap)=>{h=+h;m=+(m||0);if(m>59||h>23)return null;if(ap){if(h<1||h>12)return null;h=h%12+(ap=='p'?12:0)}return h*60+m};
@@ -440,7 +440,18 @@ function parse1(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(
   }
   if(!shifts.length&&typeof drow!=='undefined'&&drow.length)drow.forEach(l=>{const m=l.match(/^(\d{1,2}\/\d{1,2}\/\d{2,4})\b/),t=l.match(tri);if(m&&t)shifts.push({date:m[1],start:'',end:'',hours:+t[1]})});
  }
- if(mode!=='purchase'&&shifts.length){const pr=timeRows(L);if(pr.length===shifts.length)shifts.forEach((s,i)=>{s.pay=pr[i].a;s.billed=pr[i].h})}
+ /* each day's pay = that day's own total on the invoice: a "Day total" line if there is one, else the sum of the amounts printed under that date, else the amount on the date row itself. Never worked out from hours or rate, never a share of the invoice total. */
+ if(mode!=='purchase'&&shifts.length){const dp={},rows={};let cur2='',stop=false;const money=l=>{const a=[...l.matchAll(/\$\s?([\d,]+\.\d{2})/g)];return a.length?+a[a.length-1][1].replace(/,/g,''):null};
+  for(const raw of L){const l=fix(raw);if(/\bevent\s*sub\s?-?total\b|^\W*(?:discount|terms)\b|^\W*(?:grand\s*)?total\b/i.test(l)&&cur2){stop=true}if(stop)continue;
+   const fd=fdates(l),dm=fd.length?fd[0]:((l.match(DATE)||[])[1]||'');
+   if(dm&&money(l)!=null&&!/\b(?:invoice|due|issued|paid|deposit)\b/i.test(l)){cur2=dm;(rows[cur2]=rows[cur2]||{head:null,sub:[],tot:null}).head=money(l);continue}
+   if(dm){cur2=dm;rows[cur2]=rows[cur2]||{head:null,sub:[],tot:null};continue}
+   if(!cur2)continue;const v=money(l);if(v==null)continue;
+   if(/\b(?:day|daily)\s*total\b/i.test(l))rows[cur2].tot=v;else if(/[A-Za-z]{3}/.test(l.replace(/\$\s?[\d,]+\.\d{2}/g,'')))rows[cur2].sub.push(v)}
+  Object.keys(rows).forEach(k=>{const r=rows[k],v=r.tot!=null?r.tot:(r.sub.length?+r.sub.reduce((a,b)=>a+b,0).toFixed(2):r.head);if(v!=null)dp[k]=v});
+  shifts.forEach(s=>{if(dp[s.date]!=null)s.pay=dp[s.date]});
+  if((lineAmt||!(+String(F.amount||0).replace(/,/g,'')>0))&&shifts.every(s=>dp[s.date]!=null)){const tot=+[...new Set(shifts.map(s=>s.date))].reduce((a,d)=>a+dp[d],0).toFixed(2);if(tot>0)F.amount=tot.toFixed(2)}
+  if(shifts.every(s=>s.pay==null)){const pr=timeRows(L);if(pr.length===shifts.length)shifts.forEach((s,i)=>{s.pay=pr[i].a})}}
  if(mode!=='purchase'&&!F.hours&&shifts.length){const h=+shifts.reduce((a,s)=>a+s.hours,0).toFixed(2);if(h>0){F.hours=String(h);found.hours=1}}
  try{items.forEach(it=>{if(it&&it.n)it.n=cleanItem(it.n);if(it&&it.full)it.full=cleanItem(it.full)})}catch(e){}
  return {fields:F,items,found,guess,shifts,L,recon:(typeof recon!=='undefined'?recon:null)}}
