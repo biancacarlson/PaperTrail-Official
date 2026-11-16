@@ -12,7 +12,7 @@ function setMode(m){showWork();S.mode=m;S.rec=newRec();S.pages=[];S.undo=[];S.re
 const newRec=()=>({mode:S.mode,items:[],src:{},edited:{},loaded:false,doc:false,employer:S.mode=='freelance'?'AVLancer':''});
 /* Open = the amount may still change. Closed = final. It is worked out from the invoice: a printed TOTAL means closed; an estimated total or no total means open.
    The switch overrides that (r.stMan). An old record explicitly marked closed before this existed keeps that choice. */
-const isEst=r=>!!(r&&(r.estTotal||/invoice is an estimate|estimated total|printed total was \$0\.00/i.test(String(r.notes||''))));
+const isEst=r=>!!(r&&!r.estOff&&(r.estTotal||/invoice is an estimate|estimated total|printed total was \$0\.00/i.test(String(r.notes||''))));
 const notYet=r=>{const d=Parser.pd(r.endDate||r.jobDate);return !!d&&d.getTime()>new Date().setHours(23,59,59,999)};
 const autoSt=r=>r&&N(r.amount)>0&&!isEst(r)&&!notYet(r)?'closed':'open';
 const stOf=r=>!r?'closed':r.stMan=='open'||r.stMan=='closed'?r.stMan:(r.stMan===undefined&&(r.status=='closed'||r.status=='open')?r.status:autoSt(r));
@@ -122,7 +122,7 @@ function showDoc(u){showOcr();const v=$('#view');v.style.height='';v.innerHTML='
   ap();if(S.z<=1)fit()};
  if(!window.__dvr){window.__dvr=1;addEventListener('resize',()=>{const l=$('#layer'),w=$('#view');if(l&&w&&S.z<=1&&l.offsetHeight)w.style.height=l.offsetHeight+'px'})}}
 /* ---------- parsing (deterministic) ---------- */
-function parse(t){const r=S.rec,o=Parser.parse(t,r.mode);delete r.estTotal;Object.assign(r,o.fields);r.src=Object.assign(r.src,o.found);if(r.mode!='purchase'&&o.shifts&&o.shifts.length)r.shifts=o.shifts;if(r.mode=='purchase'){r.items=o.items;if(o.guess)r.gname=o.guess;ensureItem(r)}applyLearned(r)}
+function parse(t){const r=S.rec,o=Parser.parse(t,r.mode);delete r.estTotal;delete r.estOff;Object.assign(r,o.fields);r.src=Object.assign(r.src,o.found);if(r.mode!='purchase'&&o.shifts&&o.shifts.length)r.shifts=o.shifts;if(r.mode=='purchase'){r.items=o.items;if(o.guess)r.gname=o.guess;ensureItem(r)}applyLearned(r)}
 /* Only a subtotal was readable (no per-item lines): keep the totals reconcilable with one clearly-flagged combined line. */
 function ensureItem(r){if(r.mode=='purchase'&&!r.items.length&&N(r.extSub)>0)r.items.push({n:r.gname||'',q:1,p:N(r.extSub),guess:1,ext:1})}
 /* ---------- form ---------- */
@@ -180,7 +180,7 @@ function calc(){const r=S.rec;if(!r)return;try{dupWarn()}catch(e){}const o=compu
  let h='<div class="cal2"><h3>Calculated</h3>';
  if(r.mode=='purchase')h+=row('Items ('+(r.items.length-o.nOff)+')',M(o.sub))+(o.ship?row('Shipping',M(o.ship)):'')+row('Tax',M(N(r.tax)==null?null:o.tax),o.nOff&&N(r.tax)?'adjusted to work items':'')+'<div class="hero tot"><span>'+(o.nOff?'Work-related total':'Total')+'</span><b>'+M(o.total)+'</b></div>'+o.warn.map(w=>'<div class="msg">⚠ '+w+'</div>').join('');
  else{const d=est(r);
-  if(d)h+='<div class="hero"><span>Net-30 payout'+(r.endDate?'':' (estimate)')+'</span><b>'+us(d)+'</b><small>'+(r.endDate?'Net 30: same date, next month, after the event end date':'No event end date found, so counted from the job date')+'</small><button onclick="addCal()">Add to Calendar</button></div>';
+  if(d)h+='<div class="hero"><span>Net-30 payout'+(r.endDate?'':' (estimate)')+'</span><b>'+us(d)+'</b><small>'+(r.endDate?'Net 30: same date, next month, after the event end date':'No event end date found, so counted from the job date')+'</small><button onclick="addCal()">Add payout to Calendar</button>'+((S.rec.shifts||[]).length?'<button onclick="addWork()" style="margin-top:8px">Add work days to Calendar</button>':'')+'</div>';
   h+=row('Mileage Deduction',M(o.wear),o.wear!=null?'$'+o.rate+'/mi<br>IRS standard mileage rate':o.rate==null&&o.rt!=null?'No IRS rate on file for this year':'')}
  $('#calc').innerHTML=h+'</div>';persist()}
 /* ---------- selection → field ---------- */
@@ -325,16 +325,16 @@ function stChips(){const w=S.records.filter(r=>r.mode!='purchase'),o=w.filter(r=
 function totalsView(now){const T=periodSums(now),f=v=>+(+v).toFixed(2),sd=d=>d.toLocaleDateString('en-US',{month:'short',day:'numeric'}),
  rg=i=>{const a=new Date(T.lo[i]);return a.getMonth()==T.now.getMonth()&&a.getDate()==T.now.getDate()?sd(a):sd(a)+' \u2013 '+sd(T.now)},
  money=v=>v?'<b>'+M(f(v))+'</b>':'<b class="z">\u2013</b>',miles=v=>v?'<b>'+f(v).toLocaleString('en-US',{maximumFractionDigits:1})+' mi</b>':'<b class="z">\u2013</b>',
- head=t=>'<div class="tcols in"><span class="th1">'+t+'</span><span>This month<small>'+rg(0)+'</small></span><span>This year<small>'+rg(1)+'</small></span></div>',
+ head=t=>'<div class="th1">'+t+'</div><div class="tcols in"><span></span><span>This month<small>'+rg(0)+'</small></span><span>This year<small>'+rg(1)+'</small></span></div>',
  row=(l,a,c,fn)=>'<div class="tr'+(c?' '+c:'')+'"><span>'+l+'</span>'+(fn||money)(a[0])+(fn||money)(a[1])+'</div>',
  cats=Object.entries(T.cat).sort((p,q)=>q[1][1]-p[1][1]),clis=Object.values(T.cli).sort((p,q)=>q.v[1]-p.v[1]),
- none=t=>'<div class="tr"><span class="z">'+t+'</span></div>',pl=(n,a,b)=>n+' '+(n==1?a:b);
+ none=t=>'<div class="tr"><span class="z" style="grid-column:1/-1;text-align:left">'+t+'</span></div>',pl=(n,a,b)=>n+' '+(n==1?a:b);
  let h='';
  if(!Object.keys(T.cat).length&&!Object.keys(T.cli).length)h+='<div class="empty2">Nothing dated this year yet.</div>';
  else{
   h+='<div class="sl">'+head('Expenses by category')+(cats.length?cats.map(([k,a])=>row(esc(k),a)).join('')+row('Total expenses',T.exp,'tot'):none('No expenses this year'))+'</div>';
   h+=stChips()+'<div class="sl">'+head('Income by client')+(clis.length?clis.map(c=>row(esc(c.n),c.v)).join('')+row('Total income',T.inc,'tot'):none('No work invoices this year'))+'</div>';
-  h+='<div class="sl">'+head('Mileage')+row('Mileage deduction',T.ded,'tot')+row('Miles driven',T.mi,'',miles)+'</div>'}
+  h+='<div class="sl">'+head('Mileage')+row('Deduction',T.ded,'tot')+row('Miles driven',T.mi,'',miles)+'</div>'}
  const n=[];if(T.noMi)n.push(pl(T.noMi,'work invoice this year has','work invoices this year have')+' no round-trip miles, so no mileage deduction is counted.');
  const u=[];if(T.und)u.push(T.und+' undated');if(T.fut)u.push(T.fut+' dated after today');if(u.length)n.push('Not counted: '+u.join(', ')+'.');
   n.push('Expenses count by purchase date, income by job date (Amount Paid).');
@@ -397,7 +397,7 @@ function renderRecs(){persist();try{dupWarn()}catch(e){}const nb=$('#m3');if(nb)
  +'<div class="svq"><div class="svs"><input id="svq" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Merchant, client or receipt #" aria-label="Search saved records" value="'+esc(S.sv.q)+'" oninput="svFind(this.value)"><button id="svclr" type="button" onclick="svClear()" aria-label="Clear search" style="'+(S.sv.q?'':'display:none')+'">✕</button></div>'+sortCtl(x)+'</div>'
  +(x&&cats.length>1?'<div class="chips"><button class="'+(S.sv.cat=='All'?'on':'')+'" onclick="svCat(\'All\')">All</button>'+cats.map(c=>'<button class="'+(S.sv.cat==c?'on':'')+'" onclick="svCat(\''+c+'\')">'+c+'</button>').join('')+'</div>':'')
  
- +(!x&&nWork?'<div class="chips">'+[['All','All'],['open','Open ('+nOpen+')'],['closed','Closed ('+nCl+')']].map(([v,l])=>'<button class="'+((S.sv.st||'All')==v?'on':'')+'" onclick="svSt(\''+v+'\')">'+l+'</button>').join('')+'</div>':'')
+ +(!x&&nWork?'<div class="chips">'+[['All','All ('+nWork+')'],['open','Open ('+nOpen+')'],['closed','Closed ('+nCl+')']].map(([v,l])=>'<button class="'+((S.sv.st||'All')==v?'on':'')+'" onclick="svSt(\''+v+'\')">'+l+'</button>').join('')+'</div>':'')
  +'<div id="svbody" class="sv">'+svBody()+'</div></div>'}
 
 function dl(f){const r=S.rec,o=compute(r);let d,n='record.'+f;if(f=='json')d=JSON.stringify({...r,calculated:o},null,1);else{const rows=r.mode=='purchase'?[['Item','Qty','Unit','Total'],...r.items.filter(i=>!i.off).map(i=>[i.n,i.q,i.p,i.t]),['Subtotal','','',o.sub],...(o.disc?[['Discount','','',-o.disc]]:[]),['Tax','','',N(r.tax)==null?'':o.tax],['Total','','',o.total]]:[['Field','Value'],...text(r).filter(l=>l.includes(': ')).map(l=>l.split(/: (.*)/s).slice(0,2))];d=rows.map(x=>x.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(',')).join('\n')}
@@ -410,6 +410,18 @@ function addCal(){const r=S.rec,d=est(r);if(!d)return;const e=d.replace(/-/g,'')
  L=['Expected payment (net 30)','Amount: '+(amt||'not entered'),who?'Client: '+who:'',r.employer&&r.client&&r.employer!==r.client?'Employer: '+r.employer:'',r.invoice?'Invoice #: '+r.invoice:'',r.jobDate?'Job date: '+us(r.jobDate):'',r.endDate?'Event end date: '+us(r.endDate):'',r.location?'Location: '+r.location:'',hr!=null||ot!=null?'Hours: '+(hr||0)+' regular'+(ot?', '+ot+' overtime':''):'',r.notes?'Notes: '+String(r.notes).replace(/\s+/g,' ').trim():''].filter(Boolean),
  ics=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//PaperTrail//EN','BEGIN:VEVENT','UID:'+e+'-'+Date.now()+'@papertrail','DTSTAMP:'+new Date().toISOString().replace(/[-:]|\.\d+/g,''),'DTSTART;VALUE=DATE:'+e,'DTEND;VALUE=DATE:'+n,'SUMMARY:'+x('Net-30 payout'+(amt?' '+amt:'')+(who?' - '+who:'')),'DESCRIPTION:'+L.map(x).join('\\n'),'BEGIN:VALARM','TRIGGER:-PT15H','ACTION:DISPLAY','DESCRIPTION:'+x('Payout due'+(amt?': '+amt:'')+(who?' - '+who:'')),'END:VALARM','END:VEVENT','END:VCALENDAR'].join('\r\n'),
  a=document.createElement('a');a.href=URL.createObjectURL(new Blob([ics],{type:'text/calendar'}));a.download='payout.ics';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
+/* v52: one calendar event per shift (every shift on the invoice, past or future). Each has a fixed ID, so adding again updates the same events instead of duplicating them. Alerts: 2 hours and 1 day before. */
+function workIcs(r){const sh=(r.shifts||[]).filter(x=>x&&((x.start&&x.end)||N(x.hours)!=null));if(!sh.length)return null;
+ const x=t=>String(t).replace(/[\\;,]/g,'\\$&').replace(/\n/g,' '),p2=n=>String(n).padStart(2,'0'),ymd=d=>d.getFullYear()+p2(d.getMonth()+1)+p2(d.getDate()),
+ who=r.client||r.employer||'',tot=shTotal(r),amt=N(r.amount),st=new Date().toISOString().replace(/[-:]|\.\d+/g,''),al=m=>['BEGIN:VALARM','TRIGGER:'+m,'ACTION:DISPLAY','DESCRIPTION:Work','END:VALARM'];
+ const ev=[];sh.forEach((s,i)=>{const d=Parser.pd(s.date||r.jobDate);if(!d)return;const hasT=s.start&&s.end,pay=s.pay!=null?+s.pay:(amt!=null&&tot>0&&N(s.hours)!=null&&Math.abs(tot-((N(r.hours)||0)+(N(r.overtime)||0)))<.01?amt*N(s.hours)/tot:null);
+  let a,b;if(hasT){const e=new Date(d);if(s.end<=s.start)e.setDate(e.getDate()+1);a='DTSTART:'+ymd(d)+'T'+s.start.replace(':','')+'00';b='DTEND:'+ymd(e)+'T'+s.end.replace(':','')+'00'}else{const e=new Date(d);e.setDate(e.getDate()+1);a='DTSTART;VALUE=DATE:'+ymd(d);b='DTEND;VALUE=DATE:'+ymd(e)}
+  const L=[hasT?t12(s.start)+' - '+t12(s.end):'',who?'Client: '+who:'',r.employer&&r.employer!==r.client?'Employer: '+r.employer:'',r.invoice?'Invoice #: '+r.invoice:'',r.location?'Location: '+r.location:'',pay!=null?'Est. pay for this day: '+M(+pay.toFixed(2)):''].filter(Boolean);
+  ev.push(['BEGIN:VEVENT','UID:work-'+String(r.invoice||r.rid||'job').replace(/[^A-Za-z0-9]/g,'')+'-'+ymd(d)+'-'+i+'@papertrail','DTSTAMP:'+st,a,b,'SUMMARY:'+x('Work: '+(who||'Job')+(r.location?' @ '+r.location:'')),r.location?'LOCATION:'+x(r.location):'','DESCRIPTION:'+L.map(x).join('\\n'),...al('-PT2H'),...al('-P1D'),'END:VEVENT'].filter(Boolean).join('\r\n'))});
+ return ev.length?['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//PaperTrail//EN',...ev,'END:VCALENDAR'].join('\r\n'):null}
+function saveIcs(ics,name){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([ics],{type:'text/calendar'}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
+function addWork(r){r=r||S.rec;const ics=workIcs(r);if(!ics)return toast('No shifts with dates to add');saveIcs(ics,'work-days.ics')}
+function addWorkRec(i){const r=S.records[i];if(r)addWork(r)}
 function doPrint(){$('#print').textContent=text(S.rec).join('\n');print()}
 /* ---------- encrypted autosave (AES-GCM, key from passcode, IndexedDB on this device) ---------- */
 const idb=(m,v)=>new Promise((ok,no)=>{const q=indexedDB.open('bench',1);q.onupgradeneeded=()=>q.result.createObjectStore('s');q.onerror=()=>no(q.error);q.onsuccess=()=>{const d=q.result,tx=d.transaction('s',m=='get'?'readonly':'readwrite'),o=tx.objectStore('s'),K=S.uid?'state:'+S.uid:'state',r=m=='get'?o.get(K):m=='put'?o.put(v,K):o.delete(K);tx.oncomplete=()=>{d.close();ok(r.result)};tx.onerror=()=>no(tx.error)}});
@@ -876,7 +888,7 @@ function applyLearned(r){if(!r)return;r.fix=r.fix||{};
  else fillMiles(r)}
 /* a field was finished (the change event fires when you leave it, so nothing is learned from half-typed text) */
 function fldDone(k){const r=S.rec;if(!r||!r.loaded)return;
- if(k=='amount'&&r.mode!='purchase'){delete r.estTotal;render();return}
+ if(k=='amount'&&r.mode!='purchase'){delete r.estTotal;r.estOff=1;render();return}
  if(k=='location'&&r.mode!='purchase'){if(fillMiles(r)){const e=$('#f_roundTrip');if(e){e.value=r.roundTrip??'';e.classList.toggle('ext',String(r.roundTrip??'').trim()!=='')}paintFix('roundTrip');calc()}}
  if(k=='merchant'||k=='roundTrip')learnRec(r)}
 function fixText(k){const r=S.rec;if(!r||!r.fix||!r.fix[k]||(r.edited&&r.edited[k]))return'';
@@ -913,7 +925,7 @@ function dupWarn(){const el=$('#dupwarn');if(!el)return;const r=S.rec,m=r&&r.loa
 function openRec(i){const r=S.records[i];if(!r)return;closeRec();const{t,G}=rows(r),
  h=G.map(g=>({...g,rows:g.rows.filter(x=>x[0]!=='Regular Hours')})).map(g=>'<div class="rg">'+g.rows.map(([l,v,hl])=>`<div class="rr${hl?' hl':''}${g.k=='tot'?' tt':''}"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join('')+'</div>').join(''),
  o=document.createElement('div');o.id='recmodal';o.className='rmo';o.onclick=e=>{if(e.target===o)closeRec()};
- o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${r.mode!='purchase'?'<div class="stn'+(stOf(r)=='open'?'':' cl')+'">'+swHtml(r,'flipStatus('+i+')')+'</div>':''}${r.imgs&&r.imgs.length?'':'<div class="invm">'+(r.mode=='purchase'?'No receipt attached':'No invoice attached')+'</div>'}${h}</div><div class="rmf"><button onclick="dlRec(${i})">Download PDF</button><button onclick="viewRec(${i})">View PDF</button>${r.imgs&&r.imgs.length?`<button onclick="cropRec(${i})">Crop</button><button onclick="attachRec(${i})">Replace invoice</button><button onclick="rmImg(${i})">Remove invoice</button>`:`<button onclick="attachRec(${i})">Attach invoice</button>`}<button onclick="editRec(${i})">Edit</button><button onclick="delOpen(${i})" style="color:#b3261e">Delete</button></div></div>`;
+ o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${r.mode!='purchase'?'<div class="stn'+(stOf(r)=='open'?'':' cl')+'">'+swHtml(r,'flipStatus('+i+')')+'</div>':''}${r.imgs&&r.imgs.length?'':'<div class="invm">'+(r.mode=='purchase'?'No receipt attached':'No invoice attached')+'</div>'}${h}</div><div class="rmf">${r.mode!='purchase'&&(r.shifts||[]).length?`<button onclick="addWorkRec(${i})">Add work days to Calendar</button>`:''}<button onclick="dlRec(${i})">Download PDF</button><button onclick="viewRec(${i})">View PDF</button>${r.imgs&&r.imgs.length?`<button onclick="cropRec(${i})">Crop</button><button onclick="attachRec(${i})">Replace invoice</button><button onclick="rmImg(${i})">Remove invoice</button>`:`<button onclick="attachRec(${i})">Attach invoice</button>`}<button onclick="editRec(${i})">Edit</button><button onclick="delOpen(${i})" style="color:#b3261e">Delete</button></div></div>`;
  document.body.appendChild(o);document.body.style.overflow='hidden'}
 function delOpen(i){if(!S.records[i])return;if(!confirm('Delete this saved record? This cannot be undone.'))return;S.records.splice(i,1);closeRec();renderRecs();store()}
 function closeRec(){const o=$('#recmodal');if(o)o.remove();document.body.style.overflow=''}
@@ -1436,7 +1448,7 @@ window.csvGo=async function(){
 '.tcols{padding:2px 15px 0;margin:2px 0 -4px;text-align:right;font:600 11px var(--mono);letter-spacing:.1em;color:var(--mut)}',
 '.tcols small{display:block;font:400 10.5px -apple-system,system-ui,sans-serif;letter-spacing:0;margin-top:1px;white-space:nowrap}',
 '.th1{font:600 11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--mut);padding:10px 0 4px}',
-'.tcols.in{padding:10px 0 6px;margin:0;border-bottom:1px solid var(--ln);align-items:end}.tcols.in .th1{padding:0;text-align:left;font:700 12px var(--mono);letter-spacing:.1em;color:var(--fg)}.tcols.in span:not(.th1){font:600 12px -apple-system,system-ui,sans-serif;letter-spacing:0;color:var(--fg)}.tcols.in small{color:var(--mut)}',
+'.tcols.in{padding:2px 0 6px;margin:0;border-bottom:1px solid var(--ln);align-items:end}.sl .tcols.in+.tr.tot{border-top:0!important}.tcols.in .th1{padding:0;text-align:left;font:700 12px var(--mono);letter-spacing:.1em;color:var(--fg)}.tcols.in span:not(.th1){font:600 12px -apple-system,system-ui,sans-serif;letter-spacing:0;color:var(--fg)}.tcols.in small{color:var(--mut)}',
 '.sl .tr{padding:7px 0!important;border:0!important;font-size:14px;text-align:right}',
 '.sl .tr>span:first-child{text-align:left;font-weight:500}',
 '.sl .tr b{font-weight:600;font-size:14px}.sl .tr b.z{color:#c3c6c2;font-weight:400}',
@@ -1526,8 +1538,8 @@ window.csvGo=async function(){
    const PT_VER='v200'
    const PT_VER='vv200'
    ---------- */
-const PT_BUILD=249;
-const PT_LABEL='v51';
+const PT_BUILD=251;
+const PT_LABEL='v53';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();

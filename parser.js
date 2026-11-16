@@ -1,7 +1,7 @@
 'use strict';
 /* self-update (V must match the ?v= number in index.html): the iPhone Home Screen app keeps its own cached copy of the page and ignores no-cache hints. On launch, ask the server (bypassing the cache) which version is current;
    if it is newer than this file, re-download every file once and reload. Runs from parser.js so even an old cached index.html picks it up. Once per session, so it can never loop. */
-(function(){var V=249;try{if(typeof window==='undefined'||!window.fetch||!navigator.onLine||sessionStorage.getItem('pt_upd'))return;
+(function(){var V=251;try{if(typeof window==='undefined'||!window.fetch||!navigator.onLine||sessionStorage.getItem('pt_upd'))return;
  fetch('index.html',{cache:'reload'}).then(function(r){return r.text()}).then(function(h){var m=h.match(/parser\.js\?v=(\d+)/);if(!m||+m[1]<=V)return;
   try{sessionStorage.setItem('pt_upd','1')}catch(e){}
   return Promise.all(['parser.js','scan.js','app.js'].map(function(f){return fetch(f+'?v='+m[1],{cache:'reload'})})).then(function(){location.reload()})}).catch(function(){})}catch(e){}})();
@@ -440,6 +440,7 @@ function parse1(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(
   }
   if(!shifts.length&&typeof drow!=='undefined'&&drow.length)drow.forEach(l=>{const m=l.match(/^(\d{1,2}\/\d{1,2}\/\d{2,4})\b/),t=l.match(tri);if(m&&t)shifts.push({date:m[1],start:'',end:'',hours:+t[1]})});
  }
+ if(mode!=='purchase'&&shifts.length){const pr=timeRows(L);if(pr.length===shifts.length)shifts.forEach((s,i)=>{s.pay=pr[i].a;s.billed=pr[i].h})}
  if(mode!=='purchase'&&!F.hours&&shifts.length){const h=+shifts.reduce((a,s)=>a+s.hours,0).toFixed(2);if(h>0){F.hours=String(h);found.hours=1}}
  try{items.forEach(it=>{if(it&&it.n)it.n=cleanItem(it.n);if(it&&it.full)it.full=cleanItem(it.full)})}catch(e){}
  return {fields:F,items,found,guess,shifts,L,recon:(typeof recon!=='undefined'?recon:null)}}
