@@ -51,16 +51,6 @@ const css=`
 #topbar .tbsw.open .tbx{display:inline-block}
 #savedview .svs{display:none}
 #savedview .svq{justify-content:flex-end}
-/* v52: calmer Saved header: flat underline tabs, filters + sort share one row */
-#savedview .seg{background:transparent!important;border:0!important;border-radius:0!important;padding:0!important;gap:0;border-bottom:1px solid var(--hair,var(--ln))!important;margin:0 0 2px!important}
-#savedview .seg button{background:transparent!important;border:0!important;border-bottom:2px solid transparent!important;border-radius:0!important;box-shadow:none!important;color:var(--mut);font-weight:500;padding:10px 4px!important;margin-bottom:-1px}
-#savedview .seg button.on{color:var(--gd);border-bottom-color:var(--gd)!important;font-weight:600}
-#savedview .svrow{display:flex;align-items:center;gap:10px}
-#savedview .svrow .chips{flex:1 1 auto;min-width:0}
-#savedview .svrow .svsb{padding:5px 12px;border-radius:999px;background:transparent;font-weight:500;color:var(--mut)}
-#savedview .svrow .svsb span{color:var(--fg)}
-#savedview .chips button{border-color:transparent!important;background:rgba(255,255,255,.05)!important;color:var(--mut)}
-#savedview .chips button.on{background:#1b1d20!important;color:var(--fg)!important;border-color:var(--hair,#2a2d31)!important}
 @media(max-width:900px){
  #topbar .tbsw{margin-left:auto}
  #topbar .tbsw.open{position:absolute;left:14px;right:14px;top:max(8px,env(safe-area-inset-top));margin:0;z-index:2;background:#0b0d0f;height:36px}
@@ -88,17 +78,8 @@ const css=`
  #savedview .seg button{white-space:nowrap;font-size:13px;padding-inline:2px}
 }
 
-/* v59: Data and Settings live in the footer; Sort sits under the list; filters are plain text */
-#ptfoot .frow{display:flex;flex-wrap:nowrap;align-items:center;justify-content:space-between;gap:2px}#ptfoot .frow>*{flex:0 1 auto;min-width:0;white-space:nowrap}#ptfoot .fv{margin:0;font-size:12.5px;opacity:.7}
-#ptfoot .frow .mt,#ptfoot .frow .fb{padding:8px 6px;font-size:13px;font-weight:400;color:var(--mut);line-height:1.2;min-height:36px;margin:0}
-#savedview .chips button,#savedview .chips button.on{background:transparent!important;border:0!important;border-radius:0!important;padding:6px 12px 6px 0!important;font-size:14px;font-weight:500;color:var(--mut)!important}
-#savedview .chips button.on{color:var(--fg)!important;font-weight:600}
-#savedview .svfoot{display:flex;justify-content:flex-end;margin:-4px 0 -2px}
-#savedview .svfoot .svsb{border:0;background:transparent;font-weight:500;color:var(--mut);padding:4px 0;font-size:13px}
-#savedview .svfoot .svsb::before{content:"Sort:";margin-right:4px}
-#savedview .svfoot .svsb span{color:var(--fg)}
 /* footer disclaimer */
-#ptfoot{max-width:1180px;margin:0 auto;padding:8px 20px calc(84px + env(safe-area-inset-bottom,0px));text-align:center;color:var(--mut)}
+#ptfoot{max-width:1180px;margin:0 auto;padding:8px 20px calc(28px + env(safe-area-inset-bottom,0px));text-align:center;color:var(--mut)}
 #ptfoot .fb{width:auto;background:transparent;border:0;padding:8px 10px;font-size:12.5px;font-weight:400;color:var(--mut);display:inline-flex;align-items:center;gap:6px}
 #ptfoot .fb:hover{color:var(--fg)}
 #ptfoot .fb i{width:5px;height:5px;border:solid currentColor;border-width:0 1.5px 1.5px 0;transform:rotate(45deg) translate(-1px,-1px);transition:transform .15s}
@@ -172,17 +153,17 @@ const brand=side.querySelector('.brand'),nav=side.querySelector('.nav');
 if(brand)inner.appendChild(brand);
 if(nav)inner.appendChild(nav);
 const mts=document.createElement('div');mts.className='mts';
-[['data','Data'],['acct','Settings']].forEach(([k,l])=>{
+[['data','Data'],['acct','Account']].forEach(([k,l])=>{
  const b=document.createElement('button');b.type='button';b.className='mt';b.setAttribute('aria-haspopup','menu');b.setAttribute('aria-expanded','false');
  b.innerHTML=l+'<i aria-hidden="true"></i>';b.onclick=e=>window.ptMenu(e,k);mts.appendChild(b)});
-bar.appendChild(inner);shell.insertBefore(bar,shell.firstChild);
+inner.appendChild(mts);bar.appendChild(inner);shell.insertBefore(bar,shell.firstChild);
 
 
 /* ---------- search: magnifier in the top bar, expands into a field; drives the Saved search ---------- */
 const sw=document.createElement('div');sw.className='tbsw';
 sw.innerHTML='<div class="tbf"><input id="tbq" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Search merchant, client or receipt #" aria-label="Search saved records"><button type="button" class="tbx" aria-label="Clear search and close">\u2715</button></div>'
  +'<button type="button" class="tbi" aria-label="Search saved records" aria-expanded="false"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>';
-inner.appendChild(sw);
+inner.insertBefore(sw,mts);
 const tbq=sw.querySelector('#tbq'),tbi=sw.querySelector('.tbi'),tbx=sw.querySelector('.tbx');
 function sOpen(){sw.classList.add('open');bar.classList.add('searching');tbi.setAttribute('aria-expanded','true');setTimeout(()=>{try{tbq.focus()}catch(e){}},30)}
 function sClose(){sw.classList.remove('open');bar.classList.remove('searching');tbi.setAttribute('aria-expanded','false');tbq.blur()}
@@ -220,7 +201,8 @@ const installable=()=>{try{return !!(window.installGuide&&window.installGuide(fa
 const MENUS={
  acct:()=>[
   {head:S.email||''},
-  {t:'Password & hint',f:()=>window.authPwHint()},
+  {t:'Update password',f:()=>window.authChangePw()},
+  {t:'Update password hint',f:()=>window.authChangeHint()},
   {t:'Create a new recovery code',f:()=>window.authMakeCode()},
   {idle:true},
   ...(installable()?[{t:'Add to Home Screen',f:homeScreen}]:[]),
@@ -228,7 +210,7 @@ const MENUS={
   {t:'Log out',f:()=>lockNow()}],
  data:()=>[
   ...(S.records&&S.records.length?[
-   {t:'Copy records',f:()=>{if(S.tab!='saved')showSaved();svCopy()}},
+   {t:'Copy records',sub:'The list you are viewing in Saved',f:()=>{if(S.tab!='saved')showSaved();svCopy()}},
    {t:'Export CSV\u2026',f:()=>{if(S.tab!='saved')showSaved();csvOpen()}},
    {hr:1}]:[]),
   {t:'Download backup',sub:bkText(),f:()=>window.authBackup()},
@@ -268,9 +250,9 @@ window.ptMenu=function(ev,key){
  document.body.appendChild(menu);
  trig=btn;btn.setAttribute('aria-expanded','true');
  const r=btn.getBoundingClientRect(),w=menu.offsetWidth,vw=document.documentElement.clientWidth;
- let left=btn.classList.contains('lkhelp')||btn.closest('#ptfoot')?r.left+(r.width-w)/2:r.right-w;
+ let left=btn.classList.contains('lkhelp')?r.left+(r.width-w)/2:r.right-w;
  left=Math.max(12,Math.min(left,vw-w-12));
- menu.style.left=left+'px';menu.style.top=Math.max(8,(btn.closest('#ptfoot')?r.top-menu.offsetHeight-6:r.bottom+6))+'px';
+ menu.style.left=left+'px';menu.style.top=(r.bottom+6)+'px';
  
 };
 document.addEventListener('pointerdown',e=>{if(menu&&!menu.contains(e.target)&&!(trig&&trig.contains(e.target)))closeMenu()},true);
@@ -285,20 +267,18 @@ document.addEventListener('keydown',e=>{
 function place(){
  if(!menu||!trig)return;
  const r=trig.getBoundingClientRect(),w=menu.offsetWidth,vw=document.documentElement.clientWidth;
- let left=trig.classList.contains('lkhelp')||trig.closest('#ptfoot')?r.left+(r.width-w)/2:r.right-w;
- menu.style.left=Math.max(12,Math.min(left,vw-w-12))+'px';menu.style.top=Math.max(8,(trig.closest('#ptfoot')?r.top-menu.offsetHeight-6:r.bottom+6))+'px';
+ let left=trig.classList.contains('lkhelp')?r.left+(r.width-w)/2:r.right-w;
+ menu.style.left=Math.max(12,Math.min(left,vw-w-12))+'px';menu.style.top=(r.bottom+6)+'px';
 }
 addEventListener('resize',place);
 addEventListener('scroll',place,true);
 
 /* ---------- Saved tab: Copy + Export CSV become one quiet menu ---------- */
 if(typeof svBody==='function'){
- const _sb=svBody,_sortCtl=sortCtl;
- sortCtl=function(){return ''};
+ const _sb=svBody;
  svBody=function(){
   let h=_sb.apply(this,arguments);
   h=h.replace(/<div class="svact">[\s\S]*?<\/div>/,'');
-  if(S.sv.sec!='t'&&S.records&&S.records.length>1&&/class="svsum"/.test(h))h=h.replace(/(<div class="svsum">[\s\S]*?<\/div>)/,'$1<div class="svfoot">'+_sortCtl(S.sv.sec=='x')+'</div>');
   return h};
 }
 
@@ -306,8 +286,7 @@ if(typeof svBody==='function'){
 /* ---------- footer: grey Disclaimer link that expands in place ---------- */
 {
  const f=document.createElement('footer');f.id='ptfoot';
- f.innerHTML='<div class="frow"><button type="button" class="fb" aria-expanded="false" aria-controls="ptdisc">Disclaimer<i aria-hidden="true"></i></button><span class="fv"></span></div><div id="ptdisc" class="fd" hidden></div>';
- {const row=f.querySelector('.frow'),d0=row.querySelector('.fb');[...mts.children].forEach(b=>row.insertBefore(b,d0))}
+ f.innerHTML='<button type="button" class="fb" aria-expanded="false" aria-controls="ptdisc">Disclaimer<i aria-hidden="true"></i></button><span class="fv"></span><div id="ptdisc" class="fd" hidden></div>';
  shell.appendChild(f);
  const fb=f.querySelector('.fb'),fd=f.querySelector('.fd');
  fb.onclick=()=>{

@@ -90,7 +90,7 @@ The user is responsible for maintaining appropriate backups and original source 
 
 ## Software License
 
-The software is provided “AS IS”, without warranty of any kind, express or implied, to the fullest extent permitted by applicable law.
+This software is provided “AS IS”, without warranty of any kind, to the fullest extent permitted by applicable law.
 
 ## Acknowledgment
 
