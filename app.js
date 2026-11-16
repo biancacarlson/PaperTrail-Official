@@ -1,6 +1,6 @@
 'use strict';
 const LS=(k,d)=>{try{return localStorage.getItem(k)||d}catch(e){return d}};
-const $=s=>document.querySelector(s),S={start:'North Park, San Diego, CA 92104',mode:'freelance',rec:null,records:[],sel:[],words:[],idle:15,img:null,z:1,x:0,y:0,tab:'new',learn:{m:{},mi:{}},sv:{sec:'w',cat:'All',st:'All',sort:'dnew',q:''}};
+const $=s=>document.querySelector(s),S={start:'North Park, San Diego, CA 92104',mode:'purchase',rec:null,records:[],sel:[],words:[],idle:15,img:null,z:1,x:0,y:0,tab:'new',sv:{sec:'x',cat:'All',sort:'dnew'}};
 const est=r=>Parser.net30(r.endDate||r.jobDate);
 const chk=()=>S.rec.location?true:(st('Enter the job location first.'),false);
 const IOS=/iPhone|iPad|iPod/.test(navigator.userAgent);
@@ -8,78 +8,32 @@ const gurl=(r,c)=>(c?'googlechromes://':'https://')+'www.google.com/search?q='+e
 const N=v=>{const n=parseFloat(String(v).replace(/[$,]/g,''));return isNaN(n)?null:n},M=v=>v==null?'Not entered':(v<0?'-$':'$')+Math.abs(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 const PF={purchase:[['date','Date'],['merchant','Merchant'],['location','Location (city, state)'],['number','Receipt/Invoice #'],['tax','Tax'],['extSub','Subtotal $'],['extTotal','Total $']],
 freelance:[['employer','Employer'],['client','Client'],['jobDate','Job date'],['endDate','Event end date'],['location','Job location'],['roundTrip','Round-trip miles'],['hours','Total regular'],['overtime','Total overtime'],['amount','Amount $'],['invoice','Invoice #'],['notes','Notes']]};
-function setMode(m){showWork();S.mode=m;S.rec=newRec();S.pages=[];S.undo=[];S.redo=[];{const dw=$('#docwrap');if(dw)dw.style.display='none'}$('.head h1').textContent=m=='purchase'?'':'';$('#m1').className=m=='purchase'?'on':'';$('#m2').className=m=='freelance'?'on':'';render();renderPages()}
+function setMode(m){showWork();S.mode=m;S.rec=newRec();S.pages=[];S.undo=[];S.redo=[];{const dw=$('#docwrap');if(dw)dw.style.display='none'}$('.head h1').textContent=m=='purchase'?'':'New work invoice record';$('#m1').className=m=='purchase'?'on':'';$('#m2').className=m=='freelance'?'on':'';render();renderPages()}
 const newRec=()=>({mode:S.mode,items:[],src:{},edited:{},loaded:false,doc:false,employer:S.mode=='freelance'?'AVLancer':''});
-/* Open = the amount may still change. Closed = final. It is worked out from the invoice: a printed TOTAL means closed; an estimated total or no total means open.
-   The switch overrides that (r.stMan). An old record explicitly marked closed before this existed keeps that choice. */
-const isEst=r=>!!(r&&(r.estTotal||/invoice is an estimate|estimated total|printed total was \$0\.00/i.test(String(r.notes||''))));
-/* v51: Closed needs a real printed total. r.tp=1 means the invoice had a printed total above $0; r.tp=0 means there was none (or $0), so any amount came from adding up line items. Older saved records have no r.tp: they are Closed unless the event hasn't happened yet. */
-const futureEv=r=>{try{const d=workDays(r);if(!d.length)return false;const t=new Date();t.setHours(0,0,0,0);const e=Parser.pd(r.endDate)||d[d.length-1];return +e>+t}catch(x){return false}};
-/* v58: Closed ONLY with a printed total above $0 on the uploaded invoice. A passed date never closes it; records saved before r.tp existed stay Open until marked Closed. */
-const autoSt=r=>r&&N(r.amount)>0&&r.tp===1?'closed':'open';
-const stOf=r=>!r?'closed':r.stMan=='open'||r.stMan=='closed'?r.stMan:(r.status=='open'?'open':autoSt(r));
-/* v62: statuses are locked in. The first time a work invoice is seen without a saved status it gets one and it is stored on the record, so an update can no longer change it. New invoices: from the printed total. Records saved before the printed-total flag existed (no r.tp) only get a temporary guess (r.stGuess); rereadStatuses() then reads their attached invoice once and sets the real status. Only the switch, Replace invoice or that one re-read changes a locked status. */
-function lockStatuses(){let n=0;(S.records||[]).forEach(r=>{if(!r||r.mode=='purchase'||r.stMan=='open'||r.stMan=='closed')return;let v;if(r.status=='open')v='open';else if(r.tp===undefined){v=N(r.amount)>0&&!isEst(r)&&!futureEv(r)?'closed':'open';if(!r.rr)r.stGuess=1}else v=autoSt(r);r.stMan=v;r.status=v;r.stBy='auto';r.stWhy=r.stGuess?'Reading the invoice to check for a printed total':v=='closed'?'The invoice shows a printed total':'The invoice has no printed total';n++});return n}
-/* v62: one-time re-read of older invoices (see lockStatuses). Closed only if the attached invoice itself shows a printed total above $0 that is not an estimate. If the invoice cannot be read now (offline, blank), the guess stays and it is tried again next time. */
-let REREAD=0;
-/* v263: records an earlier version locked as Open (or Closed) by mistake. The uploaded invoice decides: a printed total above $0 = Closed; no total or $0 = Open. Only statuses the app set itself are touched (never ones you set with the switch). Runs on every sign-in for records that already carry their printed-total flag; the picture re-read below handles the rest once. */
-function resyncStatuses(){let n=0;(S.records||[]).forEach(r=>{if(!r||r.mode=='purchase'||r.stBy==='you'||r.tp===undefined)return;const v=autoSt(r);if(v!=stOf(r)||r.stBy!=='auto'){r.stBy='auto';r.stMan=v;r.status=v;r.stWhy=v=='closed'?'The invoice shows a printed total':'The invoice has no printed total';n++}});return n}
-function imgCanvas(u){return new Promise((ok,no)=>{const im=new Image();im.onload=()=>{const c=document.createElement('canvas');c.width=im.naturalWidth;c.height=im.naturalHeight;c.getContext('2d').drawImage(im,0,0);ok(c)};im.onerror=()=>no(new Error('img'));im.src=u})}
-async function readRecText(r){let t='';for(const g of (r.imgs||[])){if(!g||!g.u)continue;const c=await imgCanvas(g.u);let x='';try{x=(await Promise.race([Tesseract.recognize(c,'eng'),new Promise((_,j)=>setTimeout(()=>j(0),60000))])).data.text||''}catch(e){}
-  if(x.trim().length<60){try{x=(await Promise.race([Tesseract.recognize(prep(c),'eng'),new Promise((_,j)=>setTimeout(()=>j(0),60000))])).data.text||x}catch(e){}}
-  try{x=await findTotal(c,x)}catch(e){}
-  t+=x+'\n'}return t}
-/* v264: faint gray 'Total' lines (small text, light color, highlighter) are often missed by the first read. When the text has no printed total, read the picture again bigger / with cleaner contrast and copy only the Total-type lines from the read that finds one. */
-const hasTot=t=>{try{return !!Parser.parse(t||'','freelance').fields.tp}catch(e){return false}};
-function upC(c,z){const o=document.createElement('canvas');o.width=Math.round(c.width*z);o.height=Math.round(c.height*z);const x=o.getContext('2d');x.imageSmoothingQuality='high';x.drawImage(c,0,0,o.width,o.height);return o}
-function redC(c,z){const o=upC(c,z),x=o.getContext('2d'),d=x.getImageData(0,0,o.width,o.height),p=d.data;for(let i=0;i<p.length;i+=4){p[i+1]=p[i+2]=p[i]}x.putImageData(d,0,0);return o}/* red channel only: a yellow highlighter is bright in red, so it disappears while gray text stays dark */
-function grayC(c,z){const o=upC(c,z),x=o.getContext('2d'),d=x.getImageData(0,0,o.width,o.height),p=d.data,n=o.width*o.height,h=new Uint32Array(256);for(let i=0;i<p.length;i+=4){const l=Math.round(.299*p[i]+.587*p[i+1]+.114*p[i+2]);p[i]=l;h[l]++}
- let lo=0,hi=255,a=0;for(let v=0;v<256;v++){a+=h[v];if(a>=n*.01){lo=v;break}}a=0;for(let v=255;v>=0;v--){a+=h[v];if(a>=n*.2){hi=v;break}}if(hi-lo<40){lo=Math.max(0,hi-120)}
- for(let i=0;i<p.length;i+=4){const v=Math.max(0,Math.min(255,Math.round((p[i]-lo)*255/Math.max(1,hi-lo))));p[i]=p[i+1]=p[i+2]=v;p[i+3]=255}x.putImageData(d,0,0);return o}
-async function findTotal(c,t0){if(hasTot(t0))return t0;const m=Math.max(c.width,c.height),z2=Math.min(2,3000/m),z3=Math.min(3,3600/m),
- tries=[()=>redC(c,z2),()=>redC(c,z3),()=>grayC(c,z2),()=>grayC(c,z3),()=>upC(c,z2),()=>upC(c,z3),()=>prepUp(c)];
- for(const mk of tries){for(const mode of [6,3]){try{const cv=mk();let x;if(mode==6)x=String((await ocrP(cv)).text||'');else x=String((await Promise.race([Tesseract.recognize(cv,'eng'),new Promise((_,j)=>setTimeout(()=>j(0),60000))])).data.text||'');
-  if(!hasTot(x))continue;const add=x.split('\n').filter(l=>/\b(?:total|balance|amount\s*due|net\s*pay)\b/i.test(l)).join('\n');return String(t0||'')+'\n'+add}catch(e){}}}
- return t0}
-function statusFromText(t){const F=Parser.parse(t,'freelance').fields||{},p={amount:F.amount,tp:F.tp?1:0,estTotal:F.estTotal,notes:F.notes};return autoSt(p)}
-async function rereadStatuses(readFn){if(REREAD)return;
- /* v64: (1) older records still on a temporary guess; (2) records the v63 re-read left Open (that read missed some printed totals). For group 2 a printed total can only change Open to Closed, never the other way. */
- const g2=r=>false,g3=r=>r.stBy!=='you'&&!r.rr5,todo=(S.records||[]).filter(r=>r&&r.mode!='purchase'&&r.imgs&&r.imgs.length&&g3(r));if(!todo.length)return;REREAD=1;let done=0,chg=0;
- try{for(let k=0;k<todo.length;k++){const r=todo[k],two=g2(r);if(!S.records.includes(r)||(!r.stGuess&&!two&&!g3(r)))continue;try{toast('Checking invoice '+(k+1)+' of '+todo.length+'…')}catch(e){}
-  let t='';try{t=await (readFn||readRecText)(r)}catch(e){}
-  if(String(t||'').trim().length<40)continue;
-  if(!S.records.includes(r)||(!r.stGuess&&!g3(r)&&!(r.rr===1&&!r.stBy)))continue;
-  const v=statusFromText(t);
-  if(two&&!g3(r)&&v!='closed'){r.rr2=1;r.stWhy='The invoice has no printed total';done++;try{await store()}catch(e){}continue}
-  if(v!=stOf(r))chg++;r.stMan=v;r.status=v;r.rr=1;r.rr2=1;r.rr4=1;r.rr5=1;r.stBy='auto';r.stWhy=v=='closed'?'The invoice shows a printed total':'The invoice has no printed total, or only an estimate';delete r.stGuess;done++;
-  try{await store()}catch(e){}try{if(S.tab=='saved')renderRecs()}catch(e){}}}
- finally{REREAD=0}
- try{if(done)toast('Checked '+done+' invoice'+(done==1?'':'s')+(chg?' · '+chg+' changed':' · no changes'))}catch(e){}return{done,chg}}
-function putStatus(r,v){v=v=='open'?'open':'closed';r.stMan=v;r.status=v;r.stBy='you';r.stWhy='Set by you';delete r.stGuess}
-const swHtml=(r,fn)=>{const o=stOf(r)=='open';return `<div class="stsw2" role="group" aria-label="Invoice status"><button type="button" class="stp o${o?' on':''}" aria-pressed="${o}"${o?'':` onclick="${fn}"`}>(Open)</button><button type="button" class="stp c${o?'':' on'}" aria-pressed="${!o}"${o?` onclick="${fn}"`:''}>(Closed)</button></div>`};
-function setStatus(v){const r=S.rec;if(!r)return;putStatus(r,v);render()}
-function flipStatus(i){const r=S.records[i];if(!r||r.mode=='purchase')return;putStatus(r,stOf(r)=='open'?'closed':'open');store();renderRecs();openRec(i);toast(stOf(r)=='open'?'Marked open':'Marked closed')}
 function manual(){dismissRestore();S.rec.loaded=true;render()}
 /* ---------- lock (passcode hash via PBKDF2; screen lock only) ---------- */
 const hex=b=>[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');
 async function hash(p,salt){const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(p),'PBKDF2',false,['deriveBits']);return hex(await crypto.subtle.deriveBits({name:'PBKDF2',salt,iterations:310000,hash:'SHA-256'},k,256))}
 function lockUI(h){const L=$('#lock');L.style.display='block';$('#app').style.display='none';L.innerHTML=h}
 let fails=0;
-function wipe(){S.extra=[];try{showExtra()}catch(e){}S.cleared=null;showRestore();snackHide();S.img=null;S.dim=null;S.records=[];S.learn={m:{},mi:{}};S.words=[];S.sel=[];S.conf=null;S.home=null;['#view','#ocr','#print','#status'].forEach(i=>{const e=$(i);if(e){e.innerHTML='';e.textContent=''}});$('#docwrap').style.display='none';$('#file').value='';$('#copypanel').style.display='none';$('#copyta').value='';setMode(S.mode)}
+function wipe(){S.cleared=null;showRestore();snackHide();S.img=null;S.dim=null;S.records=[];S.words=[];S.sel=[];S.conf=null;S.home=null;['#view','#ocr','#print','#status'].forEach(i=>{const e=$(i);if(e){e.innerHTML='';e.textContent=''}});$('#docwrap').style.display='none';$('#file').value='';$('#copypanel').style.display='none';$('#copyta').value='';setMode(S.mode)}
 var snT;function snackHide(){clearTimeout(snT);const e=$('#snack');if(e)e.style.display='none'}
 function snack(m,fn){let e=$('#snack');if(!e){e=document.createElement('div');e.id='snack';document.body.appendChild(e)}e.innerHTML='<span></span><button></button>';e.firstChild.textContent=m;const b=e.lastChild;b.textContent='Undo';b.style.display=fn?'':'none';if(!fn)e.style.paddingRight='16px';else e.style.paddingRight='';b.onclick=()=>{snackHide();fn&&fn()};e.style.display='flex';clearTimeout(snT);snT=setTimeout(snackHide,10000)}
-function clearAll(){const c={mode:S.mode,rec:S.rec,pages:S.pages,undo:S.undo,redo:S.redo,img:S.img,dim:S.dim,words:S.words,conf:S.conf};const keep=S.records,kl=S.learn;wipe();S.records=keep;S.learn=kl;S.cleared=c;showRestore();renderRecs();snack('Record cleared',restoreCleared)}
+function clearAll(){const c={mode:S.mode,rec:S.rec,pages:S.pages,undo:S.undo,redo:S.redo,img:S.img,dim:S.dim,words:S.words,conf:S.conf};const keep=S.records;wipe();S.records=keep;S.cleared=c;showRestore();renderRecs();snack('Record cleared',restoreCleared)}
 function showRestore(){const b=$('#restore');if(b)b.style.display=S.cleared?'flex':'none'}
 function dismissRestore(){S.cleared=null;showRestore()}
 function restoreCleared(){const c=S.cleared;if(!c)return;if(S.rec&&S.rec.loaded&&!confirm('Replace what is on screen with the cleared record?'))return;S.cleared=null;showWork();
  Object.assign(S,{mode:c.mode,rec:c.rec,pages:c.pages,undo:c.undo,redo:c.redo,img:c.img,dim:c.dim,words:c.words,conf:c.conf,selM:null});
- $('#m1').className=S.mode=='purchase'?'on':'';$('#m2').className=S.mode=='freelance'?'on':'';$('.head h1').textContent=S.mode=='purchase'?'':'';
+ $('#m1').className=S.mode=='purchase'?'on':'';$('#m2').className=S.mode=='freelance'?'on':'';$('.head h1').textContent=S.mode=='purchase'?'':'New work invoice record';
  if(S.mode!='purchase'&&S.img){showDoc(S.img);if(S.words&&S.words.length&&S.dim)drawWords(S.dim[0],S.dim[1])}
  render();renderPages();showRestore()}
 async function lockNow(){clearTimeout(pt);S.key=null;S.loaded=false;S.noStore=false;wipe();$('#lock').style.display='block';showLock()}
-function showLock(){}
+const PW={"s":"62f53ba61516d37ff300ce68df2b2afe","h":"ba82c58f3766e930b59ed2480c7f8db564f999a0e0f1a415a9dedd4cb2b2f32a","e":"7a8c7dd61c94dcf41108ee71ee436129"};
+function showLock(){if(localStorage.getItem('lk'))return lockUI('<h2>Locked</h2><div class="msg">Too many wrong attempts. This app is locked on this device.</div>');lockUI('<h2>Enter passcode</h2><input id="pw" type="password" autocomplete="off"><button class="pri" onclick="unlock()">Log in</button><div id="lm" class="msg"></div>')}
 
 
+async function unlock(){if(localStorage.getItem('lk'))return showLock();const o=PW,s=new Uint8Array(o.s.match(/../g).map(h=>parseInt(h,16)));
+ if(await hash($('#pw').value,s)===o.h){localStorage.removeItem('lf');S.key=await dk($('#pw').value,o.e);try{const x=await idb('get');if(x&&x.iv){try{S.records=await dec(x)}catch(e){S.noStore=true;S.records=[]}}}catch(e){}S.loaded=true;open_();try{renderRecs();if(S.noStore)st('Saved records could not be opened with this passcode.')}catch(e){}}else{const f=(+localStorage.getItem('lf')||0)+1;localStorage.setItem('lf',f);if(f>=3){localStorage.setItem('lk','1');showLock()}else $('#lm').textContent='Wrong passcode. '+(3-f)+' attempt'+(3-f==1?'':'s')+' left.'}}
 function open_(){try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}$('#lock').style.display='none';$('#app').style.display='block'}
 let t;function bump(){clearTimeout(t);S.last=Date.now();t=setTimeout(lockNow,S.idle*60000)}document.addEventListener('visibilitychange',()=>{if(!document.hidden&&$('#app').style.display!='none'&&Date.now()-S.last>S.idle*60000)lockNow()});['touchstart','click','keydown'].forEach(e=>addEventListener(e,bump));
 function setIdle(){S.idle=Math.max(1,+$('#idle').value||15);bump()}
@@ -95,86 +49,39 @@ function pdfLines(items){return pdfRows(items).map(r=>r.map((t,i)=>(i?(t.wide?' 
 function pdfWords(items,vp){const out=[];pdfRows(items).forEach(r=>r.forEach(t=>{const X=v=>vp.transform[0]*v+vp.transform[4],Y=vp.transform[3]*t.y+vp.transform[5],h=t.fs*vp.scale;out.push({text:t.s,confidence:100,bbox:{x0:X(t.x0),y0:Y-h,x1:X(t.x1),y1:Y+h*.2}})}));return out}
 /* light-gray text on white (e.g. iOS print-to-PDF invoices) is invisible to OCR; this turns it black */
 function prep(c){const o=document.createElement('canvas');o.width=c.width;o.height=c.height;const x=o.getContext('2d');x.drawImage(c,0,0);const d=x.getImageData(0,0,o.width,o.height),p=d.data;for(let i=0;i<p.length;i+=4){const l=.299*p[i]+.587*p[i+1]+.114*p[i+2],v=l>=228?255:0;p[i]=p[i+1]=p[i+2]=v}x.putImageData(d,0,0);return o}
-/* v90: enlarge 2x, then the same light-gray-to-black cut. Pale gray values on work invoices (client, address, dates) are only read reliably when the photo is enlarged first. */
-function prepUp(c){const z=Math.min(2,2800/Math.max(c.width,c.height)),o=document.createElement('canvas');o.width=Math.round(c.width*z);o.height=Math.round(c.height*z);const x=o.getContext('2d');x.imageSmoothingQuality='high';x.drawImage(c,0,0,o.width,o.height);return prep(o)}
 const st=m=>$('#status').textContent=m||'';
-/* v85: multi-page work invoices. Every page of a PDF, and every photo picked together, is read and saved with the invoice. */
-S.extra=[];
-function showExtra(){let e=document.getElementById('xpg');const v=document.getElementById('view');if(!e){if(!v||!v.parentNode)return;e=document.createElement('div');e.id='xpg';v.parentNode.insertBefore(e,v.nextSibling)}
- e.innerHTML=(S.extra||[]).map((x,i)=>'<div style="font-size:12px;color:var(--mut);margin:10px 0 4px">Page '+(i+2)+'</div><img src="'+x.u+'" style="width:100%;display:block;border-radius:8px;border:1px solid var(--bd,#e2e0d8)" alt="Invoice page '+(i+2)+'">').join('')}
-async function wkPagesOf(f){const out=[];
+async function handle(f){if(!f)return;S.rec=newRec();S.pages=[];S.undo=[];S.redo=[];S.rec.loaded=true;S.rec.doc=true;S.sel=[];S.words=[];S.conf=null;st('Reading…');try{
+ let canvas,text='',pw=[];
  if(f.type=='application/pdf'||/\.pdf$/i.test(f.name)){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-  const pdf=await pdfjsLib.getDocument({data:await f.arrayBuffer()}).promise;
-  for(let n=1;n<=Math.min(pdf.numPages,10);n++){const p=await pdf.getPage(n),tc=await p.getTextContent(),t=pdfLines(tc.items),has=t.trim().length>=30,w=p.getViewport({scale:1}).width,sc=has?2:Math.min(4,2200/w),v=p.getViewport({scale:sc}),c=document.createElement('canvas');c.width=v.width;c.height=v.height;await p.render({canvasContext:c.getContext('2d'),viewport:v}).promise;out.push({c,t:has?t:null})}}
- else if(/^image\//.test(f.type)){const b=await createImageBitmap(f),sc=Math.min(1,1600/Math.max(b.width,b.height)),c=document.createElement('canvas');c.width=b.width*sc;c.height=b.height*sc;c.getContext('2d').drawImage(b,0,0,c.width,c.height);out.push({c,t:null})}
- return out}
-async function handle(f,rest){if(!f)return;S.extra=[];showExtra();S.rec=newRec();S.pages=[];S.undo=[];S.redo=[];S.rec.loaded=true;S.rec.doc=true;S.sel=[];S.words=[];S.conf=null;st('Reading…');try{
- let canvas,text='',pw=[],more=[],ex=[],xp=[];
- if(f.type=='application/pdf'||/\.pdf$/i.test(f.name)){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-  const pdf=await pdfjsLib.getDocument({data:await f.arrayBuffer()}).promise,pg=await pdf.getPage(1),NP=Math.min(pdf.numPages,10),pit=[];
-  let one=0,tot=0;
-  for(let n=1;n<=NP;n++){const c=await (await pdf.getPage(n)).getTextContent();c.items.forEach(i=>{const s=i.str.trim();if(s){tot++;if(s.length==1)one++}});text+=pdfLines(c.items)+'\n';pit.push(c.items)}
-  /* v61: a scanned / print-to-PDF file has no text layer. Every page is rendered and read, not just the first. */
-  const imgOnly=text.trim().length<30,sc=imgOnly?Math.min(4,2200/pg.getViewport({scale:1}).width):2,vp=pg.getViewport({scale:sc}),
-   renderN=async n=>{const p=await pdf.getPage(n),v=p.getViewport({scale:sc}),c=document.createElement('canvas');c.width=v.width;c.height=v.height;await p.render({canvasContext:c.getContext('2d'),viewport:v}).promise;return c};
-  if(imgOnly&&S.rec.mode=='purchase'){const cap=Math.min(pdf.numPages,6),lz=[];for(let n=1;n<=cap;n++)lz.push(()=>renderN(n));return await addShots(lz,{pdf:1,all:pdf.numPages})}
-  if(S.rec.mode!='purchase')for(let n=2;n<=NP;n++)xp.push({g:()=>renderN(n),o:imgOnly});
-  if(!imgOnly){pw=pdfWords(pit[0],vp);if(S.rec.mode=='purchase')for(let n=2;n<=NP;n++){const v=(await pdf.getPage(n)).getViewport({scale:sc}),c=await renderN(n);ex.push({c,words:pdfWords(pit[n-1],v)})}}
-  canvas=await renderN(1);
-  if(imgOnly)text=''}
+  const pdf=await pdfjsLib.getDocument({data:await f.arrayBuffer()}).promise,pg=await pdf.getPage(1);
+  let vp=pg.getViewport({scale:2}),one=0,tot=0;
+  for(let n=1;n<=Math.min(pdf.numPages,10);n++){const c=await (await pdf.getPage(n)).getTextContent();c.items.forEach(i=>{const s=i.str.trim();if(s){tot++;if(s.length==1)one++}});text+=pdfLines(c.items)+'\n';if(n==1)pw=pdfWords(c.items,vp)}
+  canvas=document.createElement('canvas');canvas.width=vp.width;canvas.height=vp.height;await pg.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
+  if(text.trim().length<30)text=''}
  else if(/^image\//.test(f.type)){const b=await createImageBitmap(f),sc=Math.min(1,1600/Math.max(b.width,b.height));canvas=document.createElement('canvas');canvas.width=b.width*sc;canvas.height=b.height*sc;canvas.getContext('2d').drawImage(b,0,0,canvas.width,canvas.height)}
  else{return st('Unsupported file. Use PDF, JPG or PNG.')}
- if(S.rec.mode!='purchase'&&rest&&rest.length)for(const rf of rest){try{(await wkPagesOf(rf)).forEach(pg=>xp.push({g:async()=>pg.c,o:pg.t==null,t:pg.t}))}catch(e){}}
  S.img=canvas.toDataURL('image/jpeg',.85);S.dim=[canvas.width,canvas.height];showDoc(S.img);if(text&&pw.length){S.words=pw;drawWords(canvas.width,canvas.height)}
- {const key=S.rec.mode=='purchase'?['merchant','date','extTotal']:['jobDate','client','amount','location','hours'],cnt=t=>{const f=Parser.parse(t||'',S.rec.mode).found;return key.filter(k=>f[k]).length},wk=S.rec.mode!='purchase',okB=b=>b&&b.n>=need&&(!wk||hasTot(b.t)||xp.length>0),need=S.rec.mode=='purchase'?Math.min(3,key.length):4;
-  const ocr=async(c,z)=>{const r=await Promise.race([Tesseract.recognize(c,'eng'),new Promise((_,j)=>setTimeout(()=>j(0),60000))]);return {t:r.data.text,w:(r.data.words||[]).filter(w=>w.text.trim()).map(w=>z>1&&w.bbox?{...w,bbox:{x0:w.bbox.x0/z,y0:w.bbox.y0/z,x1:w.bbox.x1/z,y1:w.bbox.y1/z}}:w),c:r.data.confidence}};
+ {const key=S.rec.mode=='purchase'?['merchant','date','extTotal']:['jobDate','client','amount','location'],cnt=t=>{const f=Parser.parse(t||'',S.rec.mode).found;return key.filter(k=>f[k]).length},need=Math.min(3,key.length);
+  const ocr=async c=>{const r=await Promise.race([Tesseract.recognize(c,'eng'),new Promise((_,j)=>setTimeout(()=>j(0),60000))]);return {t:r.data.text,w:(r.data.words||[]).filter(w=>w.text.trim()),c:r.data.confidence}};
   let best=text?{t:text,w:S.words,c:null,n:cnt(text)}:null;
-  for(const pre of (S.rec.mode=='purchase'?[0,1]:[0,2,1])){if(okB(best))break;st('Running OCR on this device (first run downloads language data)…');try{const uz=pre==2?Math.min(2,2800/Math.max(canvas.width,canvas.height)):1,o=await ocr(pre==2?prepUp(canvas):pre?prep(canvas):canvas,uz),n=cnt(o.t);if(!best||n>best.n)best={t:o.t,w:o.w,c:o.c,n}}catch(e){}}
-  if(best&&best.t!==text){document.querySelectorAll('.wb').forEach(e=>e.remove());text=best.t;S.words=best.w;S.conf=best.c;drawWords(canvas.width,canvas.height)}
-  if(wk&&canvas&&!hasTot(text)&&!xp.length){st('Looking for the invoice total…');try{text=await findTotal(canvas,text)}catch(e){}}
-  for(let k=0;k<xp.length;k++){st('Reading page '+(k+2)+' of '+(xp.length+1)+'…');try{const it=xp[k],c2=await it.g();S.extra.push({u:c2.toDataURL('image/jpeg',.85),w:c2.width,h:c2.height});let t2=it.t;if(it.o){try{t2=(await ocr(c2)).t}catch(e){t2=''}}text+='\n'+(t2||'')}catch(e){}}
-  if(xp.length)showExtra()}
- $('#ocr').textContent=text;parse(text);if(S.rec.mode=='purchase'&&canvas){const td=topRightDate(S.words,canvas.width,canvas.height);if(td){S.rec.date=td;S.rec.src.date=1}}lowConf();if(S.rec.mode=='purchase'&&canvas){S.pages=[{id:++PGID,words:S.words,c:canvas,url:S.img,w:canvas.width,h:canvas.height,marks:autoHL(S.words,canvas.width,canvas.height)}];ex.forEach(e=>S.pages.push({id:++PGID,words:e.words,c:e.c,url:e.c.toDataURL('image/jpeg',.85),w:e.c.width,h:e.c.height,marks:autoHL(e.words,e.c.width,e.c.height,seenHL())}));S.pages.forEach(pg=>locate(pg,S.rec.items))}const q=[];if(S.conf!=null&&S.conf<70)q.push('Low scan quality ('+Math.round(S.conf)+'% confidence). Retake in good light if fields look wrong.');if(canvas&&Math.min(canvas.width,canvas.height)<500)q.push('Low-resolution image.');if(S.rec.mode=='purchase'&&/\bhours\b/i.test(text)&&/\brate\b/i.test(text)&&/position|event|crew|technician|labor/i.test(text))q.push('This looks like a work invoice. Tap Work Invoice above and upload again.');st(text.trim()?q.join(' ')||(Object.keys(S.rec.src).length?'':'Text was read but no fields matched. Enter values manually.'):'No text found. Enter values manually.');render();renderPages()
+  for(const pre of [0,1]){if(best&&best.n>=need)break;st('Running OCR on this device (first run downloads language data)…');try{const o=await ocr(pre?prep(canvas):canvas),n=cnt(o.t);if(!best||n>best.n)best={t:o.t,w:o.w,c:o.c,n}}catch(e){}}
+  if(best&&best.t!==text){document.querySelectorAll('.wb').forEach(e=>e.remove());text=best.t;S.words=best.w;S.conf=best.c;drawWords(canvas.width,canvas.height)}}
+ $('#ocr').textContent=text;parse(text);if(S.rec.mode=='purchase'&&canvas){const td=topRightDate(S.words,canvas.width,canvas.height);if(td){S.rec.date=td;S.rec.src.date=1}}lowConf();if(S.rec.mode=='purchase'&&canvas){S.pages=[{id:++PGID,words:S.words,c:canvas,url:S.img,w:canvas.width,h:canvas.height,marks:autoHL(S.words,canvas.width,canvas.height)}];locate(S.pages[0],S.rec.items)}const q=[];if(S.conf!=null&&S.conf<70)q.push('Low scan quality ('+Math.round(S.conf)+'% confidence). Retake in good light if fields look wrong.');if(canvas&&Math.min(canvas.width,canvas.height)<500)q.push('Low-resolution image.');if(S.rec.mode=='purchase'&&/\bhours\b/i.test(text)&&/\brate\b/i.test(text)&&/position|event|crew|technician|labor/i.test(text))q.push('This looks like a work invoice. Tap Work Invoice above and upload again.');st(text.trim()?q.join(' ')||(Object.keys(S.rec.src).length?'':'Text was read but no fields matched. Enter values manually.'):'No text found. Enter values manually.');render();renderPages()
 }catch(e){st('Extraction failed ('+((e&&e.message)||e||'unknown')+'). Enter values manually or try a clearer file.');showOcr();render()}}
 /* The receipt's own date is printed at the top right. When a date is read there it beats any other date on the page (order, delivery, etc.). */
 function topRightDate(ws,W,H){try{const a=(ws||[]).filter(w=>w.bbox&&(w.bbox.x0+w.bbox.x1)/2>W*.5&&w.bbox.y1<H*.2);for(const l of wLines(a).sort((p,q)=>p.y0-q.y0)){const d=Parser.dateIn(l.t);if(d)return d}}catch(e){}return null}
 function lowConf(){const r=S.rec;r.low={};(S.words||[]).length&&Object.keys(r.src).forEach(k=>{if(!r.src[k]||r[k]==null||typeof r[k]=='object')return;const t=String(r[k]).toLowerCase().split(/\s+/).filter(x=>x.length>1);if(t.some(x=>S.words.some(w=>w.confidence<60&&w.text.toLowerCase().includes(x))))r.low[k]=1})}
 function drawWords(cw,ch){const L=$('#layer');if(!L)return;L.insertAdjacentHTML('beforeend',S.words.map((w,i)=>{const b=w.bbox;return `<div class="wb${w.confidence<60?' lowc':''}" data-i="${i}" style="left:${b.x0/cw*100}%;top:${b.y0/ch*100}%;width:${(b.x1-b.x0)/cw*100}%;height:${(b.y1-b.y0)/ch*100}%"></div>`}).join(''))}
-const selText=()=>S.psel&&S.psel.length?ptext():[...S.sel].sort((a,b)=>a-b).map(i=>S.words[i].text).join(' ');
+const selText=()=>[...S.sel].sort((a,b)=>a-b).map(i=>S.words[i].text).join(' ');
 function tapWord(el){if(!el||!el.dataset||el.dataset.i==null)return;const i=+el.dataset.i,k=S.sel.indexOf(i);k<0?S.sel.push(i):S.sel.splice(k,1);el.classList.toggle('sel');updBar()}
-function clearSel(){S.sel=[];S.psel=[];document.querySelectorAll('.wb.sel').forEach(e=>e.classList.remove('sel'));updBar()}
-function updBar(){const s=getSelection(),ok=s&&!s.isCollapsed&&($('#ocr').contains(s.anchorNode)||$('#pages').contains(s.anchorNode));$('#addbar').style.display=(ok||hasSel())?'block':'none';$('#selt').textContent=hasSel()?selText():''}
+function clearSel(){S.sel=[];document.querySelectorAll('.wb.sel').forEach(e=>e.classList.remove('sel'));updBar()}
+function updBar(){const s=getSelection(),ok=s&&!s.isCollapsed&&$('#ocr').contains(s.anchorNode);$('#addbar').style.display=(ok||S.sel.length)?'block':'none';$('#selt').textContent=S.sel.length?selText():''}
 function showOcr(){$('#docwrap').style.display='block'}
-/* v75: invoices are shown as an image, so the phone's own text selection can't reach them. Tap words (or Select all text), then Copy. */
-function selAll(){S.sel=S.words.map((_,i)=>i);document.querySelectorAll('#view .wb').forEach(e=>e.classList.add('sel'));updBar()}
-function selLines(){const ix=[...S.sel].sort((a,b)=>a-b);let o='',p=null;ix.forEach(i=>{const w=S.words[i],b=w.bbox;if(p&&b&&p.bbox&&b.y0>p.bbox.y0+(p.bbox.y1-p.bbox.y0)*.6)o+='\n';else if(p)o+=' ';o+=w.text;p=w});return o}
-async function copySel(){const t=(S.psel&&S.psel.length)?selText():selLines();if(!t)return;let ok=false;
- try{if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(t);ok=true}}catch(e){}
- if(!ok){try{const a=document.createElement('textarea');a.value=t;a.setAttribute('readonly','');a.style.cssText='position:fixed;top:0;left:0;opacity:0;font-size:16px';document.body.appendChild(a);a.focus();a.select();a.setSelectionRange(0,t.length);ok=document.execCommand('copy');a.remove()}catch(e){}}
- toast(ok?'Copied':'Could not copy. Try again.')}
-/* v60: the invoice sits in the page at full height, so one finger scrolls the page. Pinch (or the Enlarge button) zooms; only while zoomed does one finger pan the image. */
-function showDoc(u){showOcr();const v=$('#view');v.style.height='';v.innerHTML='<div id="layer" style="position:absolute;top:0;left:0;width:100%;transform-origin:0 0"><img src="'+u+'" style="position:static;width:100%;display:block"></div><button type="button" class="zbtn">Enlarge</button>';
- const im=v.firstChild,pic=im.firstChild,rb=v.lastChild;S.z=1;S.x=S.y=0;
- const fit=()=>{if(S.z<=1&&im.offsetHeight)v.style.height=im.offsetHeight+'px'},
- clampP=()=>{if(S.z<=1){S.x=S.y=0;return}const W=v.clientWidth,H=v.clientHeight,w=W*S.z,h=im.offsetHeight*S.z;S.x=w<=W?0:Math.min(0,Math.max(W-w,S.x));S.y=h<=H?0:Math.min(0,Math.max(H-h,S.y))},
- ap=()=>{clampP();im.style.transform=`translate(${S.x}px,${S.y}px) scale(${S.z})`;v.style.touchAction=S.z>1?'none':'pan-y';rb.textContent=S.z>1?'Reset zoom':'Enlarge'},
- zoomTo=(z,cx,cy)=>{const k=z/S.z;S.x=cx-(cx-S.x)*k;S.y=cy-(cy-S.y)*k;S.z=z;ap();if(z<=1)fit()};
- pic.onload=()=>{fit();ap()};if(pic.complete)fit();ap();
- rb.onpointerdown=e=>e.stopPropagation();rb.onpointerup=e=>e.stopPropagation();rb.onclick=e=>{e.stopPropagation();S.z>1?zoomTo(1,0,0):zoomTo(2.5,v.clientWidth/2,Math.min(v.clientHeight/2,200))};
- const P=new Map();let d0=0,sx=0,sy=0,mv=0;
- const mid=()=>{const a=[...P.values()];return[(a[0].clientX+a[1].clientX)/2,(a[0].clientY+a[1].clientY)/2]};
- v.onpointerdown=e=>{try{v.setPointerCapture(e.pointerId)}catch(_){}P.set(e.pointerId,e);d0=0;if(P.size==1){sx=e.clientX;sy=e.clientY;mv=0}else mv=1};
- v.onpointerup=e=>{const one=P.size==1&&!mv;P.delete(e.pointerId);if(one)tapWord(document.elementFromPoint(e.clientX,e.clientY))};
- v.onpointercancel=e=>P.delete(e.pointerId);
- v.onpointermove=e=>{const o=P.get(e.pointerId);if(!o)return;if(Math.hypot(e.clientX-sx,e.clientY-sy)>8)mv=1;
-  const pm=P.size==2?mid():null;P.set(e.pointerId,e);
-  if(P.size==2){const a=[...P.values()],d=Math.hypot(a[0].clientX-a[1].clientX,a[0].clientY-a[1].clientY),m=mid(),r=v.getBoundingClientRect(),cx=m[0]-r.left,cy=m[1]-r.top;
-   if(d0){const z=Math.min(6,Math.max(1,S.z*d/d0)),k=z/S.z;S.x=cx-(cx-S.x)*k+(m[0]-pm[0]);S.y=cy-(cy-S.y)*k+(m[1]-pm[1]);S.z=z}d0=d}
-  else if(S.z>1){S.x+=e.clientX-o.clientX;S.y+=e.clientY-o.clientY}
-  ap();if(S.z<=1)fit()};
- if(!window.__dvr){window.__dvr=1;addEventListener('resize',()=>{const l=$('#layer'),w=$('#view');if(l&&w&&S.z<=1&&l.offsetHeight)w.style.height=l.offsetHeight+'px'})}}
+function showDoc(u){showOcr();const v=$('#view');v.innerHTML='<div id="layer" style="position:absolute;top:0;left:0;width:100%;transform-origin:0 0"><img src="'+u+'" style="position:static;width:100%;display:block"></div>';const im=v.firstChild;S.z=1;S.x=S.y=0;const ap=()=>im.style.transform=`translate(${S.x}px,${S.y}px) scale(${S.z})`;im.style.width='100%';ap();
+ const P=new Map();let d0=0;v.onpointerdown=e=>{v.setPointerCapture(e.pointerId);P.set(e.pointerId,e);d0=0;if(P.size==1){sx=e.clientX;sy=e.clientY;mv=0}else mv=1};let sx=0,sy=0,mv=0;v.onpointerup=e=>{const one=P.size==1&&!mv;P.delete(e.pointerId);if(one)tapWord(document.elementFromPoint(e.clientX,e.clientY))};v.onpointercancel=e=>P.delete(e.pointerId);
+ v.onpointermove=e=>{const o=P.get(e.pointerId);if(!o)return;if(Math.hypot(e.clientX-sx,e.clientY-sy)>8)mv=1;if(P.size==2){const a=[...P.values()],d=Math.hypot(a[0].clientX-a[1].clientX,a[0].clientY-a[1].clientY);if(d0)S.z=Math.min(6,Math.max(1,S.z*d/d0));d0=d}else{S.x+=e.clientX-o.clientX;S.y+=e.clientY-o.clientY}P.set(e.pointerId,e);ap()}}
 /* ---------- parsing (deterministic) ---------- */
-function parse(t){const r=S.rec,o=Parser.parse(t,r.mode);delete r.estTotal;delete r.tp;Object.assign(r,o.fields);if(r.mode!='purchase')r.tp=r.tp?1:0;r.src=Object.assign(r.src,o.found);if(r.mode!='purchase'&&o.shifts&&o.shifts.length)r.shifts=o.shifts;if(r.mode=='purchase'){r.items=o.items;if(o.guess)r.gname=o.guess;ensureItem(r)}applyLearned(r)}
+function parse(t){const r=S.rec,o=Parser.parse(t,r.mode);Object.assign(r,o.fields);r.src=Object.assign(r.src,o.found);if(r.mode=='purchase'){r.items=o.items;if(o.guess)r.gname=o.guess;ensureItem(r)}}
 /* Only a subtotal was readable (no per-item lines): keep the totals reconcilable with one clearly-flagged combined line. */
 function ensureItem(r){if(r.mode=='purchase'&&!r.items.length&&N(r.extSub)>0)r.items.push({n:r.gname||'',q:1,p:N(r.extSub),guess:1,ext:1})}
 /* ---------- form ---------- */
@@ -182,9 +89,9 @@ function render(){const r=S.rec;{const pl=$('#pick');if(pl)pl.textContent=S.mode
  autoCat();const fs=PF[r.mode],sel=$('#addto');sel.innerHTML=fs.map(f=>`<option value="${f[0]}">${f[1]}</option>`).join('')+(r.mode=='purchase'?'<option value="+item">New item</option>':'');
  const lab=(k,l)=>`<label for="f_${k}">${l}${r.edited[k]?' (edited)':''}${miss(k)?' (needs review)':''}${r.low&&r.low[k]&&!r.edited[k]?' - low confidence, check':''}</label>`,
  W=['location','notes','number','client','employer','category'],
- fld=k=>{if(k=='status'){const o=stOf(r)=='open';return `<div class="f w"><label>Invoice status</label>${swHtml(r,"setStatus(stOf(S.rec)=='open'?'closed':'open')")}</div>`}if(k=='category')return `<div class="f w"><label for="f_category">Category${r.edited.category?' (edited)':''}</label><select id="f_category" onchange="setCat(this.value);render()"><option value="">Select…</option>${CATS.map(c=>`<option${r.category==c?' selected':''}>${c}</option>`).join('')}</select></div>`;const l=(fs.find(f=>f[0]==k)||[])[1];return `<div class="f${W.includes(k)?' w':''}">`+lab(k,l)+(k=='notes'?`<textarea id="f_${k}" class="${String(r[k]??'').trim()?'ext':''}" rows="3" oninput="ed('${k}',this.value)">${esc(r[k])}</textarea>`:(inp=>k=='roundTrip'?`<div class="row" style="margin:0">${inp}<button class="pri" style="flex:0 0 auto" onclick="render()">Recalculate</button></div>`:inp)(`<input autocomplete="off" id="f_${k}" class="${String(r[k]??'').trim()?'ext':''}${miss(k)?' warn':''}" value="${esc(r[k])}" oninput="ed('${k}',this.value)" onchange="fldDone('${k}')">`))+fixDiv(k)+(k=='roundTrip'?`<div class="srch"><a id="gs" class="btn" target="_blank" rel="noopener noreferrer" href="${esc(gurl(r))}" onclick="return chk()">Search round-trip distance</a></div>`:'')+'</div>'},
- G=r.mode=='purchase'?[['Receipt',['date','merchant','location','number','category']],['Amounts',['tax','extSub','extTotal']]]:[['',['employer','client','invoice']],['',['jobDate','endDate','location']],['Mileage',['roundTrip']],['Hours & pay',['hours','overtime','amount','status']],['__shifts',[]],['',['notes']]];
- let h=G.map(([t,ks])=>t=='__shifts'?shiftsHtml():`<section class="grp${t=='Amounts'?' amt':''}">${t?`<h3>${t}</h3>`:''}<div class="fg">${ks.map(fld).join('')}</div></section>`).join('');
+ fld=k=>{if(k=='category')return `<div class="f w"><label for="f_category">Category${r.edited.category?' (edited)':''}</label><select id="f_category" onchange="setCat(this.value);render()"><option value="">Select…</option>${CATS.map(c=>`<option${r.category==c?' selected':''}>${c}</option>`).join('')}</select></div>`;const l=(fs.find(f=>f[0]==k)||[])[1];return `<div class="f${W.includes(k)?' w':''}">`+lab(k,l)+(k=='notes'?`<textarea id="f_${k}" class="${String(r[k]??'').trim()?'ext':''}" rows="3" oninput="ed('${k}',this.value)">${esc(r[k])}</textarea>`:(inp=>k=='roundTrip'?`<div class="row" style="margin:0">${inp}<button class="pri" style="flex:0 0 auto" onclick="render()">Recalculate</button></div>`:inp)(`<input autocomplete="off" id="f_${k}" class="${String(r[k]??'').trim()?'ext':''}${miss(k)?' warn':''}" value="${esc(r[k])}" oninput="ed('${k}',this.value)">`))+(k=='roundTrip'?`<div class="srch"><a id="gs" class="btn" target="_blank" rel="noopener noreferrer" href="${esc(gurl(r))}" onclick="return chk()">Search round-trip distance</a></div>`:'')+'</div>'},
+ G=r.mode=='purchase'?[['Receipt',['date','merchant','location','number','category']],['Amounts',['tax','extSub','extTotal']]]:[['',['employer','client','invoice']],['',['jobDate','endDate','location']],['Mileage',['roundTrip']],['Hours & pay',['hours','overtime','amount']],['',['notes']]];
+ let h=G.map(([t,ks])=>`<section class="grp${t=='Amounts'?' amt':''}">${t?`<h3>${t}</h3>`:''}<div class="fg">${ks.map(fld).join('')}</div></section>`).join('');
  if(r.mode=='purchase')h+=itemsHtml();
  $('#form').className=r.mode;$('#form').innerHTML=h;$('#actions').style.display='block';calc();renderRecs();refreshActs()}
 const CATS=['Supplies','Gear','Meals','Travel','Software','Other'];
@@ -210,69 +117,43 @@ function guessCat(r){const m=String(r.merchant||'').toLowerCase(),sc={};let tot=
  if(!best&&CATK.Supplies.test(m))best='Supplies';return best||'Other'}
 function autoCat(){const r=S.rec;if(!r||r.mode!='purchase'||!r.loaded||(r.edited&&r.edited.category))return;const c=guessCat(r);if(c!==r.category){r.category=c;const e=$('#f_category');if(e)e.value=c}}
 function setCat(v){const r=S.rec;r.category=v;r.edited.category=v?1:0;if(!v)autoCat()}
-const LNK='background:transparent;border:0;color:var(--gd);text-decoration:underline;font-weight:600;padding:8px 0;text-align:left';
 const esc=v=>String(v??'').replace(/"/g,'&quot;').replace(/</g,'&lt;'),miss=k=>{const r=S.rec;return r.doc&&!r[k]&&['date','merchant','client','jobDate','location','amount'].includes(k)&&!(k=='location'&&r.mode=='purchase')};
-function ed(k,v){const r0=S.rec;if(k=='merchant'&&!r0.edited.merchant&&!r0.origMerchant)r0.origMerchant=r0.merchant;if(r0.fix&&r0.fix[k]){r0.fix[k]=0;paintFix(k)}S.rec[k]=v;if(k=='location'){const g=$('#gs'),c=$('#gc');if(g)g.href=gurl(S.rec);if(c)c.href=gurl(S.rec,1)}S.rec.edited[k]=1;const e=$('#f_'+k);if(e){const f=String(v).trim()!=='';e.classList.toggle('ext',f);e.classList.remove('usr');if(f)e.classList.remove('warn')}calc();if(k=='date')refreshActs();if(k=='merchant')autoCat()}
-function it(i,k,v){S.rec.items[i][k]=k=='n'?v:N(v)||0;S.rec.items[i].ext=0;S.rec.items[i].guess=0;if(k=='n'){S.rec.items[i].inf=0;S.rec.items[i].chk=0}calc();const e=$('#it_'+i);if(e)e.textContent=M(S.rec.items[i].t);if(k=='n')autoCat()}
+function ed(k,v){S.rec[k]=v;if(k=='location'){const g=$('#gs'),c=$('#gc');if(g)g.href=gurl(S.rec);if(c)c.href=gurl(S.rec,1)}S.rec.edited[k]=1;const e=$('#f_'+k);if(e){const f=String(v).trim()!=='';e.classList.toggle('ext',f);e.classList.remove('usr');if(f)e.classList.remove('warn')}calc();if(k=='date')refreshActs();if(k=='merchant')autoCat()}
+function it(i,k,v){S.rec.items[i][k]=k=='n'?v:N(v)||0;S.rec.items[i].ext=0;S.rec.items[i].guess=0;if(k=='n')S.rec.items[i].inf=0;calc();const e=$('#it_'+i);if(e)e.textContent=M(S.rec.items[i].t);if(k=='n')autoCat()}
 function r_del(i){S.rec.items.splice(i,1);render()}
 /* ---------- calculation ---------- */
-function compute(r){const o={};if(r.mode=='purchase'){const A=r.items;A.forEach(i=>i.t=+((i.q||0)*(i.p||0)).toFixed(2));const sm=a=>+a.reduce((s,i)=>s+i.t,0).toFixed(2);o.all=sm(A);o.sub=sm(A.filter(i=>!i.off));o.removed=+(o.all-o.sub).toFixed(2);o.nOff=A.filter(i=>i.off).length;const tx=N(r.tax)||0,sh=N(r.shipping)||0,k=o.all>0?o.sub/o.all:1,fl=A.some(i=>i.tx===0||i.tx===1),ta=fl?sm(A.filter(i=>i.tx!==0)):0,ts=fl?sm(A.filter(i=>i.tx!==0&&!i.off)):0,kt=fl&&ta>0?ts/ta:k;o.ship=+(sh*k).toFixed(2);o.tax=+(tx*kt).toFixed(2);o.total=+(o.sub+o.ship+o.tax).toFixed(2);o.full=+(o.all+sh+tx).toFixed(2);o.warn=[];
+function compute(r){const o={};if(r.mode=='purchase'){const A=r.items;A.forEach(i=>i.t=+((i.q||0)*(i.p||0)).toFixed(2));const sm=a=>+a.reduce((s,i)=>s+i.t,0).toFixed(2);o.all=sm(A);o.sub=sm(A.filter(i=>!i.off));o.removed=+(o.all-o.sub).toFixed(2);o.nOff=A.filter(i=>i.off).length;const tx=N(r.tax)||0,sh=N(r.shipping)||0,k=o.all>0?o.sub/o.all:1;o.ship=+(sh*k).toFixed(2);o.tax=+(tx*k).toFixed(2);o.total=+(o.sub+o.ship+o.tax).toFixed(2);o.full=+(o.all+sh+tx).toFixed(2);o.warn=[];
  {const d=N(r.discount)||0,xt=N(r.extTotal);o.disc=0;if(d>0&&xt!=null&&Math.abs(o.all+sh+tx-d-xt)<=0.01&&Math.abs(o.all+sh+tx-xt)>0.01){o.disc=+(d*k).toFixed(2);o.total=+(o.total-o.disc).toFixed(2);o.full=+(o.full-d).toFixed(2)}}
- if(A.some(i=>i.guess))o.warn.push('Only the order subtotal could be read, so it is shown as one combined line. Rename it, or add each item if the order had several.');else if(r.extSub&&Math.abs(N(r.extSub)-o.all)>0.01&&!(r.extTotal&&Math.abs(N(r.extTotal)-o.full)<=0.01))o.warn.push('Item prices add up to '+M(o.all)+' but the receipt subtotal is '+M(N(r.extSub))+'. '+M(Math.abs(N(r.extSub)-o.all))+' is unaccounted for. Check for a missed or misread item.');
+ if(A.some(i=>i.guess))o.warn.push('Only the order subtotal could be read, so it is shown as one combined line. Rename it, or add each item if the order had several.');else if(r.extSub&&Math.abs(N(r.extSub)-o.all)>0.01)o.warn.push('Item prices add up to '+M(o.all)+' but the receipt subtotal is '+M(N(r.extSub))+'. Check for a missed or misread item.');
  if(r.extTotal&&Math.abs(N(r.extTotal)-o.full)>0.01)o.warn.push('Calculated order total '+M(o.full)+' differs from the receipt total '+M(N(r.extTotal))+'.');
  if(r.expected&&A.length!=r.expected)o.warn.push('Receipt lists '+r.expected+' items; '+A.length+' found here.');
- if(r.tax===undefined||r.tax==='')o.warn.push('Tax not entered; total excludes tax.');if((r.shots||(S.pages&&S.pages.length))&&(r.number==null||r.number===''))o.warn.push('Receipt number not found. Tap it on the receipt, choose Receipt/Invoice # in the bar at the bottom, then tap Add.')}
+ if(r.tax===undefined||r.tax==='')o.warn.push('Tax not entered; total excludes tax.')}
  else{const rt=N(r.roundTrip),hr=N(r.hours),ot=N(r.overtime);o.rt=rt;o.tot=hr==null&&ot==null?null:+((hr||0)+(ot||0)).toFixed(2);o.rate=Parser.irs(r.jobDate);o.wear=rt!=null&&o.rate!=null?+(rt*o.rate).toFixed(2):null}return o}
-/* v57: once any item is left out (unchecked, or covered by a black bar), show the same Subtotal / Tax / Total the saved PDF summary shows. Nothing is shown while every item counts. */
-function purTot(r,o){if(r.mode!='purchase'||!o.nOff)return '';const row=(l,v,sub,c)=>'<div class="crow'+(c?' '+c:'')+'"><div class="cl">'+l+'</div><div class="cv">'+v+(sub?'<small>'+sub+'</small>':'')+'</div></div>';
- return '<div class="cal2"><h3>Work-related total</h3>'+row('Subtotal',M(o.sub))+(o.ship?row('Shipping',M(o.ship)):'')+(o.disc?row('Discount','-'+M(o.disc)):'')+(N(r.tax)!=null?row('Tax',M(o.tax),N(r.tax)?'adjusted to work items':''):'')+row('Total',M(o.total),o.removed>0?'after removing '+M(o.removed)+' of personal items':'','tot')+'</div>'}
-function calc(){const r=S.rec;if(!r)return;try{dupWarn()}catch(e){}const o=compute(r);if(r.mode=='purchase'||S.mode=='purchase'){$('#calc').innerHTML=purTot(r,o);persist();return}
+function calc(){const r=S.rec;if(!r)return;const o=compute(r);if(r.mode=='purchase'||S.mode=='purchase'){$('#calc').innerHTML='';persist();return}
  const row=(l,v,sub)=>'<div class="crow"><div class="cl">'+l+'</div><div class="cv">'+v+(sub?'<small>'+sub+'</small>':'')+'</div></div>',
   us=d=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d||''));return m?m[2]+'/'+m[3]+'/'+m[1]:d};
  let h='<div class="cal2"><h3>Calculated</h3>';
  if(r.mode=='purchase')h+=row('Items ('+(r.items.length-o.nOff)+')',M(o.sub))+(o.ship?row('Shipping',M(o.ship)):'')+row('Tax',M(N(r.tax)==null?null:o.tax),o.nOff&&N(r.tax)?'adjusted to work items':'')+'<div class="hero tot"><span>'+(o.nOff?'Work-related total':'Total')+'</span><b>'+M(o.total)+'</b></div>'+o.warn.map(w=>'<div class="msg">⚠ '+w+'</div>').join('');
  else{const d=est(r);
-  if(d)h+='<div class="hero"><span>Net-30 payout'+(r.endDate?'':' (estimate)')+'</span><b>'+us(d)+'</b><small>'+(r.endDate?'Net 30: same date, next month, after the event end date':'No event end date found, so counted from the job date')+'</small><button onclick="addCal()">Add to Calendar</button></div>';
-  if(workDays(r).length)h+='<div class="hero"><span>Work day'+(workDays(r).length>1?'s':'')+'</span><b>'+workDays(r).map(x=>(x.getMonth()+1)+'/'+x.getDate()).join(', ')+'</b><small>Reminder so you never miss the job, even if you entered the invoice ahead of time</small><button onclick="addWorkCal()">Add Work Day'+(workDays(r).length>1?'s':'')+' to Calendar</button></div>';
+  if(d)h+='<div class="hero"><span>Net-30 payout'+(r.endDate?'':' (estimate)')+'</span><b>'+us(d)+'</b><small>'+(r.endDate?'30 days after the event end date':'No event end date found, so counted from the job date')+'</small><button onclick="addCal()">Add to Calendar</button></div>';
   h+=row('Mileage Deduction',M(o.wear),o.wear!=null?'$'+o.rate+'/mi<br>IRS standard mileage rate':o.rate==null&&o.rt!=null?'No IRS rate on file for this year':'')}
  $('#calc').innerHTML=h+'</div>';persist()}
 /* ---------- selection → field ---------- */
 document.addEventListener('selectionchange',updBar);
-function addSel(){const v=(hasSel()?selText():getSelection().toString().replace(/\s+/g,' ').trim()),k=$('#addto').value,r=S.rec;if(k=='+item'){const m=v.match(/(\d+[.,]\d{2})\s*$/);r.items.push({n:v.replace(/\$?\s?\d+[.,]\d{2}\s*$/,'').trim(),q:1,p:m?N(m[1].replace(',','.')):0});render()}else{if(k=='merchant'&&!r.edited.merchant&&!r.origMerchant)r.origMerchant=r.merchant;if(r.fix&&r.fix[k])r.fix[k]=0;r[k]=v.replace(/^\$/,'');r.edited[k]=1;learnRec(r);render()}getSelection().removeAllRanges();clearSel()}
+function addSel(){const v=(S.sel.length?selText():getSelection().toString().trim()),k=$('#addto').value,r=S.rec;if(k=='+item'){const m=v.match(/(\d+[.,]\d{2})\s*$/);r.items.push({n:v.replace(/\$?\s?\d+[.,]\d{2}\s*$/,'').trim(),q:1,p:m?N(m[1].replace(',','.')):0});render()}else{r[k]=v.replace(/^\$/,'');r.edited[k]=1;render()}getSelection().removeAllRanges();clearSel()}
 /* ---------- output ---------- */
 const fm=v=>v==null?null:M(v);
 /* Uniform record layout (same for every log): title, info table, detail table (shaded), totals table.
    groups: [{k:'info'|'det'|'tot', rows:[[label,value]]}] */
 const niceMerch=m=>{m=String(m||'').trim();return m.length>=4&&m===m.toUpperCase()&&/[A-Z]/.test(m)?m.toLowerCase().replace(/\b[a-z]/g,c=>c.toUpperCase()):m};
-/* ---------- v72: shifts (split shifts = several rows on the same date) ---------- */
-const t12=s=>{const m=/^(\d{1,2}):(\d{2})/.exec(s||'');if(!m)return s||'';let h=+m[1];const ap=h>=12?'PM':'AM';h=h%12||12;return h+':'+m[2]+' '+ap};
-const shDate=d=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d||''));return m?m[2]+'/'+m[3]+'/'+m[1]:String(d||'')};
-function shHrs(a,b){const f=s=>{const m=/^(\d{1,2}):(\d{2})/.exec(s||'');return m?+m[1]*60+ +m[2]:null},s=f(a),e=f(b);if(s==null||e==null||s==e)return null;let d=e-s;if(d<0)d+=1440;return +(d/60).toFixed(2)}
-const shTotal=r=>+((r.shifts||[]).reduce((a,x)=>a+(N(x.hours)||0),0)).toFixed(2);
-function shNew(){const r=S.rec;r.shifts=r.shifts||[];const l=r.shifts[r.shifts.length-1];r.shifts.push({date:l?l.date:(r.jobDate||''),start:'',end:'',hours:''});render()}
-function shDel(i){S.rec.shifts.splice(i,1);render()}
-/* v90: the phone's time wheel fires 'change' on every spin; rebuilding the form then closed the picker mid-selection. Start/end now update the hours and totals in place and leave the inputs alone. */
-function shSumHtml(r){const sh=r.shifts||[],tot=shTotal(r),have=(N(r.hours)||0)+(N(r.overtime)||0);return sh.length?`<div class="hint" style="margin-top:10px">Shifts total: <b>${tot} h</b>${Math.abs(tot-have)>.01?` (Total regular + overtime above is ${+have.toFixed(2)} h)`:''}</div>`+(Math.abs(tot-have)>.01?'<button type="button" style="margin-top:8px" onclick="shUse()">Set Total regular from shifts</button>':''):''}
-function shSet(i,k,v){const x=(S.rec.shifts||[])[i];if(!x)return;x[k]=v;if(k=='start'||k=='end'){const h=shHrs(x.start,x.end);if(h!=null)x.hours=h;
-  const hi=document.querySelector('input[data-sh="'+i+'"]'),sm=document.getElementById('shsum');
-  if(hi&&sm){hi.value=x.hours==null?'':x.hours;sm.innerHTML=shSumHtml(S.rec);try{calc()}catch(e){}return}}
- render()}
-function shUse(){const r=S.rec,ot=N(r.overtime)||0;r.hours=String(+(shTotal(r)-ot).toFixed(2));r.edited.hours=1;render()}
-function shiftsHtml(){const r=S.rec,sh=r.shifts||[],tot=shTotal(r),have=(N(r.hours)||0)+(N(r.overtime)||0);
- const card=(x,i)=>`<div class="shc"><div class="shh"><span>Shift ${i+1}</span><button type="button" class="shx" onclick="shDel(${i})" aria-label="Remove shift ${i+1}">Remove</button></div><div class="shf d"><label>Date</label><input aria-label="Shift date" value="${esc(shDate(x.date))}" placeholder="mm/dd/yyyy" inputmode="numeric" onchange="shSet(${i},'date',this.value)"></div><div class="shf"><label>Start</label><input type="time" value="${esc(x.start||'')}" onchange="shSet(${i},'start',this.value)"></div><div class="shf"><label>End</label><input type="time" value="${esc(x.end||'')}" onchange="shSet(${i},'end',this.value)"></div><div class="shf h"><label>Hours</label><input data-sh="${i}" inputmode="decimal" value="${esc(x.hours==null?'':x.hours)}" placeholder="0" onchange="shSet(${i},'hours',this.value)"></div></div>`;
- return `<section class="grp"><h3>Shifts</h3><div class="hint shn">Enter start and end times and the hours fill in for you. Split shift? Add another shift with the same date.</div>${sh.map(card).join('')}<button type="button" class="sha" onclick="shNew()">+ Add shift</button><div id="shsum">${shSumHtml(r)}</div></section>`}
 function rows(r){if(r.mode=='summary')return sumRows(r);const o=compute(r),G=[],g=k=>{const x={k,rows:[]};G.push(x);return(l,v,h)=>{if(v!=null&&String(v).trim()!=='')x.rows.push([l,String(v).trim(),!!h])}};
- if(r.mode=='purchase'){const i=g('info');i('Date',r.date);i('Merchant',niceMerch(r.merchant));i('Category',r.category);
+ if(r.mode=='purchase'){const i=g('info');i('Date',r.date);i('Merchant',niceMerch(r.merchant));i('Location',r.location);i('Receipt/Invoice #',r.number);i('Category',r.category);
   const d=g('det');r.items.filter(x=>!x.off).forEach(x=>d((String(x.n||'Item').replace(/\s*(\.{2,}|…)\s*$/,'').trim()),M(x.t)));
-  const t=g('tot');if(o.ship)t('Shipping',M(o.ship));if(o.disc)t('Discount','-'+M(o.disc));t('Total',M(o.total));
+  const t=g('tot');t('Subtotal',M(o.sub));if(o.ship)t('Shipping',M(o.ship));if(o.disc)t('Discount','-'+M(o.disc));if(N(r.tax)!=null)t('Tax',M(o.tax));t('Total',M(o.total));
   return{t:'EXPENSE SUMMARY',G:G.filter(x=>x.rows.length)}}
- const i=g('info');i('Date',r.jobDate);i('Employer',r.employer);i('Client',r.client);
- const fh=v=>v==null?null:(+(+v).toFixed(2))+' h';i('Total Hours',fh(o.tot));
- {const sg=g('det'),sh=(r.shifts||[]).filter(x=>x&&(N(x.hours)!=null||(x.start&&x.end))),days=[];sh.forEach(x=>{const k=shDate(x.date),y=days.find(d=>d.k==k);y?y.a.push(x):days.push({k,a:[x]})});
-  days.forEach(d=>{d.a.forEach((x,j)=>{const tm=x.start&&x.end?t12(x.start)+' \u2013 '+t12(x.end):'',hr=N(x.hours)!=null?fh(N(x.hours)):'';sg([d.k||'Shift',tm].filter(Boolean).join(' \u00b7 '),hr)});
-   })}
- const d=g('det');d('Round-Trip Distance',o.rt!=null?o.rt.toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:1})+' mi':null);d('Mileage Deduction',fm(o.wear));
- const t=g('tot');t('Amount Paid',fm(N(r.amount)));
+ const i=g('info');i('Date',r.jobDate);i('Employer',r.employer);i('Client',r.client);i('Location',r.location);i('Invoice #',r.invoice);
+ const d=g('det');d('Round-Trip Distance',o.rt!=null?o.rt.toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:1})+' mi':null);d('IRS Rate',o.rate!=null&&o.rt!=null?'$'+o.rate+'/mi':null);
+ const t=g('tot');t('Amount Paid',fm(N(r.amount)));t('Mileage Deduction',fm(o.wear));
  return{t:'INVOICE SUMMARY',G:G.filter(x=>x.rows.length)}}
 /* plain text (print + fallback) */
 function text(r){const{t,G}=rows(r),out=['~ '+t+' ~'];G.forEach(x=>{out.push('');x.rows.forEach(([l,v])=>out.push(l+': '+v))});return out}
@@ -320,14 +201,8 @@ async function saveImg(){try{const b=await recsBlob([S.rec]),f=new File([b],inam
  const u=URL.createObjectURL(b);window.open(u,'_blank')}catch(e){if(e&&e.name=='AbortError')return;toast('Could not save image')}}
 function toast(m){$('#status').style.color='#0a0';$('#status').textContent=m;setTimeout(()=>{$('#status').textContent='';$('#status').style.color=''},2500)}
 const noun=()=>S.mode=='purchase'?'Receipt':'Call Sheet';const cpLabel=()=>'Copy '+noun()+' Text';
-let ct;const copyRec=async()=>{learnRec(S.rec);if(await copy([S.rec])){const b=$('#cpbtn');clearTimeout(ct);requestAnimationFrame(()=>{b.textContent='Copied'});ct=setTimeout(()=>requestAnimationFrame(()=>{b.textContent=cpLabel()}),2500)}};
-/* v11: the saved record keeps a small compressed copy of the invoice / receipt so the summary PDF can be downloaded with it attached (stored encrypted on this phone like the rest) */
-function shrinkImg(u,w,h){return new Promise(res=>{const im=new Image();im.onload=()=>{try{const sc=Math.min(1,1300/im.naturalWidth),cw=Math.max(1,Math.round(im.naturalWidth*sc)),ch=Math.max(1,Math.round(im.naturalHeight*sc)),cv=document.createElement('canvas');cv.width=cw;cv.height=ch;const x=cv.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,cw,ch);x.drawImage(im,0,0,cw,ch);res({u:cv.toDataURL('image/jpeg',.72),w:cw,h:ch})}catch(e){res(null)}};im.onerror=()=>res(null);im.src=u})}
-async function attachImgs(r){if(r.imgs&&r.imgs.length)return;let src=[];try{if(r.mode=='purchase')src=(S.pages||[]).map(p=>({u:baked(p).toDataURL('image/jpeg',.9),w:p.w,h:p.h}));else if(r.doc&&S.img&&S.dim)src=[{u:S.img,w:S.dim[0],h:S.dim[1]}].concat(S.extra||[])}catch(e){src=[]}
- if(!src.length)return;const out=(await Promise.all(src.map(x=>shrinkImg(x.u,x.w,x.h)))).filter(Boolean);if(out.length)r.imgs=out}
-async function saveRec(){if(!S.rec||!S.rec.loaded)return;await attachImgs(S.rec);learnRec(S.rec);const j=JSON.stringify(S.rec);
- if(S.rec.rid){const k=S.records.findIndex(x=>x.rid===S.rec.rid);if(k>=0){const same=JSON.stringify(S.records[k])===j;if(!same){S.records[k]=JSON.parse(j);S.sv.sec=S.rec.mode=='purchase'?'x':'w';S.sv.cat='All';S.sv.q='';store()}endEdit();showSaved();return toast(same?'No changes to save':'Changes saved')}}
-if(S.records.some(x=>JSON.stringify(x)===j))return toast('Already saved');if(S.records.some(x=>sameRec(S.rec,x))&&!confirm('You already have this one saved. Save it again anyway?'))return;S.records.push(JSON.parse(j));S.sv.sec=S.rec.mode=='purchase'?'x':'w';S.sv.cat='All';S.sv.q='';store();showSaved();toast('Added to Saved')}
+let ct;const copyRec=async()=>{if(await copy([S.rec])){const b=$('#cpbtn');clearTimeout(ct);requestAnimationFrame(()=>{b.textContent='Copied'});ct=setTimeout(()=>requestAnimationFrame(()=>{b.textContent=cpLabel()}),2500)}};
+function saveRec(){if(!S.rec||!S.rec.loaded)return;const j=JSON.stringify(S.rec);if(S.records.some(x=>JSON.stringify(x)===j))return toast('Already saved');S.records.push(JSON.parse(j));S.sv.sec=S.rec.mode=='purchase'?'x':'w';S.sv.cat='All';store();showSaved();toast('Added to Saved')}
 function key(r){const d=Parser.pd(r.date||r.jobDate);return d?+d:Infinity}
 /* expense totals (Expense records only): by month, by year (when more than one), by category */
 function totals(){const m={},y={},c={};let all=0;S.records.filter(r=>r.mode=='purchase').forEach(r=>{const t=compute(r).total||0,d=Parser.pd(r.date),p=n=>String(n).padStart(2,'0'),mk=d?d.getFullYear()+'-'+p(d.getMonth()+1):'0000',yk=d?String(d.getFullYear()):'0000',ck=r.category||'Uncategorized';m[mk]=(m[mk]||0)+t;y[yk]=(y[yk]||0)+t;c[ck]=(c[ck]||0)+t;all+=t});
@@ -336,167 +211,58 @@ function totals(){const m={},y={},c={};let all=0;S.records.filter(r=>r.mode=='pu
 function sumRows(){const T=totals(),G=[],g=(k,a)=>{if(a.length)G.push({k,rows:a.map(([l,v])=>[l,M(v),false])})};g('info',T.months);if(T.years.length>1)g('info',T.years);g('det',T.cats);g('tot',[['Total expenses',T.all]]);return{t:'EXPENSE TOTALS',G}}
 function allRecs(){const a=[...S.records].sort((p,q)=>key(p)-key(q));if(S.records.some(r=>r.mode=='purchase'))a.push({mode:'summary'});return a}
 /* ---------- Saved tab: Expenses and Work invoices, with category filter and sorting ---------- */
-function showWork(){S.tab='new';document.body.classList.remove('onsaved');const w=$('#workview'),v=$('#savedview'),b=$('#m3');if(w)w.style.display='';if(v)v.style.display='none';if(b)b.className=''}
-function showSaved(){S.tab='saved';$('#workview').style.display='none';$('#savedview').style.display='block';$('#m1').className='';$('#m2').className='';$('#m3').className='on';$('.head h1').textContent='';document.body.classList.add('onsaved');renderRecs();window.scrollTo(0,0)}
-function goMode(m){if(S.tab=='saved'&&S.mode==m){showWork();$('#m1').className=m=='purchase'?'on':'';$('#m2').className=m=='freelance'?'on':'';$('.head h1').textContent=m=='purchase'?'':'';render();renderPages()}else setMode(m)}
+function showWork(){S.tab='new';const w=$('#workview'),v=$('#savedview'),b=$('#m3');if(w)w.style.display='';if(v)v.style.display='none';if(b)b.className=''}
+function showSaved(){S.tab='saved';$('#workview').style.display='none';$('#savedview').style.display='block';$('#m1').className='';$('#m2').className='';$('#m3').className='on';$('.head h1').textContent='Saved';renderRecs();window.scrollTo(0,0)}
+function goMode(m){if(S.tab=='saved'&&S.mode==m){showWork();$('#m1').className=m=='purchase'?'on':'';$('#m2').className=m=='freelance'?'on':'';$('.head h1').textContent=m=='purchase'?'':'New work invoice record';render();renderPages()}else setMode(m)}
 const SORTS=[['dnew','Date (newest first)'],['dold','Date (oldest first)'],['chi','Cost (high to low)'],['clo','Cost (low to high)']];
-/* v80: work invoices sort by date or by location, not by cost */
-const SORTS_W=[['dnew','Date (newest first)'],['dold','Date (oldest first)'],['loc','Location (A to Z)'],['cli','Client (A to Z)']];
-const sortFor=x=>{const L=x?SORTS:SORTS_W;return L.some(o=>o[0]==S.sv.sort)?S.sv.sort:'dnew'};
-const recLoc=r=>String(r.location||'').trim().toLowerCase(),recCli=r=>String(r.client||'').trim().toLowerCase();
 const recAmt=r=>r.mode=='purchase'?compute(r).total:N(r.amount);
 const recDate=r=>{const d=Parser.pd(r.mode=='purchase'?r.date:r.jobDate);return d?+d:null};
 const recCat=r=>r.category||'Uncategorized';
 /* records with no date / no amount always go to the bottom; ties keep the order they were saved in */
-function sortRecs(a,how){if(how=='loc'||how=='cli')return a.slice().sort((p,q)=>{const g=how=='cli'?recCli:recLoc,x=g(p[0]),y=g(q[0]);if(!x||!y){if(!x&&!y)return (recDate(q[0])||0)-(recDate(p[0])||0)||q[1]-p[1];return x?-1:1}if(x!==y)return x<y?-1:1;return (recDate(q[0])||0)-(recDate(p[0])||0)||q[1]-p[1]});const f=how=='chi'||how=='clo'?recAmt:recDate,desc=how=='dnew'||how=='chi';
+function sortRecs(a,how){const f=how=='chi'||how=='clo'?recAmt:recDate,desc=how=='dnew'||how=='chi';
  return a.slice().sort((p,q)=>{const x=f(p[0]),y=f(q[0]);if(x==null||y==null){if(x==null&&y==null)return desc?q[1]-p[1]:p[1]-q[1];return x==null?1:-1}if(x!==y)return desc?y-x:x-y;return desc?q[1]-p[1]:p[1]-q[1]})}
-/* v83: search in Saved. Matches merchant, client and receipt / invoice number. Every word typed must match something; numbers ignore spaces, dashes and #. */
-const svTok=q=>String(q||'').toLowerCase().split(/\s+/).map(t=>t.replace(/^#+/,'')).filter(Boolean);
-function recHay(r){const pur=r.mode=='purchase',txt=[pur?r.merchant:r.client,pur?niceMerch(r.merchant):'',pur?r.number:r.invoice].map(v=>String(v||'').toLowerCase()).join(' ');return{txt,key:nk(txt)}}
-function recMatch(r,toks){if(!toks.length)return true;const h=recHay(r);return toks.every(t=>h.txt.includes(t)||(nk(t).length>0&&h.key.includes(nk(t))))}
-function svList(){const x=S.sv.sec=='x',toks=svTok(S.sv.q),all=S.records.map((r,i)=>[r,i]).filter(([r])=>(r.mode=='purchase')==x&&recMatch(r,toks)&&(x||!S.sv.st||S.sv.st=='All'||stOf(r)==S.sv.st));
- return sortRecs(x&&S.sv.cat!='All'?all.filter(([r])=>recCat(r)==S.sv.cat):all,sortFor(x))}
-function svSearching(){return svTok(S.sv.q).length>0}
+function svList(){const x=S.sv.sec=='x',all=S.records.map((r,i)=>[r,i]).filter(([r])=>(r.mode=='purchase')==x);
+ return sortRecs(x&&S.sv.cat!='All'?all.filter(([r])=>recCat(r)==S.sv.cat):all,S.sv.sort)}
 function svSec(v){S.sv.sec=v;S.sv.cat='All';renderRecs()}
 function svCat(v){S.sv.cat=v;renderRecs()}
-function svSt(v){S.sv.st=v;renderRecs()}
 function svSort(v){S.sv.sort=v;renderRecs()}
-function svFind(v){S.sv.q=v;const b=$('#svbody');if(b)b.innerHTML=svBody();const c=$('#svclr');if(c)c.style.display=v?'':'none'}
-function svClear(){S.sv.q='';const i=$('#svq');if(i){i.value='';i.focus()}svFind('')}
-/* v85: Totals view. Expenses by category, income by client and the mileage deduction, month to date and year to date side by side. */
-function svSeg(){const c=S.sv.sec,b=(k,l)=>'<button class="'+(c==k?'on':'')+'" onclick="svSec(\''+k+'\')">'+l+'</button>';return '<div class="seg">'+b('x','Expenses')+b('w','Work invoices')+b('t','Totals')+'</div>'}
-function periodSums(now){now=now||new Date();const y=now.getFullYear(),mo=now.getMonth(),end=new Date(y,mo,now.getDate(),23,59,59,999).getTime(),lo=[new Date(y,mo,1).getTime(),new Date(y,0,1).getTime()],
- T={cat:{},cli:{},exp:[0,0],inc:[0,0],opn:[0,0],nOpen:0,ded:[0,0],mi:[0,0],noMi:0,und:0,fut:0,lo,now};
- S.records.forEach(r=>{const d=recDate(r);if(d==null){T.und++;return}if(d>end){T.fut++;return}if(d<lo[1])return;
-  const on=[d>=lo[0],true];
-  if(r.mode=='purchase'){const t=recAmt(r)||0,k=recCat(r),a=T.cat[k]||(T.cat[k]=[0,0]);on.forEach((f,i)=>{if(f){a[i]+=t;T.exp[i]+=t}})}
-  else{if(S.sv.st&&S.sv.st!='All'&&stOf(r)!=S.sv.st)return;const o=compute(r),v=N(r.amount)||0,nm=String(r.client||'').trim(),k=nk(nm)||'-',a=T.cli[k]||(T.cli[k]={n:nm||'No client',v:[0,0]});
-   if(o.rt==null)T.noMi++;
-   on.forEach((f,i)=>{if(f){a.v[i]+=v;T.inc[i]+=v;T.ded[i]+=o.wear||0;T.mi[i]+=o.rt||0}})}});
- return T}
-function stCounts(){const rowsOf=r=>/^d/.test(sortFor(false))?new Set([wkKey(r),...workDays(r).map(d=>+wkStart(d))]).size:1,w=S.records.filter(r=>r.mode!='purchase'),c={open:0,closed:0};w.forEach(r=>{c[stOf(r)=='open'?'open':'closed']+=rowsOf(r)});return{n:w.length,open:c.open,closed:c.closed,all:c.open+c.closed}}
-function stChips(){const C=stCounts();if(!C.n)return'';return '<div class="chips">'+[['All','All ('+C.all+')'],['open','Open ('+C.open+')'],['closed','Closed ('+C.closed+')']].map(([v,l])=>'<button class="'+((S.sv.st||'All')==v?'on':'')+'" onclick="svSt(\''+v+'\')">'+l+'</button>').join('')+'</div>'}
-function totalsView(now){const T=periodSums(now),f=v=>+(+v).toFixed(2),sd=d=>d.toLocaleDateString('en-US',{month:'short',day:'numeric'}),
- rg=i=>{const a=new Date(T.lo[i]);return a.getMonth()==T.now.getMonth()&&a.getDate()==T.now.getDate()?sd(a):sd(a)+' \u2013 '+sd(T.now)},
- money=v=>v?'<b>'+M(f(v))+'</b>':'<b class="z">\u2013</b>',miles=v=>v?'<b>'+f(v).toLocaleString('en-US',{maximumFractionDigits:1})+' mi</b>':'<b class="z">\u2013</b>',
- head=t=>'<div class="th1">'+t+'</div>',
- row=(l,a,c,fn)=>'<div class="tr'+(c?' '+c:'')+'"><span>'+l+'</span>'+(fn||money)(a[0])+(fn||money)(a[1])+'</div>',
- cats=Object.entries(T.cat).sort((p,q)=>q[1][1]-p[1][1]),clis=Object.values(T.cli).sort((p,q)=>q.v[1]-p.v[1]),
- none=t=>'<div class="tr"><span class="z">'+t+'</span></div>',pl=(n,a,b)=>n+' '+(n==1?a:b);
- let h='<div class="tcols"><span></span><span>MTD<small>'+rg(0)+'</small></span><span>YTD<small>'+rg(1)+'</small></span></div>';
- if(!Object.keys(T.cat).length&&!Object.keys(T.cli).length)h+='<div class="empty2">Nothing dated this year yet.</div>';
- else{
-  h+='<div class="sl">'+head('Expenses by category')+(cats.length?cats.map(([k,a])=>row(esc(k),a)).join('')+row('Total expenses',T.exp,'tot'):none('No expenses this year'))+'</div>';
-  h+=stChips()+'<div class="sl">'+head('Income by client')+(clis.length?clis.map(c=>row(esc(c.n),c.v)).join('')+row('Total income',T.inc,'tot'):none('No work invoices this year'))+'</div>';
-  h+='<div class="sl">'+head('Mileage')+row('Mileage deduction',T.ded,'tot')+row('Miles driven',T.mi,'',miles)+'</div>'}
- const n=[];if(T.noMi)n.push(pl(T.noMi,'work invoice this year has','work invoices this year have')+' no round-trip miles, so no mileage deduction is counted.');
- const u=[];if(T.und)u.push(T.und+' undated');if(T.fut)u.push(T.fut+' dated after today');if(u.length)n.push('Not counted: '+u.join(', ')+'.');
-  n.push('Expenses count by purchase date, income by job date (Amount Paid).');
- return h+'<div class="hint">'+n.join(' ')+'</div>'}
-function svOther(){S.sv.sec=S.sv.sec=='x'?'w':'x';S.sv.cat='All';renderRecs()}
-function svCopy(){const l=svList().map(x=>x[0]).sort((p,q)=>key(p)-key(q));if(!l.length)return;if(S.sv.sec=='x'&&S.sv.cat=='All'&&!svSearching())l.push({mode:'summary'});copy(l)}
+function svCopy(){const l=svList().map(x=>x[0]).sort((p,q)=>key(p)-key(q));if(!l.length)return;if(S.sv.sec=='x'&&S.sv.cat=='All')l.push({mode:'summary'});copy(l)}
 function delRec(i){if(!confirm('Delete this saved record?'))return;S.records.splice(i,1);renderRecs();store()}
 function delAllRecs(){if(!confirm('Delete all '+S.records.length+' saved records from this phone?'))return;S.records=[];renderRecs();store()}
-/* v83: the list below the controls is its own piece (svBody) so typing in the search box redraws only the list and the keyboard stays open */
-/* v97: Work invoices sorted by date are grouped under a small heading per week (Sunday to Saturday) with how many were done that week. Expenses are not grouped. */
-const wkStart=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate()-d.getDay());
-/* v1: an invoice can cover several days (10/18 and 10/21, say). Each distinct shift date counts as a day worked. */
-function workDays(r){if(!r||r.mode=='purchase')return [];const m=new Map();(r.shifts||[]).filter(x=>x&&(N(x.hours)!=null||(x.start&&x.end))).forEach(x=>{const d=Parser.pd(x.date||r.jobDate);if(d)m.set(+d,d)});
- if(!m.size){const d=Parser.pd(r.jobDate);if(d)m.set(+d,d)}return [...m.values()].sort((a,b)=>a-b)}
-function daysLbl(r){const d=workDays(r);if(d.length<2)return r.jobDate;const y=new Set(d.map(x=>x.getFullYear())).size==1,md=x=>(x.getMonth()+1)+'/'+x.getDate();
- return y?d.map(md).join(', ')+'/'+d[d.length-1].getFullYear():d.map(x=>md(x)+'/'+x.getFullYear()).join(', ')}
-function wkKey(r){const t=recDate(r);return t==null?'none':+wkStart(new Date(t))}
-function wkTitle(k){if(k==='none')return 'No date';const a=new Date(k),b=new Date(a.getFullYear(),a.getMonth(),a.getDate()+6),f=(d,m)=>d.toLocaleDateString('en-US',m?{month:'short',day:'numeric'}:{day:'numeric'}),cur=+wkStart(new Date())===k;
- return (cur?'This week \u00b7 ':'')+f(a,1)+' \u2013 '+f(b,a.getMonth()!==b.getMonth())}
-/* v-2: an invoice that crosses a week boundary (10/24 and 10/27) is listed under each week it touches, showing only that week's dates. The amount stays on the first week; later weeks show "Part of $X". */
-/* v-3: each week of a multi-week invoice shows its own share of the amount, split by hours worked (equal per day if no hours) */
-function wkAmt(r,k){const a=N(r.amount);if(a==null)return null;const ds=workDays(r),ks=[...new Set(ds.map(d=>+wkStart(d)))].sort((p,q)=>p-q);if(ks.length<2||!ks.includes(k))return a;
- const hr={};ks.forEach(x=>hr[x]=0);(r.shifts||[]).filter(x=>x&&N(x.hours)!=null).forEach(x=>{const d=Parser.pd(x.date||r.jobDate);if(d){const w=+wkStart(d);if(w in hr)hr[w]+=N(x.hours)}});
- let tot=ks.reduce((t,x)=>t+hr[x],0);if(!(tot>0)){ks.forEach(x=>hr[x]=ds.filter(d=>+wkStart(d)===x).length);tot=ks.reduce((t,x)=>t+hr[x],0)}
- let used=0;for(let i=0;i<ks.length;i++){const p=i==ks.length-1?+(a-used).toFixed(2):+(a*hr[ks[i]]/tot).toFixed(2);if(ks[i]===k)return p;used+=p}return a}
-/* v-5: work-invoice rows list each worked day as a small pill (weekday + date) so every day is easy to spot; split invoices get a short note */
-function dayPills(r,k){let d=workDays(r);if(k!=null)d=d.filter(x=>+wkStart(x)===k);if(!d.length){const j=Parser.pd(r.jobDate);d=j?[j]:[]}
- if(sortFor(false)!=='dold')d=d.slice().reverse();
- if(!d.length)return r.jobDate?'<span class="dp">'+esc(r.jobDate)+'</span>':'';
- return d.map(x=>'<span class="dp">'+x.toLocaleDateString('en-US',{weekday:'short'})+' '+(x.getMonth()+1)+'/'+x.getDate()+'</span>').join('')}
-function daysInWk(r,k){const d=workDays(r).filter(x=>+wkStart(x)===k);if(!d.length)return r.jobDate;const md=x=>(x.getMonth()+1)+'/'+x.getDate();return d.map(md).join(', ')+'/'+d[d.length-1].getFullYear()}
-function grpRows(list,row){const dc={},m=new Map();
- list.forEach(e=>{const ds=workDays(e[0]);ds.forEach(d=>{const k=+wkStart(d);dc[k]=(dc[k]||0)+1});const p=wkKey(e[0]),add=(k,cont)=>{const w=ds.filter(d=>+wkStart(d)===k).map(d=>+d),t=w.length?Math.min(...w):(recDate(e[0])||0);if(!m.has(k))m.set(k,[]);m.get(k).push({e,cont,t})};
-  add(p,false);if(p!=='none')[...new Set(ds.map(d=>+wkStart(d)))].filter(k=>k!==p).forEach(k=>add(k,true))});
- const desc=sortFor(false)!=='dold',keys=[...m.keys()].filter(k=>k!=='none').sort((a,b)=>desc?b-a:a-b);if(m.has('none'))keys.push('none');
- const pl=(n,w)=>n+' '+w+(n==1?'':'s');
- return keys.map(k=>{const rs=m.get(k).slice();if(k!=='none')rs.sort((a,b)=>desc?b.t-a.t:a.t-b.t);const sum=+rs.reduce((t,x)=>t+((k==='none'?recAmt(x.e[0]):wkAmt(x.e[0],k))||0),0).toFixed(2);return '<div class="sl" data-wt="'+M(sum)+'" data-wl="'+wkLbl(k)+'" data-wn="'+pl(rs.length,'invoice')+'">'+rs.map(x=>row(x.e,k==='none'?null:k,x.cont)).join('')+'</div>'}).join('')}
-function wkLbl(k){if(k==='none')return'No date';const a=new Date(k),b=new Date(k);b.setDate(b.getDate()+6);const f=d=>d.toLocaleString('en-US',{month:'short',day:'numeric'});return 'Week of '+f(a)+' \u2013 '+(a.getMonth()==b.getMonth()?b.getDate():f(b))}
-function totTog(b){const p=b.parentNode,o=!p.classList.contains('open');S.sv.tot=o;p.classList.toggle('open',o);b.setAttribute('aria-expanded',o?'true':'false')}
-function sortCtl(x){const cur=sortFor(x),L={dnew:'Newest',dold:'Oldest',chi:'High\u2013low',clo:'Low\u2013high',loc:'Location',cli:'Client'};return '<label class="svsb" aria-label="Sort"><span>'+(L[cur]||'Sort')+'</span><i aria-hidden="true"></i><select id="svsort" aria-label="Sort by" onchange="svSort(this.value)">'+(x?SORTS:SORTS_W).map(([v,l])=>'<option value="'+v+'"'+(cur==v?' selected':'')+'>'+l+'</option>').join('')+'</select></label>'}
-function wdCount(list){const d=new Set();list.forEach(([r])=>{let w=workDays(r);if(!w.length){const j=Parser.pd(r.jobDate);w=j?[j]:[]}w.forEach(x=>d.add(+new Date(x.getFullYear(),x.getMonth(),x.getDate())))});return d.size}
-function svBody(){
- const x=S.sv.sec=='x',grp=!x&&/^d/.test(sortFor(x)),q=svSearching(),list=svList(),miss=list.filter(([r])=>!(r.imgs&&r.imgs.length)).length,tot=+list.reduce((s,[r])=>s+(recAmt(r)||0),0).toFixed(2),T=totals(),trow=(l,v)=>`<div class="srow"><div class="sm">${l}</div><b>${M(v)}</b></div>`,
- row=([r,i],wk,cont)=>{const pur=r.mode=='purchase',nm=esc((pur?niceMerch(r.merchant):r.client)||(pur?'Receipt':'Work invoice')),split=!pur&&wk!=null&&new Set(workDays(r).map(x=>+wkStart(x))).size>1,first=split&&Math.min(...workDays(r).map(x=>+wkStart(x)))===wk,sub=pur?[r.date,r.category].filter(Boolean).map(esc).join(' · '):dayPills(r,wk);
-  return `<div class="srow tap" role="button" tabindex="0" onclick="openRec(${i})" onkeydown="if(event.key=='Enter')openRec(${i})"><div class="sm"><div class="s1">${nm}</div>${sub?`<div class="s2">${sub}</div>`:''}${r.imgs&&r.imgs.length?'':`<div class="s3">${pur?'No receipt':'No invoice'}</div>`}</div><div class="ra"><b>${M(!pur&&wk!=null?wkAmt(r,wk):recAmt(r))}</b>${!pur?(stOf(r)=='open'?'<span class="stb">(Open)</span>':'<span class="stb cl">(Closed)</span>'):''}</div></div>`};
- let lbl;if(q)lbl=list.length+' match'+(list.length==1?'':'es')+(x&&S.sv.cat!='All'?' in '+S.sv.cat:'');else if(x)lbl=S.sv.cat!='All'?list.length+' in '+S.sv.cat:list.length+' expense'+(list.length==1?'':'s');else{const wd=wdCount(list);lbl=wd?wd+' working day'+(wd==1?'':'s'):list.length+' work invoice'+(list.length==1?'':'s')}
- let none='';if(!list.length){if(q){const toks=svTok(S.sv.q),o=S.records.filter(r=>(r.mode=='purchase')!=x&&recMatch(r,toks)).length;none='<div class="empty2">No matches for “'+esc(S.sv.q.trim())+'”.'+(x&&S.sv.cat!='All'?'<br>Try the All category.':'')+(o?'<br><button onclick="svOther()" style="margin-top:10px">Show '+o+' in '+(x?'Work invoices':'Expenses')+'</button>':'')+'</div>'}else none='<div class="empty2">'+(x?'No expenses saved yet.':S.sv.st&&S.sv.st!='All'?'No '+S.sv.st+' work invoices.':'No work invoices saved yet.')+'</div>'}
- return (list.length?(grp?grpRows(list,row):'<div class="sl">'+list.map(row).join('')+'</div>')+'<div class="svsum" style="margin-top:10px"><span>'+lbl+'</span><b>'+M(tot)+'</b></div>'+(miss?'<div class="invm">'+miss+' of '+list.length+' without '+(x?'a receipt':'an invoice')+'</div>':''):none)
- +(x&&T.n&&S.sv.cat=='All'&&!q?`<div class="sl tgl${S.sv.tot?' open':''}"><button type="button" class="tgh" aria-expanded="${S.sv.tot?'true':'false'}" onclick="totTog(this)"><span class="tgt">Expense totals</span><span class="tgv">${M(T.all)}</span><i class="tgc" aria-hidden="true"></i></button><div class="tgb"><div class="tgi">${T.months.map(([l,v])=>trow(l,v)).join('')}${T.years.length>1?T.years.map(([l,v])=>trow(l+' total',v)).join(''):''}${T.cats.map(([l,v])=>trow(l,v)).join('')}</div></div></div>`:'')
- +(list.length?'<div class="svact"><button class="pri" onclick="svCopy()">Copy '+(list.length==1?'record':list.length+' records')+'</button><button onclick="csvOpen()">Export CSV\u2026</button></div>':'')
- }
-function renderRecs(){persist();try{dupWarn()}catch(e){}const nb=$('#m3');if(nb)nb.textContent='Saved';const el=$('#savedview');if(!el||S.tab!='saved')return;
+function renderRecs(){persist();const nb=$('#m3');if(nb)nb.textContent='Saved';const el=$('#savedview');if(!el||S.tab!='saved')return;
+ const nx=S.records.filter(r=>r.mode=='purchase').length,nw=S.records.length-nx;
  if(!S.records.length){el.innerHTML='<div class="sv"><div class="empty2">Nothing saved yet.<br>Fill in a record and tap Save record. It will show up here.</div></div>';return}
- if(S.sv.sec=='t'){el.innerHTML='<div class="sv">'+svSeg()+totalsView()+'</div>';return}
  const x=S.sv.sec=='x',cnt={};S.records.filter(r=>r.mode=='purchase').forEach(r=>{const c=recCat(r);cnt[c]=(cnt[c]||0)+1});
  const cats=[...CATS.filter(c=>cnt[c]),...Object.keys(cnt).filter(c=>!CATS.includes(c)&&c!='Uncategorized'),...(cnt.Uncategorized?['Uncategorized']:[])];
  if(S.sv.cat!='All'&&!cnt[S.sv.cat])S.sv.cat='All';
- const SC=stCounts(),nOpen=SC.open,nCl=SC.closed,nAll=SC.all,nWork=SC.n;if(!nWork&&S.sv.st!='All')S.sv.st='All';
-const chipsH=(x&&cats.length>1?'<div class="chips"><button class="'+(S.sv.cat=='All'?'on':'')+'" onclick="svCat(\'All\')">All</button>'+cats.map(c=>'<button class="'+(S.sv.cat==c?'on':'')+'" onclick="svCat(\''+c+'\')">'+c+'</button>').join('')+'</div>':'')+(!x&&nWork?'<div class="chips">'+[['All','All ('+nAll+')'],['open','Open ('+nOpen+')'],['closed','Closed ('+nCl+')']].map(([v,l])=>'<button data-k="'+v+'" class="'+((S.sv.st||'All')==v?'on':'')+'" onclick="svSt(\''+v+'\')">'+l+'</button>').join('')+'</div>':'');
- el.innerHTML='<div class="sv">'+svSeg()
- +'<div class="svq svrow"><div class="svs"><input id="svq" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Merchant, client or receipt #" aria-label="Search saved records" value="'+esc(S.sv.q)+'" oninput="svFind(this.value)"><button id="svclr" type="button" onclick="svClear()" aria-label="Clear search" style="'+(S.sv.q?'':'display:none')+'">✕</button></div>'+chipsH+sortCtl(x)+'</div>'
- +'<div id="svbody" class="sv">'+svBody()+'</div></div>'}
+ const list=svList(),tot=+list.reduce((s,[r])=>s+(recAmt(r)||0),0).toFixed(2),T=totals(),trow=(l,v)=>`<div class="srow"><div class="sm">${l}</div><b>${M(v)}</b></div>`,
+ row=([r,i])=>{const pur=r.mode=='purchase',nm=esc((pur?niceMerch(r.merchant):r.client)||(pur?'Receipt':'Work invoice')),sub=[pur?r.date:r.jobDate,pur?r.category:null,r.location].filter(Boolean).map(esc).join(' · ');
+  return `<div class="srow"><div class="sm"><div class="s1">${nm}</div>${sub?`<div class="s2">${sub}</div>`:''}</div><b>${M(recAmt(r))}</b><button class="x" onclick="delRec(${i})" aria-label="Delete saved record">✕</button></div>`};
+ el.innerHTML='<div class="sv"><div class="seg"><button class="'+(x?'on':'')+'" onclick="svSec(\'x\')">Expenses</button><button class="'+(x?'':'on')+'" onclick="svSec(\'w\')">Work invoices</button></div>'
+ +(x&&cats.length>1?'<div class="chips"><button class="'+(S.sv.cat=='All'?'on':'')+'" onclick="svCat(\'All\')">All</button>'+cats.map(c=>'<button class="'+(S.sv.cat==c?'on':'')+'" onclick="svCat(\''+c+'\')">'+c+'</button>').join('')+'</div>':'')
+ +'<div class="srt"><label for="svsort">Sort</label><select id="svsort" onchange="svSort(this.value)">'+SORTS.map(([v,l])=>'<option value="'+v+'"'+(S.sv.sort==v?' selected':'')+'>'+l+'</option>').join('')+'</select></div>'
+ +(list.length?'<div class="svsum"><span>'+(x&&S.sv.cat!='All'?list.length+' in '+S.sv.cat:list.length+' '+(x?'expense':'work invoice')+(list.length==1?'':'s'))+'</span><b>'+M(tot)+'</b></div><div class="sl">'+list.map(row).join('')+'</div>':'<div class="empty2">'+(x?'No expenses saved yet.':'No work invoices saved yet.')+'</div>')
+ +(x&&T.n&&S.sv.cat=='All'?`<div class="sl"><h4>Expense totals</h4>${T.months.map(([l,v])=>trow(l,v)).join('')}${T.years.length>1?T.years.map(([l,v])=>trow(l+' total',v)).join(''):''}${T.cats.map(([l,v])=>trow(l,v)).join('')}${trow('Total expenses',T.all)}</div>`:'')
+ +(list.length?'<button class="pri" onclick="svCopy()">Copy '+(list.length==1?'this record':'these '+list.length+' records')+'</button>':'')
+ +'<button onclick="delAllRecs()">Delete all saved records</button><div class="hint">Saved on this phone only, encrypted with your passcode. Receipt images are not kept; use Save as PDF for those.</div></div>'}
 
 function dl(f){const r=S.rec,o=compute(r);let d,n='record.'+f;if(f=='json')d=JSON.stringify({...r,calculated:o},null,1);else{const rows=r.mode=='purchase'?[['Item','Qty','Unit','Total'],...r.items.filter(i=>!i.off).map(i=>[i.n,i.q,i.p,i.t]),['Subtotal','','',o.sub],...(o.disc?[['Discount','','',-o.disc]]:[]),['Tax','','',N(r.tax)==null?'':o.tax],['Total','','',o.total]]:[['Field','Value'],...text(r).filter(l=>l.includes(': ')).map(l=>l.split(/: (.*)/s).slice(0,2))];d=rows.map(x=>x.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(',')).join('\n')}
  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([d]));a.download=n;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
-/* v58: payout calendar event carries the amount in the title, the notes and the alert, plus client, invoice #, dates, location and hours. */
 function addCal(){const r=S.rec,d=est(r);if(!d)return;const e=d.replace(/-/g,''),n=Parser.net30(d,1).replace(/-/g,''),x=t=>String(t).replace(/[\\;,]/g,'\\$&').replace(/\n/g,' '),
- us=v=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v||''));return m?m[2]+'/'+m[3]+'/'+m[1]:v},
- amt=r.amount!=null&&r.amount!==''&&N(r.amount)!=null?M(N(r.amount)):null,who=r.client||r.employer||'',
- hr=N(r.hours),ot=N(r.overtime),
- L=['Expected payment (net 30)','Amount: '+(amt||'not entered'),who?'Client: '+who:'',r.employer&&r.client&&r.employer!==r.client?'Employer: '+r.employer:'',r.invoice?'Invoice #: '+r.invoice:'',r.jobDate?'Job date: '+us(r.jobDate):'',r.endDate?'Event end date: '+us(r.endDate):'',r.location?'Location: '+r.location:'',hr!=null||ot!=null?'Hours: '+(hr||0)+' regular'+(ot?', '+ot+' overtime':''):'',r.notes?'Notes: '+String(r.notes).replace(/\s+/g,' ').trim():''].filter(Boolean),
- ics=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//PaperTrail//EN','BEGIN:VEVENT','UID:'+e+'-'+Date.now()+'@papertrail','DTSTAMP:'+new Date().toISOString().replace(/[-:]|\.\d+/g,''),'DTSTART;VALUE=DATE:'+e,'DTEND;VALUE=DATE:'+n,'SUMMARY:'+x('Net-30 payout'+(amt?' '+amt:'')+(who?' - '+who:'')),'DESCRIPTION:'+L.map(x).join('\\n'),'BEGIN:VALARM','TRIGGER:-PT15H','ACTION:DISPLAY','DESCRIPTION:'+x('Payout due'+(amt?': '+amt:'')+(who?' - '+who:'')),'END:VALARM','END:VEVENT','END:VCALENDAR'].join('\r\n'),
+ ics=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//PaperTrail//EN','BEGIN:VEVENT','UID:'+e+'-'+Date.now()+'@papertrail','DTSTAMP:'+new Date().toISOString().replace(/[-:]|\.\d+/g,''),'DTSTART;VALUE=DATE:'+e,'DTEND;VALUE=DATE:'+n,'SUMMARY:'+x('Net-30 payout'+(r.client?' - '+r.client:'')),'DESCRIPTION:'+x('Expected payment (net 30)'+(r.amount?'. Amount: '+M(N(r.amount)):'')),'BEGIN:VALARM','TRIGGER:-PT15H','ACTION:DISPLAY','DESCRIPTION:Payout due today','END:VALARM','END:VEVENT','END:VCALENDAR'].join('\r\n'),
  a=document.createElement('a');a.href=URL.createObjectURL(new Blob([ics],{type:'text/calendar'}));a.download='payout.ics';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
-/* v83: work-day calendar events. One event per shift (timed) or per day (all-day), with alerts the evening before and the morning of. */
-const upDays=r=>{const t=new Date();t.setHours(0,0,0,0);return workDays(r).filter(d=>d>=t)};
-function addWorkCal(i){const r=i==null?S.rec:S.records[i],up=i!=null;if(!r||r.mode=='purchase')return;
- const keep=d=>!up||d>=new Date(new Date().setHours(0,0,0,0));
- const x=t=>String(t).replace(/[\\;,]/g,'\\$&').replace(/\n/g,' '),p=n=>String(n).padStart(2,'0'),ds=d=>d.getFullYear()+p(d.getMonth()+1)+p(d.getDate()),
-  tm=v=>{const m=/^(\d{1,2}):(\d{2})/.exec(v||'');return m?p(m[1])+m[2]+'00':null},
-  nextDay=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate()+1),
-  who=r.client||r.employer||'',A=r.amount!=null&&r.amount!==''&&N(r.amount)!=null?N(r.amount):null,tH=(r.shifts||[]).reduce((t,y)=>t+(N(y&&y.hours)||0),0),nD=workDays(r).length,pay=h=>A==null?null:nD<2?'Invoice amount: '+M(A):(h>0&&tH>0?'Est. pay for this day: '+M(+(A*h/tH).toFixed(2)):null),
-  info=[who?'Client: '+who:'',r.employer&&r.client&&r.employer!==r.client?'Employer: '+r.employer:'',r.invoice?'Invoice #: '+r.invoice:'',r.location?'Location: '+r.location:'',r.notes?'Notes: '+String(r.notes).replace(/\s+/g,' ').trim():''].filter(Boolean),
-  stamp=new Date().toISOString().replace(/[-:]|\.\d+/g,''),ev=[],
-  al=(t,d)=>['BEGIN:VALARM','TRIGGER:'+t,'ACTION:DISPLAY','DESCRIPTION:'+x(d),'END:VALARM'],
-  title='Work'+(who?': '+who:'')+(r.location?' @ '+r.location:''),
-  timed=(r.shifts||[]).filter(y=>y&&Parser.pd(y.date||r.jobDate)&&keep(Parser.pd(y.date||r.jobDate))&&tm(y.start)&&tm(y.end));
- let n=0;
- timed.forEach(y=>{const d=Parser.pd(y.date||r.jobDate),a=tm(y.start),b=tm(y.end),e=b<=a?nextDay(d):d;
-  ev.push(['BEGIN:VEVENT','UID:work-'+ds(d)+a+'-'+(n++)+'-'+Date.now()+'@papertrail','DTSTAMP:'+stamp,'DTSTART:'+ds(d)+'T'+a,'DTEND:'+ds(e)+'T'+b,'SUMMARY:'+x(title),'DESCRIPTION:'+[t12(y.start)+' - '+t12(y.end)].concat(info,[pay(N(y.hours))].filter(Boolean)).map(x).join('\\n'),...(r.location?['LOCATION:'+x(r.location)]:[]),...al('-P1D','Work tomorrow at '+t12(y.start)+(who?': '+who:'')),...al('-PT2H','Work starts at '+t12(y.start)+(who?': '+who:'')),'END:VEVENT'].join('\r\n'))});
- /* days with no start/end time (or no shifts entered) become all-day events */
- const timedDays=new Set(timed.map(y=>+Parser.pd(y.date||r.jobDate)));
- workDays(r).filter(d=>keep(d)&&!timedDays.has(+d)).forEach(d=>{
-  ev.push(['BEGIN:VEVENT','UID:work-'+ds(d)+'-'+(n++)+'-'+Date.now()+'@papertrail','DTSTAMP:'+stamp,'DTSTART;VALUE=DATE:'+ds(d),'DTEND;VALUE=DATE:'+ds(nextDay(d)),'SUMMARY:'+x(title),'DESCRIPTION:'+info.concat([pay(0)].filter(Boolean)).map(x).join('\\n'),...(r.location?['LOCATION:'+x(r.location)]:[]),...al('-PT6H','Work tomorrow'+(who?': '+who:'')),...al('PT8H','Work today'+(who?': '+who:'')),'END:VEVENT'].join('\r\n'))});
- if(!ev.length){st(up?'No upcoming work days on this invoice.':'Enter a job date first.');return}
- const ics=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//PaperTrail//EN',...ev,'END:VCALENDAR'].join('\r\n'),
-  a=document.createElement('a');a.href=URL.createObjectURL(new Blob([ics],{type:'text/calendar'}));a.download='work-days.ics';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
 function doPrint(){$('#print').textContent=text(S.rec).join('\n');print()}
 /* ---------- encrypted autosave (AES-GCM, key from passcode, IndexedDB on this device) ---------- */
-const idb=(m,v)=>new Promise((ok,no)=>{const q=indexedDB.open('bench',1);q.onupgradeneeded=()=>q.result.createObjectStore('s');q.onerror=()=>no(q.error);q.onsuccess=()=>{const d=q.result,tx=d.transaction('s',m=='get'?'readonly':'readwrite'),o=tx.objectStore('s'),K=S.uid?'state:'+S.uid:'state',r=m=='get'?o.get(K):m=='put'?o.put(v,K):o.delete(K);tx.oncomplete=()=>{d.close();ok(r.result)};tx.onerror=()=>no(tx.error)}});
+const idb=(m,v)=>new Promise((ok,no)=>{const q=indexedDB.open('bench',1);q.onupgradeneeded=()=>q.result.createObjectStore('s');q.onerror=()=>no(q.error);q.onsuccess=()=>{const d=q.result,tx=d.transaction('s',m=='get'?'readonly':'readwrite'),o=tx.objectStore('s'),r=m=='get'?o.get('state'):m=='put'?o.put(v,'state'):o.delete('state');tx.oncomplete=()=>{d.close();ok(r.result)};tx.onerror=()=>no(tx.error)}});
 async function dk(p,e){const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(p),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt:new Uint8Array(e.match(/../g).map(h=>parseInt(h,16))),iterations:310000,hash:'SHA-256'},k,{name:'AES-GCM',length:256},false,['encrypt','decrypt'])}
 async function dec(x){return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:x.iv},S.key,x.c)))}
 let pt;function persist(){}
 /* saved records (text fields only, never the images) are encrypted with the passcode-derived key and kept on this device */
-async function store(){if(!S.key||!S.loaded||S.noStore)return;try{lockStatuses()}catch(e){}try{const iv=crypto.getRandomValues(new Uint8Array(12)),c=await crypto.subtle.encrypt({name:'AES-GCM',iv},S.key,new TextEncoder().encode(JSON.stringify(learnPack())));await idb('put',{iv,c});window.bkChanged&&window.bkChanged()}catch(e){}}
+async function store(){if(!S.key||!S.loaded||S.noStore)return;try{const iv=crypto.getRandomValues(new Uint8Array(12)),c=await crypto.subtle.encrypt({name:'AES-GCM',iv},S.key,new TextEncoder().encode(JSON.stringify(S.records)));await idb('put',{iv,c})}catch(e){}}
 async function flush(){}
-async function nuke(){if(!confirm('Delete every saved record from this phone and clear the screen? Your passcode stays.'))return;try{await idb('del')}catch(e){}S.noStore=false;wipe();st('Saved data deleted.');window.bkRefresh&&window.bkRefresh()}
+async function nuke(){if(!confirm('Delete every saved record from this phone and clear the screen? Your passcode stays.'))return;try{await idb('del')}catch(e){}S.noStore=false;wipe();st('Saved data deleted.')}
 
-setMode('freelance');showLock();bump();
+setMode('purchase');showLock();bump();
 
 addEventListener('dragover',e=>e.preventDefault());addEventListener('drop',e=>{e.preventDefault();handleFiles(e.dataTransfer.files)});
 addEventListener('afterprint',()=>{$('#print').textContent=''});
@@ -525,101 +291,40 @@ addEventListener('afterprint',()=>{$('#print').textContent=''});
  const f=document.getElementById('file');if(f&&!document.getElementById('pick')){f.style.cssText='position:absolute;width:1px;height:1px;opacity:0;pointer-events:none';const k=document.createElement('button');k.id='pick';k.type='button';k.textContent='Add receipt screenshots or PDF';k.style.cssText='background:var(--g);color:#fff;border-color:var(--g)';k.onclick=()=>f.click();f.parentNode.insertBefore(k,f)}})();
 
 /* ---------- build 28: multi-screenshot purchases ---------- */
-/* v61: PDF pages are read as one uniform block so each price stays on its item's row (the default layout mode splits the price column away from the titles). */
-let W6=null;
-async function ocrP(cv){const run=async()=>{try{if(!W6)W6=await Tesseract.createWorker('eng');await W6.setParameters({tessedit_pageseg_mode:'6'});return (await W6.recognize(cv)).data}catch(e){try{W6&&await W6.terminate()}catch(_){}W6=null;return (await Tesseract.recognize(cv,'eng')).data}};
- return Promise.race([run(),new Promise((_,j)=>setTimeout(()=>j(0),90000))])}
-async function readImg(f,opts){opts=opts||{};const src=typeof f=='function'?await f():f,b=src instanceof HTMLCanvasElement?src:await createImageBitmap(src),sc=Math.min(1,2800/Math.max(b.width,b.height)),c=document.createElement('canvas');c.width=b.width*sc;c.height=b.height*sc;c.getContext('2d').drawImage(b,0,0,c.width,c.height);if(src instanceof HTMLCanvasElement){src.width=src.height=0}
- let best={t:'',n:-1,w:[],c:null};const alts=[];
- if(opts.pdf){const d=await ocrP(c),P0=Parser.parse(d.text,'purchase');best={t:d.text,n:P0.items.length+Object.keys(P0.found).length,w:(d.words||[]).filter(w=>w.text.trim()&&w.bbox),c:d.confidence};
-  /* pages of items: read again with light-gray text turned black, so 'After credit applied' lines are not lost */
-  if(P0.items.length){try{best.alt=(await ocrP(prep(c))).text}catch(e){}}
-  return{c,text:best.t,words:best.w,conf:best.c,alt:best.alt,url:c.toDataURL('image/jpeg',.85)}}
- /* Several reads, best one wins: normal layout read, then row-by-row read (keeps each price on its item's line), then high-contrast row read.
-    A read whose items add up to the receipt's subtotal ends the search; otherwise the read with the most items/fields is kept. */
- {const tmo=pr=>Promise.race([pr,new Promise((_,j)=>setTimeout(()=>j(0),90000))]),
-  passes=[()=>tmo(Tesseract.recognize(c,'eng')).then(r=>r.data),()=>ocrP(c),()=>ocrP(prep(c))];
-  for(let k=0;k<passes.length;k++){try{const d=await passes[k](),t=d.text,p=Parser.parse(t,'purchase'),n=p.items.length+Object.keys(p.found).length+(p.recon&&p.recon.ok?20:0);alts.push(t);
-   if(n>best.n)best={t,n,w:(d.words||[]).filter(w=>w.text.trim()&&w.bbox),c:d.confidence};
-   if(p.recon&&p.recon.ok)break;if(!(p.recon&&p.recon.target!=null)&&p.items.length>=6&&k>=1)break}catch(e){}}}
- try{const pp=Parser.parse(best.t,'purchase');if(!pp.fields.number&&pp.items.length&&!/amazon|temu|\d{3}-\d{7}-\d{7}/i.test(best.t)){const z=Math.min(2,2600/Math.max(c.width,c.height));
-  if(z>1.15){const c2=document.createElement('canvas');c2.width=Math.round(c.width*z);c2.height=Math.round(c.height*z);const x2=c2.getContext('2d');x2.imageSmoothingQuality='high';x2.drawImage(c,0,0,c2.width,c2.height);
-   const r=await Promise.race([Tesseract.recognize(c2,'eng'),new Promise((_,j)=>setTimeout(()=>j(0),60000))]);
-   if(Parser.parse(r.data.text,'purchase').fields.number){best.t=r.data.text;best.w=(r.data.words||[]).filter(w=>w.text.trim()&&w.bbox).map(w=>({...w,bbox:{x0:w.bbox.x0/z,y0:w.bbox.y0/z,x1:w.bbox.x1/z,y1:w.bbox.y1/z}}));best.c=r.data.confidence}}}}catch(e){}
- /* v88/v89: photos of paper receipts. When the normal reads leave the key fields empty or the items do not add up, clean the photo (uneven light, crumples) and read it in bands:
-    first with a soft cleanup that keeps the letter edges, then, only if that is still weak, with the hard black/white cut. */
- try{const sc0=r=>r.items.length+Object.keys(r.found).length+(r.recon&&r.recon.ok?20:0),weak=r=>!r.items.length||!(r.fields.extSub!=null||r.fields.extTotal!=null)||!r.found.date||(r.recon&&r.recon.target!=null&&!r.recon.ok),pp=Parser.parse(best.t,'purchase',alts);
-  if(weak(pp)&&!/amazon|temu|\d{3}-\d{7}-\d{7}/i.test(best.t)){st('Cleaning up the photo and reading it again…');let cur=pp;
-   for(const soft of [true,false]){const bd=await bandRead(c,soft);
-    if(bd&&bd.t.trim()){const q=Parser.parse(bd.t,'purchase',alts.concat(best.t));if(sc0(q)>=sc0(cur)||!best.w.length){alts.push(best.t);best={t:bd.t,n:sc0(q),w:bd.w,c:bd.c};cur=q}else alts.push(bd.t)}
-    if(!weak(cur))break}}}catch(e){}
- try{const bn=await barcodeNo(c);if(bn){best.t=best.t.replace(/\s+$/,'')+'\n'+bn.text;
-   best.w=best.w.filter(w=>{const m=w.bbox;if(!m)return true;const cx=(m.x0+m.x1)/2,cy=(m.y0+m.y1)/2;return !(cx>=bn.box.x0&&cx<=bn.box.x1&&cy>=bn.box.y0&&cy<=bn.box.y1)});
-   best.w.push({text:bn.text,confidence:bn.ok?90:50,bbox:{x0:bn.box.x0,y0:bn.box.y0,x1:bn.box.x1,y1:bn.box.y1}})}}catch(e){}
- {const dk=deskewPage(c,best.w);if(dk)return{c:dk.c,text:best.t,words:dk.words,conf:best.c,alts,url:dk.c.toDataURL('image/jpeg',.85)}}
- return{c,text:best.t,words:best.w,conf:best.c,alts,url:c.toDataURL('image/jpeg',.85)}}
-/* ---------- v88: clean photo, banded read, barcode number ---------- */
-function cleanCanvas(c,z,soft){const w=Math.round(c.width*z),h=Math.round(c.height*z),o=document.createElement('canvas');o.width=w;o.height=h;const x=o.getContext('2d');x.imageSmoothingQuality='high';x.drawImage(c,0,0,w,h);
- const id=x.getImageData(0,0,w,h),g=Scan.gray(id.data,w,h),p=id.data;
- /* soft: v89 keeps the gray edges of the letters (small print survives); hard: black/white cut, better for faint thermal paper and barcodes */
- if(soft){const f=Scan.flatten(g,w,h);for(let i=0,j=0;i<f.length;i++,j+=4){p[j]=p[j+1]=p[j+2]=f[i];p[j+3]=255}}
- else{const d=Scan.darkMask(g,w,h,.8,14);for(let i=0,j=0;i<d.length;i++,j+=4){p[j]=p[j+1]=p[j+2]=d[i]?0:255;p[j+3]=255}}
- x.putImageData(id,0,0);return o}
-/* crumpled paper curves its lines; short horizontal bands stay close to straight, so each band reads better than the whole page.
-   Each band owns the lines whose middle falls inside it (overlap is split in half), so a line read twice is never added twice. */
-async function bandRead(c,soft){const z=soft?Math.max(1,Math.min(2.4,1700/c.width)):Math.max(1,Math.min(2.2,1250/c.width)),cc=cleanCanvas(c,z,soft),w=cc.width,h=cc.height,bh=Math.round(w*(soft?.3:.44)),ov=Math.round(w*(soft?.06:.09)),nz=q=>q.toLowerCase().replace(/[^a-z0-9]/g,''),lines=[],words=[];let y=0,cs=[];
- for(;;){const bb=Math.min(h,y+bh),last=bb>=h,seg=document.createElement('canvas');seg.width=w+40;seg.height=bb-y+40;const x=seg.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,seg.width,seg.height);x.drawImage(cc,0,y,w,bb-y,20,20,w,bb-y);
-  let d=null;try{d=await ocrP(seg)}catch(e){}seg.width=seg.height=0;
-  const lo=y+(y?ov/2:0),hi=bb-(last?0:ov/2);
-  if(d){const dl=(d.lines||[]).filter(l=>l.bbox&&String(l.text||'').trim());
-   if(dl.length)dl.forEach(l=>{const cy=(l.bbox.y0+l.bbox.y1)/2-20+y;if(cy>=lo&&cy<hi)lines.push(String(l.text).replace(/\n+$/,''))});
-   else{const prev=new Set(lines.slice(-10).map(nz));String(d.text||'').split('\n').forEach(l=>{if(l.trim()&&(!prev.has(nz(l))||nz(l).length<4))lines.push(l)})}
-   (d.words||[]).forEach(wd=>{if(!wd.text.trim()||!wd.bbox)return;const b=wd.bbox,cy=(b.y0+b.y1)/2-20+y;if(cy<lo||cy>hi)return;
-    words.push({text:wd.text,confidence:wd.confidence,bbox:{x0:(b.x0-20)/z,x1:(b.x1-20)/z,y0:(b.y0-20+y)/z,y1:(b.y1-20+y)/z}})});if(d.confidence!=null)cs.push(d.confidence)}
-  if(last)break;y+=bh-ov}
- cc.width=cc.height=0;return{t:lines.join('\n'),w:words,c:cs.length?cs.reduce((a,b)=>a+b,0)/cs.length:null}}
-let WD=null;
-/* number printed under a barcode: find the bars, straighten the arc, read digits only */
-async function barcodeNo(c){const w=c.width,h=c.height;if(w<300||h<300)return null;const id=c.getContext('2d').getImageData(0,0,w,h),g=Scan.gray(id.data,w,h),d=Scan.darkMask(g,w,h),B=Scan.findBarcode(d,w,h);if(!B)return null;const L=Scan.digitLine(d,w,h,B);if(!L)return null;
- if(!WD)WD=await Tesseract.createWorker('eng');await WD.setParameters({tessedit_char_whitelist:'0123456789-',tessedit_pageseg_mode:'7'});
- const rd=async im=>{const k=Math.max(1,Math.min(4,3/L.s)),bw=Math.round(im.w*k),bh=Math.round(im.h*k),cv=document.createElement('canvas'),src=document.createElement('canvas');src.width=im.w;src.height=im.h;const sx=src.getContext('2d'),idd=sx.createImageData(im.w,im.h);
-  for(let i=0,j=0;i<im.data.length;i++,j+=4){idd.data[j]=idd.data[j+1]=idd.data[j+2]=im.data[i];idd.data[j+3]=255}sx.putImageData(idd,0,0);
-  cv.width=bw+80;cv.height=bh+60;const x=cv.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,cv.width,cv.height);x.imageSmoothingQuality='high';x.drawImage(src,40,30,bw,bh);
-  const r=await Promise.race([WD.recognize(cv),new Promise((_,j)=>setTimeout(()=>j(0),30000))]);src.width=cv.width=0;return r.data.text};
- let full='',head='';try{full=await rd(L.full);head=await rd(L.head)}catch(e){}
- try{await WD.setParameters({tessedit_char_whitelist:'',tessedit_pageseg_mode:'3'})}catch(e){}
- const R=Scan.reconcile(full,head,L.glyphs);if(R.text.replace(/\D/g,'').length<8)return null;return{text:R.text,ok:R.ok,box:L.box}}
-function handleFiles(fl){const a=[...(fl||[])];if(!a.length)return;dismissRestore();if(S.mode!='purchase')return handle(a[0],a.slice(1));if(a.some(f=>!/^image\//.test(f.type)))return handle(a[0]);return addShots(a)}
-async function addShots(files,opts){opts=opts||{};let r=S.rec;if(!r.doc){S.rec=r=newRec();r.loaded=true;r.doc=true;S.sel=[];S.words=[];S.pages=[];S.undo=[];S.redo=[]}r.shots=r.shots||0;let dup=0,bad=0;
+async function readImg(f){const b=await createImageBitmap(f),sc=Math.min(1,1600/Math.max(b.width,b.height)),c=document.createElement('canvas');c.width=b.width*sc;c.height=b.height*sc;c.getContext('2d').drawImage(b,0,0,c.width,c.height);
+ let best={t:'',n:-1,w:[],c:null};
+ for(const pre of [0,1]){try{const r=await Promise.race([Tesseract.recognize(pre?prep(c):c,'eng'),new Promise((_,j)=>setTimeout(()=>j(0),60000))]),t=r.data.text,p=Parser.parse(t,'purchase'),n=p.items.length+Object.keys(p.found).length;if(n>best.n)best={t,n,w:(r.data.words||[]).filter(w=>w.text.trim()),c:r.data.confidence};if(best.n>=5)break}catch(e){}}
+ return{c,text:best.t,words:best.w,conf:best.c,url:c.toDataURL('image/jpeg',.85)}}
+function handleFiles(fl){const a=[...(fl||[])];if(!a.length)return;dismissRestore();if(S.mode!='purchase'||a.some(f=>!/^image\//.test(f.type)))return handle(a[0]);return addShots(a)}
+async function addShots(files){let r=S.rec;if(!r.doc){S.rec=r=newRec();r.loaded=true;r.doc=true;S.sel=[];S.words=[];S.pages=[];S.undo=[];S.redo=[]}r.shots=r.shots||0;let dup=0,bad=0;
  const kf=x=>String(x.n).toLowerCase().replace(/[^a-z0-9]/g,'')+'|'+x.p;
- for(let i=0;i<files.length;i++){st((opts.pdf?'Reading page ':'Reading screenshot ')+(i+1)+' of '+files.length+'… (first run downloads language data)');
-  try{const o=await readImg(files[i],opts),P=Parser.parse(o.text,'purchase',o.alts),cur=r.shots++;
-   if(o.alt){try{const Q=Parser.parse(o.alt,'purchase');if(Q.items.length==P.items.length)P.items.forEach((x,k)=>{const y=Q.items[k];if(y&&y.lp!=null)x.p=y.p})}catch(e){}}S.pages.push({id:++PGID,words:o.words,c:o.c,url:o.url,w:o.c.width,h:o.c.height,marks:autoHL(o.words,o.c.width,o.c.height,seenHL())});locate(S.pages[S.pages.length-1],P.items);
+ for(let i=0;i<files.length;i++){st('Reading screenshot '+(i+1)+' of '+files.length+'… (first run downloads language data)');
+  try{const o=await readImg(files[i]),P=Parser.parse(o.text,'purchase'),cur=r.shots++;S.pages.push({id:++PGID,words:o.words,c:o.c,url:o.url,w:o.c.width,h:o.c.height,marks:autoHL(o.words,o.c.width,o.c.height,seenHL())});locate(S.pages[S.pages.length-1],P.items);
    if(cur===0){S.img=o.url;S.dim=[o.c.width,o.c.height];S.words=o.words;S.conf=o.conf;showDoc(o.url);drawWords(o.c.width,o.c.height)}
    Object.keys(P.fields).forEach(k=>{if(k=='merchant'?(P.found.mk||!r.merchant):(r[k]==null||r[k]===''))r[k]=P.fields[k]});
    Object.keys(P.found).forEach(k=>r.src[k]=1);if(P.guess&&!r.gname)r.gname=P.guess;
    if(cur===0){const td=topRightDate(o.words,o.c.width,o.c.height);if(td){r.date=td;r.src.date=1}}
    P.items.forEach(x=>{const ex=r.items.find(y=>y.s!==cur&&kf(y)===kf(x));if(ex){dup++;if(x.pos)(ex.alts=ex.alts||[]).push(x.pos)}else r.items.push({...x,s:cur})})}
   catch(e){bad++}}
- $('#file').value='';S.undo=[];S.redo=[];ensureItem(r);applyLearned(r);render();renderPages();try{if(localStorage.getItem('ppClip')&&r.items.some(phVague))setTimeout(()=>idPhotos().catch(()=>{}),400)}catch(e){}
+ $('#file').value='';S.undo=[];S.redo=[];ensureItem(r);render();renderPages();try{if(localStorage.getItem('ppClip')&&r.items.some(phVague))setTimeout(()=>idPhotos().catch(()=>{}),400)}catch(e){}
  const n=r.items.length;
- if(bad)st(bad+(opts.pdf?' page':' screenshot')+(bad>1?'s':'')+' could not be read.');else if(opts.pdf&&opts.all>files.length)st('Only the first '+files.length+' of '+opts.all+' pages were read.');else toast(n+' item'+(n==1?'':'s')+' from '+r.shots+(opts.pdf?' page':' screenshot')+(r.shots>1?'s':''))}
+ if(bad)st(bad+' screenshot'+(bad>1?'s':'')+' could not be read.');else toast(n+' item'+(n==1?'':'s')+' from '+r.shots+' screenshot'+(r.shots>1?'s':''))}
 const FLUFF=/\b(?:Resettable|Portable|Compact|Thickened|Texture|Universal|Sports|Durable|Premium|Upgraded|Professional|Multifunctional)\b/gi;
 function tidyName(n){let t=String(n||'').replace(/\bCombination\b/gi,'Combo').replace(/\b(\d+)\s?pes\b/gi,'$1pc').replace(/\s+\b(?:a|an|the)\b(?=\s)/gi,'').replace(/\bwith\b/gi,'w/').replace(/\s{2,}/g,' ').trim();
  const d=t.replace(FLUFF,'').replace(/\s{2,}/g,' ').trim();if(/[A-Za-z]{3,}/.test(d.replace(/\b(?:\d+pc|set|of)\b/gi,'')))t=d;
  const m=t.match(/^(\d+pc )(.+) Set$/i);if(m)t=m[1]+'Set of '+m[2];
  return t}
 function itemsHtml(){const r=S.rec,on=r.items.filter(i=>!i.off).length;r.items.forEach(it=>{it.n=tidyName(it.n)});
- const card=(it,i)=>`<div class="ic${it.off?' off':''}${i==0?' f1':''}"><button class="ck" onclick="tog(${i})" aria-label="Include or exclude item">${it.off?'':'✓'}</button><div class="ib"><textarea class="in" rows="2" placeholder="Item name" oninput="it(${i},'n',this.value)">${esc(it.n)}</textarea>${it.inf?'<div class="inf">Receipt title was cut off. Completed based on available context.</div>':''}${it.chk?'<div class="inf">This line was hard to read. It was added so the items match the receipt subtotal. Please check the name.</div>':''}<div class="il"><div class="mf"><label>Qty</label><input class="q" type="number" inputmode="numeric" value="${it.q}" oninput="it(${i},'q',this.value)"></div><span class="mx">×</span><div class="mf"><label>Price</label><input class="p" type="number" inputmode="decimal" step="0.01" value="${it.p}" oninput="it(${i},'p',this.value)"></div><div class="tt"><label>Total</label><b id="it_${i}">${M(+((it.q||0)*(it.p||0)).toFixed(2))}</b></div></div></div><button class="x" onclick="r_del(${i})" aria-label="Delete item">✕</button></div>`;
+ const card=(it,i)=>`<div class="ic${it.off?' off':''}"><button class="ck" onclick="tog(${i})" aria-label="Include or exclude item">${it.off?'':'✓'}</button><div class="ib"><label class="nl">Item name</label><textarea class="in" rows="2" placeholder="Item name" oninput="it(${i},'n',this.value)">${esc(it.n)}</textarea>${it.inf?'<div class="inf">Receipt title was cut off. Completed based on available context.</div>':''}<div class="il"><div class="mf"><label>Qty</label><input class="q" type="number" inputmode="numeric" value="${it.q}" oninput="it(${i},'q',this.value)"></div><span class="mx">×</span><div class="mf"><label>Price</label><input class="p" type="number" inputmode="decimal" step="0.01" value="${it.p}" oninput="it(${i},'p',this.value)"></div><div class="tt"><label>Total</label><b id="it_${i}">${M(+((it.q||0)*(it.p||0)).toFixed(2))}</b></div></div></div><button class="x" onclick="r_del(${i})" aria-label="Delete item">✕</button></div>`;
  return '<section class="grp"><div class="ih"><h3>Items</h3>'+(r.items.length?'<span class="chip">'+on+' of '+r.items.length+' work-related</span>':'')+'</div>'
  +(r.items.length?'<p class="ihint">Remove personal items by tapping on the checkmark beside it.</p>':'<div class="empty">No items could be read from this receipt. Add them below, or use Identify unclear items.</div>')
  +r.items.map(card).join('')
  +'<button class="addi" onclick="S.rec.items.push({n:\'\',q:1,p:0});render()">+ Add item</button><button class="lnk idb" onclick="idPhotos()">Identify unclear items from their photos</button><div id="idst" class="hint"></div>'+idHtml()+'</section>'}
-function tog(i){const it=S.rec.items[i];pushU();it.off=!it.off;delete it.offBy;const r=autoRedact(it);if(it.off&&r=='off')it.offBy='mark';render();if(r!=null)if(r=='none')snack('Could not find this item on the receipt. Redact it by hand.')}
+function tog(i){const it=S.rec.items[i];pushU();it.off=!it.off;const r=autoRedact(it);render();if(r!=null)if(r=='none')snack('Could not find this item on the receipt. Redact it by hand.')}
 (function(){const s=document.createElement('style');s.textContent='.irow{display:flex;gap:8px;align-items:center;margin-bottom:8px}.irow>*{min-width:0}.irow input:not(.q):not(.p){flex:1}.irow .q{flex:0 0 52px;padding-inline:6px;text-align:center}.irow .p{flex:0 0 78px;padding-inline:8px}.irow .x{flex:0 0 40px;padding-inline:0}.irow .ck{flex:0 0 40px;height:40px;padding:0;background:var(--g);color:#fff;border-color:var(--g);font-size:18px}.irow.off .ck{background:#fff;border-color:var(--ln)}.irow.off input{text-decoration:line-through;color:var(--mut);background:var(--card)}';document.head.appendChild(s);const f=document.getElementById('file');if(f){f.multiple=true;f.setAttribute('onchange','handleFiles(this.files)')}})();
 
 /* ---------- build 29: receipt pages, redact / highlight, PDF ---------- */
-var PM='s',FW=true,PH={s:'Tap words on the receipt to pick them, then choose a field and tap Add.',r:'Drag down over an item to black it out. Tap a box to adjust it. Use Scroll to move around.',h:'Drag over text to highlight it. Tap a highlight to adjust it. Use Scroll to move around.'},
+var PM='s',FW=true,PH={s:'',r:'Drag down over an item to black it out. Tap a box to adjust it. Use Scroll to move around.',h:'Drag over text to highlight it. Tap a highlight to adjust it. Use Scroll to move around.'},
  HLRE=/^\W*(order\s*(date|total|placed)|(grand\s*)?total|amount\s*(due|paid)|(purchase|invoice|receipt|transaction)?\s*date\b)/i,HLNO=/item|discount|bonus|saved|savings|before|tax|shipping/i;
 function wLines(ws){const a=(ws||[]).filter(w=>w.bbox).map(w=>({t:w.text,x0:w.bbox.x0,x1:w.bbox.x1,y0:w.bbox.y0,y1:w.bbox.y1,cy:(w.bbox.y0+w.bbox.y1)/2,hh:w.bbox.y1-w.bbox.y0})).sort((p,q)=>p.cy-q.cy),L=[];
  a.forEach(w=>{const g=L.find(l=>Math.abs(l.cy-w.cy)<Math.max(l.hh,w.hh)*.5);if(g){g.w.push(w);g.cy=(g.cy*(g.w.length-1)+w.cy)/g.w.length;g.hh=Math.max(g.hh,w.hh)}else L.push({cy:w.cy,hh:w.hh,w:[w]})});
@@ -630,12 +335,12 @@ function hlKey2(l){const t=String(l.t||'').toLowerCase();return (t.match(/[a-z]{
 function seenHL(){const s=new Set();S.pages.forEach(pg=>{try{wLines(pg.words).filter(l=>HLRE.test(l.t)&&/\d/.test(l.t)&&!HLNO.test(l.t)).forEach(l=>{s.add(hlKey(l));s.add(hlKey2(l))})}catch(e){}});return s}
 function autoHL(ws,W,H,seen){try{return wLines(ws).filter(l=>HLRE.test(l.t)&&/\d/.test(l.t)&&!HLNO.test(l.t)&&!(seen&&(seen.has(hlKey(l))||seen.has(hlKey2(l))))).map(l=>{const x0=Math.max(0,l.x0-4),y0=Math.max(0,l.y0-3),x1=Math.min(W,l.x1+4),y1=Math.min(H,l.y1+3);return{t:'h',x:x0/W,y:y0/H,w:(x1-x0)/W,h:(y1-y0)/H}})}catch(e){return[]}}
 function renderPages(){const el=$('#pages');if(!el)return;S.selM=null;
- if(S.mode!='purchase'||!S.pages.length){el.style.display='none';el.innerHTML='';{const ab=$('#addbar'),v=$('#view');if(ab){ab.classList.remove('fl');if(v&&v.nextElementSibling!==ab)v.after(ab)}}refreshActs();return}
- $('#docwrap').style.display='none';el.style.display='block';{const ab=$('#addbar');if(ab){ab.classList.add('fl');if(ab.nextElementSibling!==el)el.parentNode.insertBefore(ab,el)}}
+ if(S.mode!='purchase'||!S.pages.length){el.style.display='none';el.innerHTML='';refreshActs();return}
+ $('#docwrap').style.display='none';el.style.display='block';
  el.innerHTML='<div class="ptool"><div class="seg">'+[['s','Scroll'],['r','Redact'],['h','Highlight']].map(([m,l])=>`<button class="pmb" data-m="${m}" onclick="setPM('${m}')">${l}</button>`).join('')+'</div><div class="prow"><button id="pun" onclick="undoMark()">↶ Undo</button><button id="pre" onclick="redoMark()">↷ Redo</button><button id="pslot" onclick="slotClick()"></button></div></div><div class="pinfo"><div id="phint" class="hint"></div><button class="lnk" onclick="clearMarks()">Clear all marks</button></div>'
- +S.pages.map((p,i)=>`<div class="pg"><div class="pgh"><span>Page ${i+1} of ${S.pages.length}</span><button onclick="rmPage(${i})">Remove</button></div><div class="pgi"><img src="${p.url}" alt="" draggable="false"><div class="wl" data-i="${i}"></div><div class="ov" data-i="${i}"></div></div></div>`).join('')
+ +S.pages.map((p,i)=>`<div class="pg"><div class="pgh"><span>Page ${i+1} of ${S.pages.length}</span><button onclick="rmPage(${i})">Remove</button></div><div class="pgi"><img src="${p.url}" alt="" draggable="false"><div class="ov" data-i="${i}"></div></div></div>`).join('')
  ;
- S.pages.forEach((_,i)=>drawMarks(i));bindOv();setPM(PM);refreshActs();refreshWords()}
+ S.pages.forEach((_,i)=>drawMarks(i));bindOv();setPM(PM);refreshActs()}
 function togFW(){FW=!FW;updTb()}
 function slotClick(){S.selM?delSel():togFW()}
 function updTb(){const u=$('#pun'),r=$('#pre'),sl=$('#pslot'),h=$('#phint');if(!u)return;u.disabled=!S.undo.length;r.disabled=!S.redo.length;const sel=!!S.selM;
@@ -643,22 +348,8 @@ function updTb(){const u=$('#pun'),r=$('#pre'),sl=$('#pslot'),h=$('#phint');if(!
  h.textContent=sel?'Box selected: drag a white dot to resize, drag inside to move, or tap Delete.':PH[PM]}
 function setPM(m){PM=m;const p=$('#pages');if(!p)return;if(S.selM){const i=S.selM.i;S.selM=null;drawMarks(i)}p.className='m-'+m;p.querySelectorAll('.pmb').forEach(b=>b.classList.toggle('on',b.dataset.m==m));updTb()}
 function selectMark(i,m){const o=S.selM;S.selM=m?{i,m}:null;if(o&&o.i!==i)drawMarks(o.i);drawMarks(i);updTb()}
-function delSel(){const o=S.selM;if(!o)return;pushU();const pg=S.pages[o.i],k=pg.marks.indexOf(o.m);if(k>=0)pg.marks.splice(k,1);S.selM=null;drawMarks(o.i);updTb();syncRedactions()}
-/* build 53: invisible, selectable text over each receipt image (press and hold to select, then Add). Words under a black bar are left out so redacted text cannot be copied. */
-var WT=0;
-function hasSel(){return S.sel.length||(S.psel&&S.psel.length)}
-function ptext(){const a=(S.psel||[]).map(x=>{const w=S.pages[x.p]&&S.pages[x.p].words[x.w];return w&&w.bbox?{p:x.p,t:w.text,cx:(w.bbox.x0+w.bbox.x1)/2,cy:(w.bbox.y0+w.bbox.y1)/2,h:w.bbox.y1-w.bbox.y0}:null}).filter(Boolean);
- a.sort((u,v)=>u.p-v.p||(Math.abs(u.cy-v.cy)>.5*Math.max(u.h,v.h)?u.cy-v.cy:u.cx-v.cx));return a.map(x=>x.t).join(' ')}
-function refreshWords(){document.querySelectorAll('.wl').forEach(el=>{const pi=+el.dataset.i,pg=S.pages[pi];if(!pg||!pg.words||!pg.w||!pg.h){el.innerHTML='';return}
- const bars=(pg.marks||[]).filter(m=>m.t=='r'),sel=S.psel||[];
- el.innerHTML=pg.words.map((w,k)=>{if(!w.bbox||!/[A-Za-z0-9]/.test(String(w.text)))return '';const cx=(w.bbox.x0+w.bbox.x1)/2/pg.w,cy=(w.bbox.y0+w.bbox.y1)/2/pg.h;if(bars.some(m=>cx>=m.x&&cx<=m.x+m.w&&cy>=m.y&&cy<=m.y+m.h))return '';
-  const h=w.bbox.y1-w.bbox.y0,pad=h*.22,on=sel.some(q=>q.p===pi&&q.w===k);
-  return `<div class="wb${on?' sel':''}" data-p="${pi}" data-w="${k}" style="left:${(w.bbox.x0-2)/pg.w*100}%;top:${(w.bbox.y0-pad)/pg.h*100}%;width:${(w.bbox.x1-w.bbox.x0+4)/pg.w*100}%;height:${(h+2*pad)/pg.h*100}%"></div>`}).join('')});
- if(!window.__wlc){window.__wlc=1;document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('.wl .wb');if(b&&(typeof PM=='undefined'||PM=='s'))tapPWord(b)})}}
-function tapPWord(b){S.psel=S.psel||[];const p=+b.dataset.p,w=+b.dataset.w,k=S.psel.findIndex(q=>q.p===p&&q.w===w);k<0?S.psel.push({p,w}):S.psel.splice(k,1);b.classList.toggle('sel');
- if(S.psel.length){const t=ptext(),to=$('#addto');if(to){const has=v=>[...to.options].some(o=>o.value==v);if(/^\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}$/.test(t)&&has('date'))to.value='date';else if(/^[A-Za-z]{0,4}[\d\-]{4,}$/.test(t)&&has('number'))to.value='number'}}
- updBar()}
-function drawMarks(i){clearTimeout(WT);WT=setTimeout(refreshWords,250);const o=document.querySelector('.ov[data-i="'+i+'"]');if(!o||!S.pages[i])return;const sm=S.selM;
+function delSel(){const o=S.selM;if(!o)return;pushU();const pg=S.pages[o.i],k=pg.marks.indexOf(o.m);if(k>=0)pg.marks.splice(k,1);S.selM=null;drawMarks(o.i);updTb()}
+function drawMarks(i){const o=document.querySelector('.ov[data-i="'+i+'"]');if(!o||!S.pages[i])return;const sm=S.selM;
  o.innerHTML=S.pages[i].marks.map((m,j)=>{const sel=sm&&sm.m===m;return `<div class="mk ${m.t}${sel?' sel':''}" data-j="${j}" style="left:${m.x*100}%;top:${m.y*100}%;width:${m.w*100}%;height:${m.h*100}%">${sel?'<i class="hd" data-k="t"></i><i class="hd" data-k="b"></i><i class="hd" data-k="l"></i><i class="hd" data-k="r"></i>':''}</div>`}).join('')}
 function bindOv(){document.querySelectorAll('.ov').forEach(ov=>{const i=+ov.dataset.i,cl=v=>Math.min(1,Math.max(0,v)),pt=(e,b)=>[cl((e.clientX-b.left)/b.width),cl((e.clientY-b.top)/b.height)];
  ov.onpointerdown=e=>{if(PM=='s')return;ov.setPointerCapture(e.pointerId);const b=ov.getBoundingClientRect(),[x,y]=pt(e,b),hd=e.target.closest&&e.target.closest('.hd'),mk=e.target.closest&&e.target.closest('.mk'),pg=S.pages[i],d={x,y,b,mv:0,mode:'new'};
@@ -673,9 +364,9 @@ function bindOv(){document.querySelectorAll('.ov').forEach(ov=>{const i=+ov.data
   else{if(!d.u){pushU();d.u=1}const o=d.o,m=d.m,mw=12/d.b.width,mh=12/d.b.height;let l=o.x,t=o.y,r=o.x+o.w,b=o.y+o.h;
    if(d.k=='l')l=Math.min(r-mw,Math.max(0,o.x+dx));if(d.k=='r')r=Math.max(l+mw,Math.min(1,r+dx));if(d.k=='t')t=Math.min(b-mh,Math.max(0,o.y+dy));if(d.k=='b')b=Math.max(t+mh,Math.min(1,b+dy));
    m.x=l;m.y=t;m.w=r-l;m.h=b-t;drawMarks(i)}};
- ov.onpointerup=e=>{const d=ov._d;ov._d=null;if(!d)return;if(d.u&&d.mode!='new')syncRedactions();
+ ov.onpointerup=e=>{const d=ov._d;ov._d=null;if(!d)return;
   if(d.mode=='new'&&d.mv){const[x,y]=pt(e,d.b),fw=PM=='r'&&FW,m={t:PM=='r'?'r':'h',x:fw?0:Math.min(x,d.x),y:Math.min(y,d.y),w:fw?1:Math.abs(x-d.x),h:Math.abs(y-d.y)};
-   if(m.w*d.b.width>10&&m.h*d.b.height>10){pushU();S.pages[i].marks.push(m);selectMark(i,m);syncRedactions();return}}
+   if(m.w*d.b.width>10&&m.h*d.b.height>10){pushU();S.pages[i].marks.push(m);selectMark(i,m);return}}
   drawMarks(i)};
  ov.onpointercancel=()=>{ov._d=null;drawMarks(i)}})}
 function snap(){const a=S.pages.map(p=>({p,m:JSON.parse(JSON.stringify(p.marks))}));a.off=(S.rec&&S.rec.items?S.rec.items:[]).map(i=>!!i.off);return a}
@@ -685,20 +376,14 @@ function applySnap(sn){const its=S.rec&&S.rec.items||[];if(sn.off&&sn.off.length
  if(same){S.pages.forEach((_,i)=>drawMarks(i));updTb()}else{const y=window.scrollY;renderPages();window.scrollTo(0,y)}}
 function undoMark(){snackHide();if(!S.undo.length)return;S.redo.push(snap());applySnap(S.undo.pop());updTb()}
 function redoMark(){if(!S.redo.length)return;S.undo.push(snap());applySnap(S.redo.pop());updTb()}
-function clearMarks(){if(!S.pages.some(p=>p.marks.length))return;pushU();S.pages.forEach(p=>p.marks=[]);S.selM=null;S.pages.forEach((_,i)=>drawMarks(i));updTb();syncRedactions(true);snack('Marks cleared',undoMark)}
+function clearMarks(){if(!S.pages.some(p=>p.marks.length))return;pushU();S.pages.forEach(p=>p.marks=[]);S.selM=null;S.pages.forEach((_,i)=>drawMarks(i));updTb();snack('Marks cleared',undoMark)}
 function rmPage(i){if(!confirm('Remove page '+(i+1)+' from the PDF?'))return;pushU();S.pages.splice(i,1);renderPages()}
 /* marks are burned into the pixels, so redacted areas cannot be recovered from the PDF or image */
 function baked(p){const c=document.createElement('canvas');c.width=p.w;c.height=p.h;const x=c.getContext('2d');x.drawImage(p.c,0,0,p.w,p.h);
  x.globalCompositeOperation='multiply';x.fillStyle='#ffe600';p.marks.filter(m=>m.t=='h').forEach(m=>x.fillRect(m.x*p.w,m.y*p.h,m.w*p.w,m.h*p.h));
  x.globalCompositeOperation='source-over';x.fillStyle='#000';p.marks.filter(m=>m.t=='r').forEach(m=>x.fillRect(Math.floor(m.x*p.w),Math.floor(m.y*p.h),Math.ceil(m.w*p.w)+1,Math.ceil(m.h*p.h)+1));return c}
-/* v77: file names carry date + business + receipt/invoice number (or total), so two documents from the same day never share a name */
-function uname(r,label){r=r||{};const pur=r.mode=='purchase',p=n=>String(n).padStart(2,'0'),d=Parser.pd(pur?r.date:(r.jobDate||r.date)),
- who=String((pur?r.merchant:(r.client||r.employer))||'').replace(/[\\\/:*?"<>|#%{}\[\]~]+/g,' ').replace(/\s+/g,' ').trim().slice(0,24).trim(),
- no=String((pur?r.number:r.invoice)||'').replace(/[^A-Za-z0-9\-]/g,'').slice(0,20),amt=N(pur?r.extTotal:r.amount),now=new Date(),
- id=no?'No '+no:(amt>0?'$'+amt.toFixed(2):'at '+p(now.getHours())+p(now.getMinutes()));
- return [d?d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()):'',who,id,label].filter(Boolean).join(' ')}
-function rname(){const r=S.rec||{};return uname(r,r.mode=='purchase'||S.mode=='purchase'?'Physical Receipt':'Physical Call Sheet')}
-function iname(){const r=S.rec||{};return uname(r,r.mode=='purchase'?'Plain Text Receipt':'Plain Text Call Sheet')}
+function rname(){const r=S.rec||{},pur=S.mode=='purchase',d=Parser.pd(pur?r.date:(r.jobDate||r.date)),p=n=>String(n).padStart(2,'0');return(d?d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' ':'')+(pur?'Physical Receipt':'Physical Call Sheet')}
+function iname(){const r=S.rec||{},pur=r.mode=='purchase',d=Parser.pd(pur?r.date:(r.jobDate||r.date)),p=n=>String(n).padStart(2,'0');return(d?d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' ':'')+(pur?'Plain Text Receipt':'Plain Text Call Sheet')}
 function refreshActs(){const on=!!(S.pages&&S.pages.length>0);document.querySelectorAll('.pdfx').forEach(b=>b.style.display=on?'':'none');const c=$('#cpbtn'),m=$('#imgbtn');if(c){c.textContent=cpLabel()}if(m){m.classList.remove('sec');m.textContent='Save as PDF';m.onclick=saveCombo}}
 async function savePdf(){const J=window.jspdf&&window.jspdf.jsPDF;if(!J)return st('The PDF tool did not load. Check your connection and reload.');if(!S.pages.length)return;
  let d=null;S.pages.forEach(p=>{const W=595,H=+(W*p.h/p.w).toFixed(2),o=H>W?'p':'l',u=baked(p).toDataURL('image/jpeg',.92);if(!d)d=new J({unit:'pt',format:[W,H],orientation:o,compress:true});else d.addPage([W,H],o);d.addImage(u,'JPEG',0,0,W,H)});
@@ -706,10 +391,10 @@ async function savePdf(){const J=window.jspdf&&window.jspdf.jsPDF;if(!J)return s
  if(IOS&&navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f]});return}catch(e){if(e&&e.name=='AbortError')return}}
  const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=n;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);toast('Saved '+n)}
 /* one PDF: the uploaded invoice / receipt pages + the plain text summary. The summary shares a page with the image whenever it fits. */
-async function saveCombo(rec,view){const J=window.jspdf&&window.jspdf.jsPDF;if(!J)return st('The PDF tool did not load. Check your connection and reload.');
- try{const sv=rec&&rec.mode?rec:null,r=sv||S.rec,{t,G}=rows(r),pur=r.mode=='purchase',M=36,LW=170;let imgs=[];
- if(sv)imgs=(sv.imgs||[]).map(x=>({u:x.u,w:x.w,h:x.h}));else if(pur)imgs=(S.pages||[]).map(p=>({u:baked(p).toDataURL('image/jpeg',.92),w:p.w,h:p.h}));
- else if(r.doc&&S.img&&S.dim)imgs=[{u:S.img,w:S.dim[0],h:S.dim[1]}].concat(S.extra||[]);
+async function saveCombo(){const J=window.jspdf&&window.jspdf.jsPDF;if(!J)return st('The PDF tool did not load. Check your connection and reload.');
+ try{const r=S.rec,{t,G}=rows(r),pur=S.mode=='purchase',M=36,LW=170;let imgs=[];
+ if(pur)imgs=(S.pages||[]).map(p=>({u:baked(p).toDataURL('image/jpeg',.92),w:p.w,h:p.h}));
+ else if(r.doc&&S.img&&S.dim)imgs=[{u:S.img,w:S.dim[0],h:S.dim[1]}];
  /* summary block: draws at (x0,y0) with width SW, returns its height; measure-only when draw is false */
  const sum=(d,x0,y0,SW,draw)=>{const R=x0+SW,VW=SW-LW-24;let y=y0;
   if(draw){d.setFont('helvetica','bold').setFontSize(16).setTextColor(17);d.text(t,x0,y+14);d.setDrawColor(69,129,142);d.setLineWidth(2);d.line(x0,y+19,x0+d.getTextWidth(t),y+19)}y+=32;
@@ -730,11 +415,10 @@ async function saveCombo(rec,view){const J=window.jspdf&&window.jspdf.jsPDF;if(!
   imgs.forEach((im,i)=>{const last=i==imgs.length-1,W=595,H=+(W*im.h/im.w).toFixed(2);
    if(last){add(W,H+14+sh+M);d.addImage(im.u,'JPEG',0,0,W,H);sum(d,M,H+14,W-2*M,true)}/* summary sits under the last page of the receipt, same page */
    else{add(W,H);d.addImage(im.u,'JPEG',0,0,W,H)}})}
- const p=n=>String(n).padStart(2,'0'),dt=Parser.pd(pur?r.date:(r.jobDate||r.date)),n=uname(r,sv&&!imgs.length?(pur?'Expense Summary':'Invoice Summary'):(pur?'Receipt and Summary':'Call Sheet Invoice and Summary'))+'.pdf',f=new File([d.output('blob')],n,{type:'application/pdf'});
- if(view){const u=URL.createObjectURL(f);if(view!==true&&!view.closed)view.location.href=u;else window.open(u,'_blank');return}
+ const p=n=>String(n).padStart(2,'0'),dt=Parser.pd(pur?r.date:(r.jobDate||r.date)),n=(dt?dt.getFullYear()+'-'+p(dt.getMonth()+1)+'-'+p(dt.getDate())+' ':'')+(pur?'Receipt and Summary.pdf':'Call Sheet Invoice and Summary.pdf'),f=new File([d.output('blob')],n,{type:'application/pdf'});
  if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f]});return}catch(e){if(e&&e.name=='AbortError')return}}
  const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=n;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);toast('Saved '+n)}
- catch(e){if(view&&view!==true)try{view.close()}catch(_){}toast('Could not save PDF')}}
+ catch(e){toast('Could not save PDF')}}
 (function(){const s=document.createElement('style');s.textContent=[
  'html,body{overflow-x:clip!important}.src{position:static!important}',
  '.ptool{position:sticky;top:max(8px,env(safe-area-inset-top));z-index:6;background:var(--bg);padding:6px 0 8px}',
@@ -743,7 +427,7 @@ async function saveCombo(rec,view){const J=window.jspdf&&window.jspdf.jsPDF;if(!
  '.pg{margin-bottom:16px}.pgh{display:flex;justify-content:space-between;align-items:center;font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mut);margin-bottom:6px}.pgh button{background:transparent;border:0;color:var(--mut);text-decoration:underline;padding:4px 8px;font-weight:500;font-size:12px}',
  '.pgi{position:relative;border:1px solid var(--ln);border-radius:12px;overflow:hidden;background:#fff;line-height:0}.pgi img{width:100%;display:block;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}',
  '.ov{position:absolute;inset:0;pointer-events:none}.m-r .ov,.m-h .ov{pointer-events:auto;touch-action:none;cursor:crosshair}',
- '.wl{position:absolute;inset:0;overflow:hidden;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}.m-r .wl,.m-h .wl{pointer-events:none}.wl .wb{cursor:pointer}.wl .wb:active{background:rgba(217,154,78,.3)}#addbar.fl{position:fixed;left:10px;right:10px;top:auto;bottom:12px;z-index:40;margin:0;box-shadow:0 4px 18px rgba(0,0,0,.25)}.mk{position:absolute}.mk.r{background:#000}.mk.h{background:rgba(255,230,0,.45);outline:1px solid rgba(200,160,0,.55)}.mk.tmp.r{background:rgba(0,0,0,.7)}',
+ '.mk{position:absolute}.mk.r{background:#000}.mk.h{background:rgba(255,230,0,.45);outline:1px solid rgba(200,160,0,.55)}.mk.tmp.r{background:rgba(0,0,0,.7)}',
  '.ih{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}.ih h3{margin:0}.chip{font:600 11px var(--mono);color:var(--gd);background:var(--ext);border:1px solid #c9ddd1;border-radius:999px;padding:5px 10px;white-space:nowrap}',
  '.ic{display:flex;gap:10px;align-items:flex-start;padding:12px;border:1px solid var(--ln);border-radius:14px;background:#fff;margin-bottom:10px}.ic.off{background:var(--card);border-style:dashed}',
  '.ic .ck{flex:0 0 30px;width:30px;height:30px;padding:0;border-radius:50%;background:var(--g);color:#fff;border-color:var(--g);font-size:16px;line-height:1;margin-top:2px}.ic.off .ck{background:#fff;border-color:#c9c7bd}',
@@ -809,38 +493,18 @@ function nz(t){return String(t||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').tri
 function locate(pg,items){try{const L=wLines(pg.words).map(l=>({...l,n:nz(l.t),u:0}));
  (items||[]).forEach(it=>{const tk=nz(it.n0||it.n).split(' ').filter(t=>t.length>=3);if(!tk.length)return;const pr=((it.q||1)*(it.p||0)).toFixed(2);let best=null,bs=0;
   L.forEach(l=>{if(l.u)return;const f=tk.filter(t=>l.n.includes(t)).length/tk.length,sc=f+(l.t.replace(/[,\s]/g,'').includes(pr)?.15:0);if(f>=.6&&sc>bs){bs=sc;best=l}});
-  if(best){best.u=1;it.id=it.id||++UID;it.pos={pid:pg.id,y0:best.y0/pg.h,y1:best.y1/pg.h,x0:best.x0/pg.w,x1:best.x1/pg.w};
+  if(best){best.u=1;it.id=it.id||++UID;it.pos={pid:pg.id,y0:best.y0/pg.h,y1:best.y1/pg.h};
   /* highlight the item description only (not the price) */
   const dw=(pg.words||[]).filter(w=>w.bbox&&Math.abs((w.bbox.y0+w.bbox.y1)/2-(best.y0+best.y1)/2)<(best.y1-best.y0)*.5&&tk.some(t=>nz(w.text).includes(t)));
   const hx0=Math.max(0,(dw.length?Math.min(...dw.map(w=>w.bbox.x0)):best.x0)-4),hx1=Math.min(pg.w,(dw.length?Math.max(...dw.map(w=>w.bbox.x1)):best.x1)+4),hy0=Math.max(0,best.y0-3),hy1=Math.min(pg.h,best.y1+3);
   pg.marks=(pg.marks||[]).filter(m=>m.hid!==it.id);pg.marks.push({t:'h',x:hx0/pg.w,y:hy0/pg.h,w:(hx1-hx0)/pg.w,h:(hy1-hy0)/pg.h,hid:it.id})}})}catch(e){}}
 function totalsTop(pg,y1){const l=wLines(pg.words).filter(l=>l.y0/pg.h>y1+.01&&/^\W*(sub\s?-?total|item\(s\)|items?\s*total|shipping|sales\s*tax|order\s*total|total|payment|amount)/i.test(l.t)).sort((a,b)=>a.y0-b.y0)[0];return l?l.y0/pg.h-.004:1}
 /* returns [{pid,y,h}] row bands (full width) for every place this item appears */
-/* build 53: a black bar over an item's row on the receipt leaves that item out of the total; removing the bar puts it back */
-function barCovers(it,reds){const tk=nz(it.n0||it.n).split(' ').filter(t=>t.length>=3),ps=[it.pos,...(it.alts||[])].filter(Boolean);
- for(const {p,m} of reds){
-  if(ps.length){for(const q of ps){if(q.pid!=p.id)continue;const h=q.y1-q.y0,ov=Math.min(m.y+m.h,q.y1)-Math.max(m.y,q.y0);if(h<=0||ov<h*.6)continue;
-   if(m.w>=.35||q.x0==null)return true;const hx=Math.min(m.x+m.w,q.x1)-Math.max(m.x,q.x0);if(hx>=(q.x1-q.x0)*.3)return true}}
-  else if(tk.length&&p.words){const W=p.words.filter(w=>w.bbox&&(w.bbox.x0+w.bbox.x1)/2/p.w>=m.x&&(w.bbox.x0+w.bbox.x1)/2/p.w<=m.x+m.w&&(w.bbox.y0+w.bbox.y1)/2/p.h>=m.y&&(w.bbox.y0+w.bbox.y1)/2/p.h<=m.y+m.h),t=nz(W.map(w=>w.text).join(' '));
-   if(t&&tk.filter(x=>t.includes(x)).length/tk.length>=.6)return true}}
- return false}
-function syncRedactions(quiet){const r=S.rec;if(!r||r.mode!='purchase'||!r.items||!S.pages.length)return;
- const reds=[];S.pages.forEach(p=>(p.marks||[]).forEach(m=>{if(m.t=='r')reds.push({p,m})}));const a=[],b=[];
- r.items.forEach(it=>{const c=barCovers(it,reds);
-  if(c&&!it.off){it.off=true;it.offBy='mark';a.push(it.n||'item')}
-  else if(!c&&it.off&&it.offBy=='mark'){it.off=false;delete it.offBy;b.push(it.n||'item')}});
- if(a.length||b.length){render();if(!quiet)snack(a.length?'Left out of the total: '+a.join(', '):'Back in the total: '+b.join(', '))}}
 function bandsFor(it){const O=[];S.rec.items.forEach(x=>[x.pos,...(x.alts||[])].filter(Boolean).forEach(p=>O.push({x,p})));const out=[],pad=.011;
  O.filter(o=>o.x===it).forEach(o=>{const pi=S.pages.findIndex(p=>p.id==o.p.pid),pg=S.pages[pi];if(!pg)return;
-  const same=O.filter(q=>q.p.pid==o.p.pid).sort((a,b)=>a.p.y0-b.p.y0),k=same.indexOf(o),last=k==same.length-1,
-   hs=same.slice(1).map((q,j)=>q.p.y0-same[j].p.y0).sort((a,b)=>a-b),med=hs.length?hs[hs.length>>1]:null,
-   /* tightly packed rows (a paper receipt photo) get bars sized to the text line, not to a fixed margin */
-   dense=med!=null&&med<.045&&same.length>=3,hh=Math.max(.004,o.p.y1-o.p.y0),pd=dense?Math.min(pad,hh*.35):pad;
-  let top=Math.max(0,o.p.y0-pd),bot;
-  if(dense&&k>0)top=Math.max(0,o.p.y0-Math.min(pd,Math.max(0,(o.p.y0-same[k-1].p.y1)/2)));
-  if(dense){if(!last)bot=same[k+1].p.y0-Math.min(pd,Math.max(0,(same[k+1].p.y0-o.p.y1)/2));else bot=Math.min(totalsTop(pg,o.p.y1),o.p.y1+pd,1)}
-  else if(!last)bot=same[k+1].p.y0-pad-.004;
-  else{const lim=totalsTop(pg,o.p.y1);bot=Math.min(lim,med?o.p.y0+med-pad-.004:o.p.y1+.06,1)}
+  const same=O.filter(q=>q.p.pid==o.p.pid).sort((a,b)=>a.p.y0-b.p.y0),k=same.indexOf(o),top=Math.max(0,o.p.y0-pad),last=k==same.length-1;let bot;
+  if(!last)bot=same[k+1].p.y0-pad-.004;
+  else{const hs=same.slice(1).map((q,j)=>q.p.y0-same[j].p.y0).sort((a,b)=>a-b),med=hs.length?hs[hs.length>>1]:null,lim=totalsTop(pg,o.p.y1);bot=Math.min(lim,med?o.p.y0+med-pad-.004:o.p.y1+.06,1)}
   if(bot-top>.01)out.push({pid:pg.id,y:top,h:bot-top});
   if(last){/* same item continues at the top of the next screenshot (overlapping scroll) */
    const np=S.pages[pi+1];if(np){const L=wLines(pg.words),sl=L.find(l=>l.y0/pg.h>=o.p.y1&&l.y0/pg.h<bot&&/^by\s+\S+/i.test(l.t)),sn=sl?nz(sl.t).replace(/^by\s+/,''):'';
@@ -926,915 +590,5 @@ function idSkip(a){S.idRes.splice(a,1);render()}
 '.ic.off .ib textarea.in{background-color:var(--card)!important}'
 ].join('');document.head.appendChild(s)})();
 
-/* v59: tap a saved record to open it and download its summary PDF; warn when the record being prepared is already saved */
-const nk=v=>String(v||'').toLowerCase().replace(/[^a-z0-9]/g,'');
-const recNum=r=>nk(r.mode=='purchase'?r.number:r.invoice),recWho=r=>nk(r.mode=='purchase'?niceMerch(r.merchant):r.client);
-/* v84: remembered fixes. A merchant spelling you correct, and the round-trip miles you enter for a job location, are remembered and applied next time.
-   They are kept inside the same encrypted store as saved records (so backups carry them too) and are never sent anywhere. */
-function learnPack(){const L=S.learn||{m:{},mi:{}};return Object.keys(L.m).length||Object.keys(L.mi).length?{v:2,records:S.records,learn:L}:S.records}
-const lrn=()=>S.learn||(S.learn={m:{},mi:{}});
-function lev(a,b){const m=a.length,n=b.length;if(!m)return n;if(!n)return m;let p=Array.from({length:n+1},(_,j)=>j);for(let i=1;i<=m;i++){const c=[i];for(let j=1;j<=n;j++)c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]==b[j-1]?0:1));p=c}return p[n]}
-/* only a correction that stays close to what was read counts as a spelling fix; a completely different name is a one-off, not a rule */
-function closeEnough(a,b){a=nk(a);b=nk(b);if(!a||!b)return false;if(a==b)return true;const s=a.length<b.length?a:b,l=s===a?b:a;if(s.length>=4&&l.includes(s))return true;return lev(a,b)<=Math.max(2,Math.ceil(Math.max(a.length,b.length)*.34))}
-function learnTrim(o,max){const k=Object.keys(o);if(k.length>max)k.sort((a,b)=>(o[a].ts||0)-(o[b].ts||0)).slice(0,k.length-max).forEach(x=>delete o[x])}
-function learnRec(r){if(!r||!r.loaded||!S.key||S.noStore)return;const L=lrn();let ch=false;
- if(r.mode=='purchase'){const o=String(r.origMerchant||'').trim(),f=String(r.merchant||'').trim(),k=nk(o);
-  if(k&&f){if(o===f){if(L.m[k]){delete L.m[k];ch=true}}else if(closeEnough(o,f)){const c=L.m[k];if(!c||c.t!==f){L.m[k]={f:o,t:f,ts:Date.now()};ch=true}}}}
- else{const loc=String(r.location||'').trim(),k=nk(loc),mi=N(r.roundTrip);
-  if(k&&mi!=null&&mi>0){const c=L.mi[k];if(!c||c.v!==mi){L.mi[k]={l:loc,v:mi,ts:Date.now()};ch=true}}}
- if(ch){learnTrim(L.m,200);learnTrim(L.mi,300);store();learnUI()}}
-/* v86: a place you entered miles for before is remembered, even if the address text differs a little. Looks at remembered distances first, then every saved work invoice (newest first). Matches the full text, or just the venue/street part before the first comma. */
-function milesFor(loc){const k=nk(loc);if(!k)return null;const seg=v=>nk(String(v||'').split(',')[0]),sk=seg(loc),L=lrn().mi||{},
-  hit=(key,txt)=>key===k||(sk.length>=6&&seg(txt)===sk)||(k.length>=10&&key.length>=10&&(key.startsWith(k)||k.startsWith(key)));
- for(const key of Object.keys(L)){const e=L[key];if(e&&e.v>0&&key===k)return{v:e.v}}
- let best=null;
- for(let i=(S.records||[]).length-1;i>=0;i--){const x=S.records[i];if(!x||x.mode=='purchase')continue;const v=N(x.roundTrip);if(v!=null&&v>0&&hit(nk(x.location),x.location)){best={v};break}}
- if(best)return best;
- for(const key of Object.keys(L)){const e=L[key];if(e&&e.v>0&&hit(key,e.l))return{v:e.v}}
- return null}
-function fillMiles(r){const c=milesFor(r.location);r.fix=r.fix||{};
- if(c&&!r.edited.roundTrip&&(r.fix.roundTrip||String(r.roundTrip??'').trim()==='')){const was=r.roundTrip;r.roundTrip=String(c.v);r.fix.roundTrip=1;return was!==r.roundTrip}
- if(!c&&r.fix.roundTrip&&!r.edited.roundTrip){r.roundTrip='';r.fix.roundTrip=0;return true}return false}
-function applyLearned(r){if(!r)return;r.fix=r.fix||{};
- if(r.mode=='purchase'){r.fix.merchant=0;const m=String(r.merchant||'').trim(),c=lrn().m[nk(m)];if(c&&!r.edited.merchant&&m!==c.t){r.origMerchant=m;r.merchant=c.t;r.fix.merchant=1}}
- else fillMiles(r)}
-/* a field was finished (the change event fires when you leave it, so nothing is learned from half-typed text) */
-function fldDone(k){const r=S.rec;if(!r||!r.loaded)return;
- if(k=='amount'&&r.mode!='purchase'){delete r.estTotal;r.tp=N(r.amount)>0?1:0;render();return}
- if(k=='location'&&r.mode!='purchase'){if(fillMiles(r)){const e=$('#f_roundTrip');if(e){e.value=r.roundTrip??'';e.classList.toggle('ext',String(r.roundTrip??'').trim()!=='')}paintFix('roundTrip');calc()}}
- if(k=='merchant'||k=='roundTrip')learnRec(r)}
-function fixText(k){const r=S.rec;if(!r||!r.fix||!r.fix[k]||(r.edited&&r.edited[k]))return'';
- return k=='merchant'?'Fixed from \u201c'+esc(r.origMerchant)+'\u201d using a correction you made before. <a href="#" onclick="undoFix(\'merchant\');return false">Undo</a>':'Filled in from your last job at this location. Check it if the route changed. <a href="#" onclick="undoFix(\'roundTrip\');return false">Clear</a>'}
-function fixDiv(k){if(k!='merchant'&&k!='roundTrip')return'';const t=fixText(k);return '<div class="fixn" id="fx_'+k+'"'+(t?'':' hidden')+'>'+t+'</div>'}
-function paintFix(k){const h=$('#fx_'+k);if(!h)return;const t=fixText(k);h.innerHTML=t;h.hidden=!t}
-function undoFix(k){const r=S.rec;if(!r)return;r.fix=r.fix||{};
- if(k=='merchant'){const o=r.origMerchant;if(o==null)return;delete lrn().m[nk(o)];r.merchant=o;r.edited.merchant=1;r.fix.merchant=0;store();learnUI();autoCat()}
- else{r.roundTrip='';r.fix.roundTrip=0}
- render()}
-function learnUI(){const e=$('#fxcnt');if(!e)return;const L=lrn(),n=Object.keys(L.m).length+Object.keys(L.mi).length;e.textContent=''}
-function fixOpen(){closeRec();const L=lrn(),by=(a,b)=>(b[1].ts||0)-(a[1].ts||0),ms=Object.entries(L.m).sort(by),ls=Object.entries(L.mi).sort(by),
- row=(a,b,kind,k)=>'<div class="srow"><div class="sm"><div class="s1">'+a+'</div><div class="s2">'+b+'</div></div><button class="x" onclick="fixDel(\''+kind+'\',\''+k+'\')" aria-label="Forget this">\u2715</button></div>',
- o=document.createElement('div');o.id='recmodal';o.className='rmo';o.onclick=e=>{if(e.target===o)closeRec()};
- let h='';
- if(ms.length)h+='<div class="sl"><h4>Merchant spelling</h4>'+ms.map(([k,c])=>row(esc(c.f)+' \u2192 '+esc(c.t),'Applied when a receipt is read this way','m',k)).join('')+'</div>';
- if(ls.length)h+='<div class="sl"><h4>Round-trip miles</h4>'+ls.map(([k,c])=>row(esc(c.l),esc(String(c.v))+' mi round trip','mi',k)).join('')+'</div>';
- if(!h)h='<div class="empty2">Nothing remembered yet.<br>Fix a merchant\u2019s spelling or enter round-trip miles for a job location, and PaperTrail will reuse it next time.</div>';
- o.innerHTML='<div class="rm" role="dialog" aria-modal="true" aria-label="Remembered fixes"><div class="rmh"><h3>Remembered fixes</h3><button class="x" onclick="closeRec()" aria-label="Close">\u2715</button></div><div class="rmb">'+h+'<div class="hint" style="margin-top:10px">Stored on this phone with your saved records, encrypted. Tap \u2715 to forget one.</div></div><div class="rmf">'+(ms.length||ls.length?'<button onclick="fixAll()">Forget all</button>':'')+'<button class="pri" onclick="closeRec()">Close</button></div></div>';
- document.body.appendChild(o);document.body.style.overflow='hidden'}
-function fixDel(kind,k){const L=lrn();delete L[kind][k];store();learnUI();fixOpen()}
-function fixAll(){if(!confirm('Forget every remembered fix? Saved records are not changed.'))return;S.learn={m:{},mi:{}};store();learnUI();fixOpen()}
-function sameRec(a,b){if(!a||!b||a.mode!=b.mode)return false;
- const na=recNum(a),nb=recNum(b),wa=recWho(a),wb=recWho(b),who=!wa||!wb||wa==wb||wa.includes(wb)||wb.includes(wa);
- if(na.length>=3&&nb.length>=3)return na==nb&&who;
- const ta=recAmt(a),tb=recAmt(b),da=recDate(a),db=recDate(b);
- return !!wa&&wa==wb&&da!=null&&da==db&&ta!=null&&ta==tb&&ta>0}
-function dupWarn(){const el=$('#dupwarn');if(!el)return;const r=S.rec,m=r&&r.loaded?S.records.map((x,i)=>[x,i]).filter(([x])=>sameRec(r,x)&&!(r.rid&&x.rid===r.rid)):[];let h='';
- if(m.length){const pur=r.mode=='purchase',[x,i]=m[0],a=recAmt(x),nm=esc((pur?niceMerch(x.merchant):x.client)||(pur?'Receipt':'Work invoice')),dt=esc((pur?x.date:x.jobDate)||''),
-  det=[nm,dt,a!=null&&a>0?M(a):''].filter(Boolean).join(' · ');
-  h=`<div class="dup" role="alert"><div><b>Already saved</b><span>${pur?'A receipt':'An invoice'} like this is already in Saved: ${det}${m.length>1?' (+'+(m.length-1)+' more)':''}</span></div><button onclick="openRec(${i})">View</button></div>`}
- {const ed=!!(r&&r.rid&&S.records.some(x=>x.rid===r.rid)),sb=$('#svbtn');if(sb)sb.textContent=ed?'Save changes':'Save record';if(ed)h='<div class="dup" role="status" style="background:#e9f1ed;border-color:#b9d2c4;color:var(--fg)"><div><b>Editing a saved record</b><span>Fix anything below, then tap Save changes.</span></div><button onclick="cancelEdit()">Cancel</button></div>'+h}
- if(el.dataset.h!==h){el.dataset.h=h;el.innerHTML=h}}
-function openRec(i){const r=S.records[i];if(!r)return;closeRec();const{t,G}=rows(r),
- h=G.map(g=>({...g,rows:g.rows.filter(x=>x[0]!=='Regular Hours')})).map(g=>'<div class="rg">'+g.rows.map(([l,v,hl])=>`<div class="rr${hl?' hl':''}${g.k=='tot'?' tt':''}"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join('')+'</div>').join(''),
- o=document.createElement('div');o.id='recmodal';o.className='rmo';o.onclick=e=>{if(e.target===o)closeRec()};
- o.innerHTML=`<div class="rm" role="dialog" aria-modal="true" aria-label="${esc(t)}"><div class="rmh"><h3>${esc(t)}</h3><button class="x" onclick="closeRec()" aria-label="Close">✕</button></div><div class="rmb">${r.mode!='purchase'?'<div class="stn'+(stOf(r)=='open'?'':' cl')+'">'+swHtml(r,'flipStatus('+i+')')+'</div>'+(r.stWhy?'<div class="stw">'+esc(r.stWhy)+'</div>':''):''}${r.imgs&&r.imgs.length?'':'<div class="invm">'+(r.mode=='purchase'?'No receipt attached':'No invoice attached')+'</div>'}${h}</div><div class="rmf">${r.mode!='purchase'&&upDays(r).length?`<button onclick="addWorkCal(${i})">Add work day${upDays(r).length>1?'s':''} to calendar</button>`:''}<button onclick="dlRec(${i})">Download PDF</button><button onclick="viewRec(${i})">View PDF</button>${r.imgs&&r.imgs.length?`<button onclick="cropRec(${i})">Crop</button><button onclick="replaceInv(${i})">Replace invoice</button><button onclick="rmImg(${i})">Remove invoice</button>`:`<button onclick="attachRec(${i})">Attach invoice</button>`}<button onclick="editRec(${i})">Edit</button><button onclick="delOpen(${i})" style="color:#b3261e">Delete</button></div></div>`;
- document.body.appendChild(o);document.body.style.overflow='hidden'}
-function delOpen(i){if(!S.records[i])return;if(!confirm('Delete this saved record? This cannot be undone.'))return;S.records.splice(i,1);closeRec();renderRecs();store()}
-function closeRec(){const o=$('#recmodal');if(o)o.remove();document.body.style.overflow=''}
-/* v12: older saved records never kept the invoice picture, so let the person pick the file again and attach it to the record */
-/* v13: an old "invoice + summary" PDF has the summary printed under the invoice. Find its teal heading rule and cut it off, so the summary is not shown twice. Returns the canvas (cropped, or unchanged if no summary is found); null if the page was only a summary. */
-function stripSummary(c,ptW){try{const x=c.getContext('2d'),W=c.width,H=c.height,s=W/ptW,need=Math.round(60*s),near=(r,g,b)=>Math.abs(r-69)<32&&Math.abs(g-129)<32&&Math.abs(b-142)<32;
- const rowHit=y=>{const d=x.getImageData(0,y,W,1).data;let run=0,best=0;for(let k=0;k<W;k++){const o=k*4;if(near(d[o],d[o+1],d[o+2])){run++;if(run>best)best=run}else run=0}return best>=need};
- let y=H-1;while(y>=0&&!rowHit(y))y--;if(y<0)return c;while(y>0&&rowHit(y-1))y--;
- const nh=Math.round(y-32*s);if(nh<40*s)return null;if(nh>=H)return c;const o=document.createElement('canvas');o.width=W;o.height=nh;o.getContext('2d').drawImage(c,0,0);return o}catch(e){return c}}
-function attachRec(i){const r=S.records[i];if(!r)return;const inp=document.createElement('input');inp.type='file';inp.accept='application/pdf,image/*';inp.style.cssText='position:fixed;left:-9999px;opacity:0';document.body.appendChild(inp);
- inp.onchange=async()=>{const f=inp.files&&inp.files[0];inp.remove();if(!f)return;toast('Adding invoice\u2026');
-  try{const cs=[];
-   if(f.type=='application/pdf'||/\.pdf$/i.test(f.name)){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';const pdf=await pdfjsLib.getDocument({data:await f.arrayBuffer()}).promise;
-    for(let n=1;n<=Math.min(pdf.numPages,r.mode=='purchase'?6:4);n++){const p=await pdf.getPage(n),v=p.getViewport({scale:Math.min(2,1500/p.getViewport({scale:1}).width)}),c=document.createElement('canvas');c.width=v.width;c.height=v.height;await p.render({canvasContext:c.getContext('2d'),viewport:v}).promise;const keep=n==pdf.numPages?stripSummary(c,p.getViewport({scale:1}).width):c;if(keep)cs.push(keep)}}
-   else if(/^image\//.test(f.type)){const b=await createImageBitmap(f),sc=Math.min(1,1600/Math.max(b.width,b.height)),c=document.createElement('canvas');c.width=Math.round(b.width*sc);c.height=Math.round(b.height*sc);c.getContext('2d').drawImage(b,0,0,c.width,c.height);cs.push(c)}
-   else return toast('Use a PDF, JPG or PNG');
-   const out=(await Promise.all(cs.map(c=>shrinkImg(c.toDataURL('image/jpeg',.85))))).filter(Boolean);if(!out.length)return toast('Could not read that file');
-   r.imgs=out;store();renderRecs();toast('Invoice added');openRec(i)}catch(e){toast('Could not add that file')}};
- inp.click()}
-/* v56: Replace invoice on a work invoice re-reads the new file: hours, amount, dates and Open/Closed are worked out again from it. Review, then Save changes. */
-function replaceInv(i){const r=S.records[i];if(!r||r.mode=='purchase')return attachRec(i);
- const inp=document.createElement('input');inp.type='file';inp.accept='application/pdf,image/*';inp.style.cssText='position:fixed;left:-9999px;opacity:0';document.body.appendChild(inp);
- inp.onchange=async()=>{const f=inp.files&&inp.files[0];inp.remove();if(!f)return;
-  editRec(i);const prev=S.rec;if(!prev||prev.rid!==r.rid)return;
-  await handle(f);const nr=S.rec;if(!nr||nr===prev||!nr.doc)return;
-  const skip=new Set(['src','low','shots','doc','loaded','imgs','tp','estTotal','shifts','hours','overtime','amount','jobDate','endDate','stMan','status','edited','rid']);
-  Object.keys(prev).forEach(k=>{if(skip.has(k))return;const v=nr[k];if(v==null||v===''||(typeof v=='object'&&!Array.isArray(v)&&!Object.keys(v).length))nr[k]=prev[k]});
-  nr.rid=prev.rid;nr.loaded=true;render();toast('New invoice read. Check the summary, then tap Save changes.')};
- inp.click()}
-function rmImg(i){const r=S.records[i];if(!r||!r.imgs)return;if(!confirm('Remove the attached invoice from this saved item? Its details stay.'))return;delete r.imgs;store();toast('Invoice removed');openRec(i)}
-function dlRec(i){const r=S.records[i];if(r)saveCombo(r)}
-/* open the PDF in a new tab instead of downloading it (the tab is opened right away so iPhone does not block it) */
-function viewRec(i){const r=S.records[i];if(!r)return;let w=null;try{w=window.open('','_blank');if(w)w.document.write('<meta name=viewport content="width=device-width"><p style="font:17px -apple-system,sans-serif;padding:28px;color:#555">Opening PDF\u2026</p>')}catch(e){}saveCombo(r,w||true)}
-/* v78: open a saved record back in the form. Saving then updates that same record instead of adding a copy. */
-function endEdit(){S.extra=[];try{showExtra()}catch(e){}S.rec=newRec();S.pages=[];S.undo=[];S.redo=[];S.sel=[];S.psel=[];S.words=[];S.img=null;const dw=$('#docwrap');if(dw)dw.style.display='none';const dz=$('#dupwarn');if(dz){dz.dataset.h='';dz.innerHTML=''}render();renderPages()}
-function cancelEdit(){endEdit();showSaved()}
-function editRec(i){const r=S.records[i];if(!r)return;
- if(S.rec&&S.rec.loaded&&!S.rec.rid&&!confirm('Replace the record you are working on with this saved one? Unsaved changes will be lost.'))return;
- closeRec();if(!r.rid){r.rid=Date.now().toString(36)+Math.random().toString(36).slice(2,7);store()}
- showWork();S.mode=r.mode;S.rec=JSON.parse(JSON.stringify(r));S.rec.loaded=true;S.pages=[];S.undo=[];S.redo=[];S.sel=[];S.psel=[];S.words=[];S.img=null;S.extra=[];try{showExtra()}catch(e){}
- const dw=$('#docwrap');if(dw)dw.style.display='none';$('#m1').className=r.mode=='purchase'?'on':'';$('#m2').className=r.mode=='freelance'?'on':'';$('.head h1').textContent='Edit saved record';
- render();renderPages();window.scrollTo(0,0)}
-document.addEventListener('keydown',e=>{if(e.key=='Escape')closeRec()});
-(function(){const s=document.createElement('style');s.textContent='#view{height:auto;min-height:120px;touch-action:pan-y}#layer{touch-action:auto!important}.zbtn{position:absolute;top:8px;right:8px;z-index:3;padding:6px 12px;font-size:13px;font-weight:700;border-radius:999px;background:rgba(255,255,255,.92);box-shadow:0 1px 4px rgba(0,0,0,.25)}'
- +'.wkh{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;font-weight:600;color:var(--mut);padding:0 4px;margin:10px 0 -4px}.wkh span+span{font-weight:500}'
- +'.dp{display:table;background:rgba(63,127,95,.14);color:#2f6b4f;border-radius:999px;padding:3px 10px;margin:5px 0 0 0;font-size:13px;font-weight:600}.dn{font-size:12px;color:var(--mut);margin-top:6px}'
- +'.srow.tap{cursor:pointer}.srow.tap:active{background:rgba(0,0,0,.04)}'
- +'.dup{display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:10px 12px;border:1px solid #e0a59b;background:var(--warn);border-radius:12px;font-size:14px}.dup>div{flex:1;min-width:0}.dup b{display:block}.dup span{display:block;font-size:13px;overflow-wrap:anywhere}.dup button{flex:0 0 auto;padding:8px 14px;font-weight:700}'
- +'.rmo{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center}'
- +'.rm{background:var(--bg);width:100%;max-width:520px;max-height:88vh;display:flex;flex-direction:column;border-radius:18px 18px 0 0;padding:14px 16px calc(14px + env(safe-area-inset-bottom,0px))}'
- +'.rmh{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}.rmh h3{margin:0}.rmh .x{width:34px;height:34px;padding:0}'
- +'.rmb{overflow-y:auto;flex:1;min-height:0}.rg{background:var(--card);border:1px solid var(--ln);border-radius:14px;padding:4px 14px;margin:0 0 10px}'
- +'.rr{display:flex;justify-content:space-between;gap:12px;padding:7px 0;font-size:14px}.rr+.rr{border-top:1px solid var(--ln)}.rr span{color:var(--mut)}.rr b{text-align:right;overflow-wrap:anywhere}.rr.hl b{background:#fff2a8;padding:0 4px;border-radius:4px}.rr.tt{font-weight:700}'
- +'.rmf{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}.rmf button{flex:1 1 40%}';document.head.appendChild(s)})();
-(function(){const s=document.createElement('style');s.textContent=['.sv{display:flex;flex-direction:column;gap:10px}.sv .sl{margin:0}.sv>button{width:100%}.sv .seg{margin:0}','.chips{display:flex;flex-wrap:wrap;gap:6px}.chips button{padding:6px 12px;border-radius:999px;font-size:13px;font-weight:600;background:#fff;color:var(--mut);border-color:var(--ln)}.chips button.on{background:var(--g);color:#fff;border-color:var(--g)}','.srt{display:flex;align-items:center;gap:10px}','.svs{position:relative}.svs input{padding-right:44px;-webkit-appearance:none;appearance:none}.svs input::-webkit-search-cancel-button{-webkit-appearance:none;display:none}.svs button{position:absolute;right:2px;top:50%;transform:translateY(-50%);border:0;background:transparent;padding:8px 12px;color:var(--mut);width:auto}.sv>.svs{margin:0}#svbody>button{width:100%}.tr{display:grid;grid-template-columns:minmax(0,1fr) 88px 88px;column-gap:6px;align-items:baseline;padding:9px 0;font-size:14px;overflow-wrap:anywhere}.tr+.tr{border-top:1px solid var(--ln)}.tr>:not(:first-child){text-align:right;white-space:nowrap}.tr b{font-weight:600}.tr .z,.tr b.z{color:var(--mut);font-weight:400}.tr.tot{font-weight:700}.tr.tot b{font-weight:700}.tr.th{border:0;padding:10px 0 2px;font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}.fixn{font-size:12px;color:var(--gd,#2f6b4f);margin-top:4px;line-height:1.4}.fixn[hidden]{display:none}.fixn a{color:inherit;font-weight:700}.srt label{flex:0 0 auto;margin:0}','.svsum{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:var(--mut);padding:0 2px}.svsum b{color:var(--fg);font-size:17px}','.sm{flex:1;min-width:0}.s1{font-weight:600;overflow-wrap:anywhere}.s2{font-size:12px;color:var(--mut);margin-top:1px}','.empty2{border:2px dashed var(--ln);border-radius:16px;padding:28px 16px;text-align:center;color:var(--mut)}','@media(max-width:900px){.nav button{padding:10px 6px;font-size:14px}}'].join('');document.head.appendChild(s)})();
-(function(){const s=document.createElement('style');s.textContent='.sl{background:var(--card);border:1px solid var(--ln);border-radius:14px;padding:6px 14px;margin:10px 0}.sl h4{margin:10px 0 2px;font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}.srow{display:flex;align-items:center;gap:10px;padding:9px 0;font-size:14px}.srow+.srow{border-top:1px solid var(--ln)}.srow span{flex:1;min-width:0}.srow b{white-space:nowrap}.srow .x{flex:0 0 32px;height:32px;padding:0}#f_category{width:100%}input[type=time]{padding-inline:8px;font-size:15px;min-width:0}';document.head.appendChild(s)})();
-
-
-/* ---------- v69: add-to-Home-Screen guide ---------- */
-(function(){
-const standalone=()=>{try{return navigator.standalone===true||matchMedia('(display-mode: standalone)').matches}catch(e){return false}};
-const li='margin:0 0 10px;padding-left:2px';
-window.installGuide=function(open){
- if(standalone())return '';
- return '<details'+(open?' open':'')+' style="margin:14px 0;background:var(--usr);border:1px solid #ecd3a8;border-radius:12px;padding:12px 14px"><summary style="font-weight:700;color:var(--fg);font-size:15px">Before you begin: add PaperTrail to your Home Screen</summary>'
- +'<div style="font-size:14px;line-height:1.5;margin-top:10px;color:var(--fg)">'
- +'<p style="margin:0 0 10px">Safari may delete a website\'s saved data after about a week without use. Installing PaperTrail on your Home Screen helps keep your invoices safe.</p>'
- +'<ol style="margin:0;padding-left:20px">'
- +'<li style="'+li+'">Open PaperTrail in <b>Safari</b>.</li>'
- +'<li style="'+li+'">Tap <b>Share</b> (the square with an up arrow). If you do not see it, tap <b>&bull;&bull;&bull;</b> first.</li>'
- +'<li style="'+li+'">Choose <b>Add to Home Screen</b>. If it is not listed, tap <b>View More</b>.</li>'
- +'<li style="'+li+'">Make sure <b>Open as Web App</b> is on, then tap <b>Add</b>.</li>'
- +'<li style="'+li+'">Open PaperTrail from the new Home Screen icon and create your account there.</li></ol>'
- +'<p style="margin:10px 0 0"><b>Moving existing invoices?</b> In Safari, open the <b>Data</b> menu and tap <b>Download backup</b>. In the Home Screen app, tap <b>Restore from a backup file</b> on the sign-in screen.</p>'
- +'<p style="margin:10px 0 0;font-weight:600">Save your recovery code. Your records are encrypted with your password, so the recovery code is your only way back in if you forget it.</p>'
- +'</div></details>';
-};
-/* Settings: always available */
-const d=document.querySelector('.side details');
-if(d){const w=document.createElement('div');w.innerHTML=installGuide(false);d.insertBefore(w,d.children[1])}
-})();
-
-/* ---------- v62: accounts (email + password, kept on this device) ---------- */
-/* PaperTrail accounts (v62): email + password sign-in, kept on this device.
-   Load AFTER app.js. It replaces only the lock screen (showLock). Everything else in app.js is untouched, apart from
-   the one-line change in idb() that gives each account its own saved-records slot (see README-auth.md).
-   Each account = email + password. The password never leaves the phone: it is stretched with PBKDF2 (310,000 rounds,
-   same as before) into (a) a check value used to sign in and (b) an AES-GCM key that encrypts that account's saved records.
-   There is no server and so no password reset: a forgotten password means that account's saved records cannot be opened. */
-(function(){
-const AK='pt_acct:',FK='pt_f:',LK='pt_l:',LAST='pt_last',MAXF=5,COOL=15*60000;
-const norm=s=>String(s||'').trim().toLowerCase();
-const rnd=n=>hex(crypto.getRandomValues(new Uint8Array(n)));
-const unhex=h=>new Uint8Array(h.match(/../g).map(x=>parseInt(x,16)));
-const uidOf=async em=>hex(await crypto.subtle.digest('SHA-256',new TextEncoder().encode('papertrail:'+em))).slice(0,24);
-/* email is mixed into the passphrase so the same password on two accounts still gives two different keys */
-const pp=(em,pw)=>em+'\u0000'+pw;
-const msg=(t,ok)=>{const m=$('#lm');if(m){m.textContent=t||'';m.style.color=ok?'#35a56f':''}};
-const esc=v=>String(v||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
-
-function ui(tab){
- S.uid=null;S.email=null;S.pp=null;
- let last='';try{last=localStorage.getItem(LAST)||''}catch(e){}
- const up=tab=='up';
- lockUI('<h2>PaperTrail</h2>'
- +'<div style="display:flex;gap:8px;margin:14px 0 4px"><button type="button" class="'+(up?'':'pri')+'" onclick="authTab(\'in\')">Sign in</button><button type="button" class="'+(up?'pri':'')+'" onclick="authTab(\'up\')">Create account</button></div>'
- +'<input id="em" type="email" inputmode="email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="Email" value="'+esc(up?'':last)+'">'
- +'<input id="pw" type="password" autocomplete="'+(up?'new-password':'current-password')+'" placeholder="Password'+(up?' (8+ characters)':'')+'">'
- +'<label style="display:flex;align-items:center;gap:8px;margin:0 0 10px;font:14px -apple-system,system-ui,sans-serif;letter-spacing:0;text-transform:none;color:var(--fg)"><input type="checkbox" style="width:auto;margin:0" onchange="[\'pw\',\'pw2\'].forEach(function(i){var e=document.getElementById(i);if(e)e.type=event.target.checked?\'text\':\'password\'})"> Show password</label>'
- +(up?'<input id="pw2" type="password" autocomplete="new-password" placeholder="Confirm password">'
-      +'<input id="ph" type="text" maxlength="100" autocomplete="off" autocapitalize="sentences" spellcheck="false" placeholder="Password hint">'
-      +'<div class="hint" style="font-size:12.5px;color:var(--mut);margin:-4px 0 8px">The hint shows on the sign-in screen to anyone holding this phone. Write something only you would get, not the password.</div>'
-      +installGuide(true)
-      +'<div class="hint" style="font-size:13px;color:var(--mut);margin:2px 0 8px">Your records are encrypted on this device with this password. On the next screen you will get a recovery code. Save it: it is the only way back in if you forget your password.</div>'
-   +'<button class="pri" type="button" onclick="authUp()">Create account</button>'
-  :'<button class="pri" type="button" onclick="authIn()">Sign in</button>'
-   +'<div style="display:flex;flex-direction:column;gap:2px;margin-top:6px"><button type="button" style="'+LNK+'" onclick="authForgot()">Forgot password?</button><button type="button" style="'+LNK+'" onclick="authHint()">Show my password hint</button><button type="button" style="'+LNK+'" onclick="authRestore()">Restore from a backup file</button></div><div class="hint" style="margin-top:18px;white-space:nowrap">Records are encrypted and saved on this device only.</div>')
- +'<div id="lm" class="msg" style="margin-top:10px"></div>');
- const f=$(up?'#em':(last?'#pw':'#em'));if(f)try{f.focus()}catch(e){}
-}
-window.authTab=ui;
-window.showLock=function(){S.uid=null;ui('in')};
-
-async function enter(uid,em,pw,o){
- S.uid=uid;S.email=em;S.pp=pp(em,pw);S.key=await dk(S.pp,o.e);S.records=[];S.learn={m:{},mi:{}};S.noStore=false;
- try{const x=await idb('get');if(x&&x.iv){try{const d=await dec(x);if(Array.isArray(d))S.records=d;else{S.records=d.records||[];S.learn={m:(d.learn&&d.learn.m)||{},mi:(d.learn&&d.learn.mi)||{}}}}catch(e){S.noStore=true;S.records=[]}}}catch(e){}
- try{const a=lockStatuses(),b=resyncStatuses();if(a||b)S.loaded=true,store()}catch(e){}
- S.loaded=true;try{learnUI()}catch(e){}try{localStorage.setItem(LAST,em)}catch(e){}
- const v=$('#ver');if(v)v.title=em;
- open_();
- try{renderRecs();if(S.noStore)st('Saved records could not be opened.')}catch(e){}
- setTimeout(()=>{try{if(typeof Tesseract!='undefined')rereadStatuses()}catch(e){}},3000);
- extras();
-}
-
-
-/* ---------- v71: recovery code + backup file ---------- */
-/* Recovery code: 20 random letters/numbers (100 bits). It encrypts a copy of the account's passphrase and that copy is kept on this device.
-   With the code, the saved records can be re-locked under a new password. Without it (and without the password) nothing can open them. */
-const RC='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const newCode=()=>{const b=crypto.getRandomValues(new Uint8Array(20));let s='';for(const x of b)s+=RC[x%32];return s.replace(/(.{4})(?=.)/g,'$1-')};
-const cn=c=>String(c||'').toUpperCase().replace(/[^A-Z2-9]/g,'');
-async function ck(code,salt){const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(cn(code)),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt:unhex(salt),iterations:310000,hash:'SHA-256'},k,{name:'AES-GCM',length:256},false,['encrypt','decrypt'])}
-async function wrap(code,passphrase){const s=rnd(16),iv=crypto.getRandomValues(new Uint8Array(12));const c=await crypto.subtle.encrypt({name:'AES-GCM',iv},await ck(code,s),new TextEncoder().encode(passphrase));return{s,iv:hex(iv),c:hex(c)}}
-async function unwrap(code,w){return new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:unhex(w.iv)},await ck(code,w.s),unhex(w.c)))}
-const getAcct=uid=>{try{return JSON.parse(localStorage.getItem(AK+uid))}catch(e){return null}};
-const setAcct=(uid,o)=>localStorage.setItem(AK+uid,JSON.stringify(o));
-
-function sheetText(code){return 'PaperTrail recovery sheet\n\nAccount email: '+(S.email||'')+'\nRecovery code: '+code+'\nCreated: '+new Date().toLocaleDateString()+'\n\nWhat this is: a spare key. If you forget your PaperTrail password, this code lets you set a new one without losing your saved records.\n\nHow to use it: on the PaperTrail sign-in screen tap "Forgot password?", then enter your email, this code and a new password.\n\nKeep this private. Anyone who has this code and your phone can reset your password.\n'}
-function showCode(code,next,title){
- const B='style="flex:1;min-width:0"';
- lockUI('<h2 style="margin-top:0">'+title+'</h2>'
- +'<p style="margin:0 0 10px;font-size:15px;line-height:1.5"><b>This recovery code is your one spare key.</b> Access to all invoices is password-protected. If you forget the password, you\u2019ll need this code to create a new one. Store it somewhere safe.</p>'
- +'<div style="font:600 18px var(--mono);letter-spacing:.04em;background:var(--card);border:1px solid var(--ln);border-radius:12px;padding:16px 10px;text-align:center;user-select:all;-webkit-user-select:all;word-break:break-all">'+code+'</div>'
- +'<p style="margin:14px 0 6px;font-size:14px;font-weight:600">Step 1: Save your recovery code outside this app</p>'
- +'<div style="display:flex;gap:8px"><button type="button" '+B+' onclick="authSaveFile()">Save as file</button><button type="button" '+B+' onclick="authEmail()">Email</button><button type="button" '+B+' onclick="authCopy()">Copy</button></div>'
- +'<p style="margin:14px 0 6px;font-size:14px;font-weight:600">Step 2: Paste it here to confirm you copied it correctly</p>'
- +'<input id="rcheck" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX" style="font-family:var(--mono)">'
- +'<button class="pri" type="button" onclick="authCodeDone()" style="margin-top:6px">Continue</button><div id="lm" class="msg" style="margin-top:10px"></div>');
- window.__rc=code;
- window.authCodeDone=()=>{if(cn($('#rcheck').value)!==cn(code))return msg('That does not match yet. Compare it with the code above, or paste what you saved.');window.__rc=null;next()};
-}
-window.authCopy=async function(){try{await navigator.clipboard.writeText(window.__rc);msg('Copied successfully. Paste in a safe place',1)}catch(e){try{const r=document.createRange();r.selectNodeContents($('#lock div[style*="mono"]'));const g=getSelection();g.removeAllRanges();g.addRange(r);msg('Selected. Tap Copy in the menu that appears.')}catch(x){msg('Press and hold the code to copy it.')}}};
-window.authSaveFile=async function(){const t=sheetText(window.__rc),f=new File([t],'PaperTrail recovery sheet.txt',{type:'text/plain'});
- try{if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f]});return}}catch(e){if(e&&e.name=='AbortError')return}
- try{const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=f.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);msg('Saved to your downloads.')}catch(e){msg('Could not save a file here. Use Copy instead.')}};
-window.authEmail=function(){const t=sheetText(window.__rc);location.href='mailto:'+encodeURIComponent(S.email||'')+'?subject='+encodeURIComponent('PaperTrail recovery sheet')+'&body='+encodeURIComponent(t)};
-window.authShare=window.authSaveFile;
-
-/* Settings buttons and the "no recovery code yet" bar, added once someone is signed in */
-function tidySettings(d){
- if(d.querySelector('.setgrid'))return;
- const lab=[...d.children].find(e=>e.tagName=='LABEL'),inp=d.querySelector('#idle');
- if(lab&&inp){const r=document.createElement('div');r.className='setrow';d.insertBefore(r,lab);r.appendChild(lab);r.appendChild(inp)}
- const g=document.createElement('div');g.className='setgrid';
- [...d.children].filter(e=>e.tagName=='BUTTON'||e.id=='bkinfo').forEach(e=>g.appendChild(e));
- d.appendChild(g)}
-function extras(){
- const d=document.querySelector('.side details');
- if(d&&!$('#rcbtn')){
-  const mk=(id,txt,fn)=>{const b=document.createElement('button');b.id=id;b.type='button';b.textContent=txt;b.onclick=fn;d.appendChild(b)};
-  mk('rcbtn','Create a new recovery code',()=>window.authMakeCode());
-  mk('pwbtn','Password & hint',()=>window.authPwHint());
-  mk('bkbtn','Download backup',()=>window.authBackup());
-  tidySettings(d);
- }
- let n=$('#rcbar');
- if(!n){const m=document.querySelector('.main');if(!m)return;n=document.createElement('div');n.id='rcbar';n.style.cssText='display:none;gap:8px;align-items:center;flex-wrap:wrap;background:var(--usr);border:1px solid #ecd3a8;border-radius:12px;padding:10px 12px;margin-bottom:14px';n.innerHTML='<span style="flex:1;min-width:180px">Set up a recovery code (a spare key) so a forgotten password never locks you out of your invoices.</span><button type="button" class="pri" style="flex:0 0 auto">Create</button>';n.children[1].onclick=()=>window.authMakeCode();m.insertBefore(n,m.firstChild)}
- const o=getAcct(S.uid);n.style.display=o&&!o.rw?'flex':'none';
- try{window.bkRefresh&&window.bkRefresh()}catch(e){}
-}
-window.authMakeCode=async function(){
- if(!S.uid||!S.pp)return;
- const o=getAcct(S.uid);if(!o)return;
- if(o.rw&&!confirm('This replaces your current recovery code. The old one will stop working. Continue?'))return;
- const code=newCode();o.rw=await wrap(code,S.pp);setAcct(S.uid,o);
- showCode(code,()=>{open_();extras()},'Save your recovery code');
-};
-
-/* v19: change password while signed in. Re-encrypts the saved records under the new password; the old recovery code stops working, so a new one is made. */
-window.authChangePw=function(){
- const o=S.uid&&getAcct(S.uid);if(!o||!S.pp)return;
- if(S.noStore){alert('Your saved records could not be opened, so the password cannot be changed safely.');return}
- const old=document.getElementById('pwov');if(old)old.remove();
- const ov=document.createElement('div');ov.id='pwov';ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px';
- ov.innerHTML='<div style="background:var(--card,#fff);color:var(--fg,#111);border-radius:16px;padding:18px;width:100%;max-width:380px;box-shadow:0 10px 40px rgba(0,0,0,.3)"><h2 style="margin:0 0 10px">Update password</h2>'
-  +'<input id="cp0" type="password" autocomplete="current-password" placeholder="Current password">'
-  +'<input id="cp1" type="password" autocomplete="new-password" placeholder="New password (8+ characters)">'
-  +'<input id="cp2" type="password" autocomplete="new-password" placeholder="Confirm new password">'
-  +'<div id="cpm" style="color:#b3261e;min-height:20px;font-size:14px;margin:6px 0"></div>'
-  +'<div style="display:flex;gap:8px"><button type="button" id="cpx">Cancel</button><button type="button" class="pri" id="cps">Update password</button></div></div>';
- document.body.appendChild(ov);
- const g=i=>document.getElementById(i),m=t=>{g('cpm').textContent=t||''};
- g('cpx').onclick=()=>ov.remove();
- g('cps').onclick=async()=>{const a=g('cp0').value,b=g('cp1').value,c=g('cp2').value;
-  if(!a||!b||!c)return m('Fill in all three boxes.');
-  if(b.length<8)return m('New password needs 8 or more characters.');
-  if(b!==c)return m('The new passwords do not match.');
-  if(b===a)return m('Choose a different password.');
-  if(o.hint&&o.hint.toLowerCase().includes(b.toLowerCase()))return m('Your hint contains this password. Change the hint first.');
-  const btn=g('cps');btn.disabled=true;
-  try{
-   if(await hash(pp(S.email,a),unhex(o.s))!==o.h){btn.disabled=false;return m('Current password is not right.')}
-   const np=pp(S.email,b),salt=rnd(16),n={s:salt,h:await hash(np,unhex(salt)),e:rnd(16),...(o.hint?{hint:o.hint}:{})},nk=await dk(np,n.e),
-    iv=crypto.getRandomValues(new Uint8Array(12)),ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},nk,new TextEncoder().encode(JSON.stringify(learnPack())));
-   await idb('put',{iv,c:ct});setAcct(S.uid,n);S.pp=np;S.key=nk;
-   let code=null;if(o.rw){code=newCode();n.rw=await wrap(code,np);setAcct(S.uid,n)}
-   ov.remove();try{window.bkChanged&&window.bkChanged()}catch(e){}
-   if(code)showCode(code,()=>{open_();extras()},'Password changed. Save your new recovery code');else{try{toast('Password changed')}catch(e){}extras()}
-  }catch(e){btn.disabled=false;m('Could not change the password. Nothing was changed.')}}
-};
-window.authHint=async function(){
- const em=norm(($('#em')||{}).value);if(!em)return msg('Enter your email first.');
- const o=getAcct(await uidOf(em));
- msg(o?(o.hint?'Hint: '+o.hint:'No hint was set for this account. Tap Forgot password? to use your recovery code.'):'No account for this email on this device.');
-};
-/* v53: one "Password & hint" dialog (replaces the separate Update password / Update password hint buttons). Leave the password boxes empty to change only the hint. */
-window.authPwHint=function(){
- const o=S.uid&&getAcct(S.uid);if(!o||!S.pp)return;
- const old=document.getElementById('pwov');if(old)old.remove();
- const ov=document.createElement('div');ov.id='pwov';ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto';
- const LB='style="margin:10px 0 2px;font-size:13px;font-weight:600;color:var(--mut)"';
- ov.innerHTML='<div style="background:var(--card,#fff);color:var(--fg,#111);border-radius:16px;padding:18px;width:100%;max-width:380px;box-shadow:0 10px 40px rgba(0,0,0,.3)"><h2 style="margin:0 0 4px">Password &amp; hint</h2>'
-  +'<div '+LB+'>Change password</div>'
-  +'<input id="cp0" type="password" autocomplete="current-password" placeholder="Current password">'
-  +'<input id="cp1" type="password" autocomplete="new-password" placeholder="New password (8+ characters)">'
-  +'<input id="cp2" type="password" autocomplete="new-password" placeholder="Confirm new password">'
-  +'<div '+LB+'>Password hint</div>'
-  +'<input id="hn1" type="text" maxlength="100" autocomplete="off" spellcheck="false" placeholder="Password hint (optional)" value="'+esc(o.hint||'')+'">'
-  +'<div id="cpm" style="color:#b3261e;min-height:20px;font-size:14px;margin:6px 0"></div>'
-  +'<div style="display:flex;gap:8px"><button type="button" id="cpx">Cancel</button><button type="button" class="pri" id="cps">Save</button></div></div>';
- document.body.appendChild(ov);
- const g=i=>document.getElementById(i),m=t=>{g('cpm').textContent=t||''};
- g('cpx').onclick=()=>ov.remove();
- g('cps').onclick=async()=>{const a=g('cp0').value,b=g('cp1').value,c=g('cp2').value,h=g('hn1').value.trim(),chg=!!(a||b||c),hintChg=h!==String(o.hint||'');
-  if(!chg&&!hintChg){ov.remove();return}
-  if(chg){
-   if(S.noStore)return m('Your saved records could not be opened, so the password cannot be changed safely.');
-   if(!a||!b||!c)return m('Fill in all three password boxes, or leave them empty to change only the hint.');
-   if(b.length<8)return m('New password needs 8 or more characters.');
-   if(b!==c)return m('The new passwords do not match.');
-   if(b===a)return m('Choose a different password.');
-  }
-  const pw=chg?b:S.pp.split('\u0000').slice(1).join('\u0000');
-  if(h&&pw&&h.toLowerCase().includes(pw.toLowerCase()))return m('The hint can not contain your password.');
-  if(!chg){const cur=getAcct(S.uid);if(!cur){ov.remove();return}
-   if(h)cur.hint=h;else delete cur.hint;
-   setAcct(S.uid,cur);ov.remove();
-   try{window.bkChanged&&window.bkChanged()}catch(e){}
-   try{toast(h?'Hint saved':'Hint removed')}catch(e){}return}
-  const btn=g('cps');btn.disabled=true;
-  try{
-   if(await hash(pp(S.email,a),unhex(o.s))!==o.h){btn.disabled=false;return m('Current password is not right.')}
-   const np=pp(S.email,b),salt=rnd(16),n={s:salt,h:await hash(np,unhex(salt)),e:rnd(16),...(h?{hint:h}:{})},nk=await dk(np,n.e),
-    iv=crypto.getRandomValues(new Uint8Array(12)),ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},nk,new TextEncoder().encode(JSON.stringify(learnPack())));
-   await idb('put',{iv,c:ct});setAcct(S.uid,n);S.pp=np;S.key=nk;
-   let code=null;if(o.rw){code=newCode();n.rw=await wrap(code,np);setAcct(S.uid,n)}
-   ov.remove();try{window.bkChanged&&window.bkChanged()}catch(e){}
-   if(code)showCode(code,()=>{open_();extras()},'Password changed. Save your new recovery code');else{try{toast('Password changed')}catch(e){}extras()}
-  }catch(e){btn.disabled=false;m('Could not change the password. Nothing was changed.')}}
-};
-/* change (or remove) the hint while signed in, same place as Change password */
-window.authChangeHint=function(){
- const o=S.uid&&getAcct(S.uid);if(!o||!S.pp)return;
- const old=document.getElementById('hnov');if(old)old.remove();
- const ov=document.createElement('div');ov.id='hnov';ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px';
- ov.innerHTML='<div style="background:var(--card,#fff);color:var(--fg,#111);border-radius:16px;padding:18px;width:100%;max-width:380px;box-shadow:0 10px 40px rgba(0,0,0,.3)"><h2 style="margin:0 0 6px">Password hint</h2>'
-  +'<p style="margin:0 0 10px;font-size:13px;line-height:1.45;color:var(--mut)">Shown on the sign-in screen to anyone holding this phone. Write something only you would get, not the password. Leave it empty to remove the hint.</p>'
-  +'<input id="hn1" type="text" maxlength="100" autocomplete="off" spellcheck="false" placeholder="Password hint" value="'+esc(o.hint||'')+'">'
-  +'<div id="hnm" style="color:#b3261e;min-height:20px;font-size:14px;margin:6px 0"></div>'
-  +'<div style="display:flex;gap:8px"><button type="button" id="hnx">Cancel</button><button type="button" class="pri" id="hns">Save hint</button></div></div>';
- document.body.appendChild(ov);
- const g=i=>document.getElementById(i);
- g('hnx').onclick=()=>ov.remove();
- g('hns').onclick=()=>{const h=g('hn1').value.trim(),pw=S.pp.split('\u0000').slice(1).join('\u0000');
-  if(h&&pw&&h.toLowerCase().includes(pw.toLowerCase())){g('hnm').textContent='The hint can not contain your password.';return}
-  const c=getAcct(S.uid);if(!c){ov.remove();return}
-  if(h)c.hint=h;else delete c.hint;
-  setAcct(S.uid,c);ov.remove();
-  try{window.bkChanged&&window.bkChanged()}catch(e){}
-  try{toast(h?'Hint saved':'Hint removed')}catch(e){}};
- try{g('hn1').focus()}catch(e){}
-};
-window.authForgot=function(){
- let last='';try{last=localStorage.getItem(LAST)||''}catch(e){}
- lockUI('<h2>Reset password</h2><p style="margin:0 0 10px;font-size:14px;line-height:1.5">Enter your email, the recovery code you saved, and a new password. Your saved records stay as they are. Tip: you can paste the whole recovery sheet into the code box.</p>'
- +'<input id="em" type="email" inputmode="email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Email" value="'+esc(last)+'">'
- +'<input id="rc" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Recovery code (looks like AB12-CD34-...)">'
- +'<input id="pw" type="password" autocomplete="new-password" placeholder="New password (8+ characters)">'
- +'<input id="pw2" type="password" autocomplete="new-password" placeholder="Confirm new password">'
- +'<button class="pri" type="button" onclick="authReset()">Reset password</button>'
- +'<button type="button" style="'+LNK+'" onclick="authHint()">Show my password hint</button>'
- +'<button type="button" style="'+LNK+'" onclick="authTab(\'in\')">Back</button><div id="lm" class="msg" style="margin-top:10px"></div>');
-};
-window.authReset=async function(){
- try{
-  const rawc=$('#rc').value,fm=rawc.match(/(?:[A-Z2-9]{4}-){4}[A-Z2-9]{4}/i),em=norm($('#em').value),code=cn(fm?fm[0]:rawc),p1=$('#pw').value,p2=$('#pw2').value;
-  if(!em||code.length<20)return msg('Enter your email and the full recovery code.');
-  if(p1.length<8)return msg('Use at least 8 characters for the new password.');
-  if(p1!==p2)return msg('The two passwords do not match.');
-  const uid=await uidOf(em),lock=+localStorage.getItem(LK+uid)||0;
-  if(Date.now()<lock)return msg('Too many wrong attempts. Try again in '+Math.ceil((lock-Date.now())/60000)+' minute(s).');
-  const o=getAcct(uid);
-  if(!o)return msg('No account for this email on this device. If you have a backup file, use Restore from a backup file first.');
-  if(!o.rw)return msg('This account has no recovery code. Sign in with your password to create one.');
-  if(o.hint&&o.hint.toLowerCase().includes(p1.toLowerCase()))return msg('Your hint contains this new password. Choose a different password.');
-  const bad=()=>{const f=(+localStorage.getItem(FK+uid)||0)+1;if(f>=MAXF){localStorage.removeItem(FK+uid);localStorage.setItem(LK+uid,String(Date.now()+COOL));return msg('Too many wrong attempts. Locked for 15 minutes.')}localStorage.setItem(FK+uid,String(f));msg('That recovery code is not right. '+(MAXF-f)+' attempt'+(MAXF-f==1?'':'s')+' left.')};
-  let old;try{old=await unwrap(code,o.rw)}catch(e){return bad()}
-  if(await hash(old,unhex(o.s))!==o.h)return bad();
-  /* open the records with the old passphrase first; change nothing until that works */
-  S.uid=uid;let recs=null;
-  try{const x=await idb('get');if(x&&x.iv){S.key=await dk(old,o.e);recs=await dec(x)}}catch(e){S.uid=null;S.key=null;return msg('The saved records could not be opened, so nothing was changed.')}
-  const np=pp(em,p1),salt=rnd(16),n={s:salt,h:await hash(np,unhex(salt)),e:rnd(16),...(o.hint?{hint:o.hint}:{})};
-  n.rw=await wrap(code,np);
-  if(recs){S.key=await dk(np,n.e);const iv=crypto.getRandomValues(new Uint8Array(12)),c=await crypto.subtle.encrypt({name:'AES-GCM',iv},S.key,new TextEncoder().encode(JSON.stringify(recs)));await idb('put',{iv,c})}
-  setAcct(uid,n);localStorage.removeItem(FK+uid);localStorage.removeItem(LK+uid);
-  await enter(uid,em,p1,n);
-  try{toast('Password changed')}catch(e){}
- }catch(e){S.uid=null;msg('Could not reset the password.')}
-};
-
-/* Backup file: the encrypted records plus the account's sign-in details. It can be opened only with the password or recovery code. */
-window.authBackup=async function(){
- if(!S.uid)return;
- window.__bkBusy=true;
- try{
-  await store();const x=await idb('get'),o=getAcct(S.uid);
-  const f={app:'papertrail',v:1,uid:S.uid,acct:o,state:x&&x.iv?{iv:hex(x.iv),c:hex(x.c)}:null,saved:new Date().toISOString()};
-  const name='PaperTrail Backup File.json';
-  const file=new File([JSON.stringify(f)],name,{type:'application/json'});
-  const r=await window.deliverFile(file);
-  if(r==='cancel')return;
-  window.bkMark();toast(r==='shared'?'Backup ready':'Backup saved');
- }catch(e){alert('Could not make a backup.')}
- finally{window.__bkBusy=false}
-};
-window.authRestore=function(){
- const i=document.createElement('input');i.type='file';i.accept='.json,application/json';
- i.onchange=async()=>{
-  const fl=i.files[0];if(!fl)return;
-  try{
-   const j=JSON.parse(await fl.text());
-   if(j.app!=='papertrail'||!j.uid||!j.acct||!j.acct.h||!j.acct.s||!j.acct.e)throw 0;
-   if(getAcct(j.uid)&&!confirm('An account for this email is already on this device. Replace its saved records and sign-in with this backup?'))return;
-   if(j.state){S.uid=j.uid;try{await idb('put',{iv:unhex(j.state.iv),c:unhex(j.state.c).buffer})}finally{S.uid=null}}
-   setAcct(j.uid,j.acct);try{window.bkRestored(j.uid,Date.parse(j.saved))}catch(e){}
-   msg('Backup restored. Now sign in with the email and password (or use Forgot password with the recovery code) from when the backup was made.');
-  }catch(e){msg('That file is not a PaperTrail backup.')}
- };
- i.click();
-};
-
-window.authUp=async function(){
- try{
-  const em=norm($('#em').value),p1=$('#pw').value,p2=$('#pw2').value;
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(em))return msg('Enter a valid email address.');
-  if(p1.length<8)return msg('Use at least 8 characters for the password.');
-  if(p1!==p2)return msg('The two passwords do not match.');
-  const hint=(($('#ph')||{}).value||'').trim();
-  if(hint&&hint.toLowerCase().includes(p1.toLowerCase()))return msg('The hint can not contain your password.');
-  if(!hint&&!confirm('You have not added a password hint. Create the account without one?')){const h=$('#ph');if(h)try{h.focus()}catch(e){}return msg('Add a password hint, then tap Create account.')}
-  const uid=await uidOf(em);
-  if(localStorage.getItem(AK+uid))return msg('This email already has an account on this device. Tap Sign in.');
-  const salt=rnd(16),o={s:salt,h:await hash(pp(em,p1),unhex(salt)),e:rnd(16)},code=newCode();
-  o.rw=await wrap(code,pp(em,p1));if(hint)o.hint=hint;
-  localStorage.setItem(AK+uid,JSON.stringify(o));
-  showCode(code,()=>enter(uid,em,p1,o),'Save your recovery code');
- }catch(e){msg('Could not create the account on this device.')}
-};
-
-window.authIn=async function(){
- try{
-  const em=norm($('#em').value),pw=$('#pw').value;
-  if(!em||!pw)return msg('Enter your email and password.');
-  const uid=await uidOf(em),lock=+localStorage.getItem(LK+uid)||0;
-  if(Date.now()<lock)return msg('Too many wrong attempts. Try again in '+Math.ceil((lock-Date.now())/60000)+' minute(s).');
-  let o=null;try{o=JSON.parse(localStorage.getItem(AK+uid))}catch(e){}
-  if(!o){await hash(pp(em,pw),unhex(rnd(16)));return msg('No account for this email on this device. Accounts are stored on the device where they were created. Use Create account.')}
-  if(await hash(pp(em,pw),unhex(o.s))===o.h){localStorage.removeItem(FK+uid);localStorage.removeItem(LK+uid);return enter(uid,em,pw,o)}
-  const f=(+localStorage.getItem(FK+uid)||0)+1;
-  if(f>=MAXF){localStorage.removeItem(FK+uid);localStorage.setItem(LK+uid,String(Date.now()+COOL));return msg('Too many wrong attempts. Locked for 15 minutes.')}
-  localStorage.setItem(FK+uid,String(f));msg('Wrong email or password. '+(MAXF-f)+' attempt'+(MAXF-f==1?'':'s')+' left.'+(o.hint?' Hint: '+o.hint:''));
- }catch(e){msg('Could not sign in.')}
-};
-
-/* the app calls showLock() at load, before this file runs: draw the new screen now */
-if($('#lock')&&$('#lock').style.display!='none')window.showLock();
-})();
-
-/* ---------- v82: backup reminders + CSV export ---------- */
-(function(){
-const BKK='pt_bk:',CHK='pt_chg:',SNK='pt_bksnz:',STALE_DAYS=7,SNOOZE_DAYS=3,DAY=864e5;
-const gl=k=>{try{return +localStorage.getItem(k)||0}catch(e){return 0}};
-const sl=(k,v)=>{try{localStorage.setItem(k,String(v))}catch(e){}};
-const ago=ms=>{const d=Math.floor((Date.now()-ms)/DAY);if(d<1)return 'today';if(d==1)return 'yesterday';if(d<14)return d+' days ago';if(d<60){const w=Math.floor(d/7);return w+' weeks ago'}const m=Math.floor(d/30);return m+' months ago'};
-
-/* Save a file: share sheet where the phone offers one (Save to Files, AirDrop, Mail), otherwise a normal download.
-   Returns 'shared', 'downloaded' or 'cancel'. */
-window.deliverFile=async function(file){
- if(navigator.canShare&&navigator.canShare({files:[file]})){
-  try{await navigator.share({files:[file]});return 'shared'}catch(e){if(e&&e.name==='AbortError')return 'cancel'}
- }
- const a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=file.name;document.body.appendChild(a);a.click();a.remove();
- setTimeout(()=>URL.revokeObjectURL(a.href),4000);return 'downloaded';
-};
-
-/* ----- backup reminder ----- */
-/* Only timestamps are kept (never record contents). A reminder shows when there are saved records and either no backup was ever made,
-   or the last backup is a week or more old AND the records have changed since. */
-function bkNeed(){
- if(!S.uid||!S.key||!S.records||!S.records.length)return null;
- if(Date.now()<gl(SNK+S.uid))return null;
- const bk=gl(BKK+S.uid),chg=gl(CHK+S.uid);
- if(!bk)return{kind:'never'};
- if(chg>bk&&Date.now()-bk>=STALE_DAYS*DAY)return{kind:'old',bk};
- return null;
-}
-function bkRefresh(){
- const m=document.querySelector('.main');if(!m)return;
- /* Settings line */
- const b=$('#bkbtn');
- if(b){let i=$('#bkinfo');if(!i){i=document.createElement('div');i.id='bkinfo';i.className='hint';i.style.cssText='margin-top:10px';b.parentNode.insertBefore(i,b)}
-  const t=S.uid?gl(BKK+S.uid):0;i.textContent=t?'Last backup: '+ago(t):'No backup yet'}
- /* reminder bar */
- let bar=$('#bkbar');
- if(!bar){
-  bar=document.createElement('div');bar.id='bkbar';
-  bar.style.cssText='display:none;gap:8px;align-items:center;flex-wrap:wrap;background:var(--usr);border:1px solid #ecd3a8;border-radius:12px;padding:10px 12px;margin-bottom:14px';
-  bar.innerHTML='<div style="flex:1;min-width:180px"><b class="bk1"></b><div class="hint bk2" style="margin-top:2px"></div></div>'
-   +'<button type="button" class="pri" style="flex:0 0 auto">Download backup</button>'
-   +'<button type="button" style="flex:0 0 auto;background:transparent;border-color:transparent;color:var(--mut)">Later</button>';
-  bar.children[1].onclick=()=>window.authBackup();
-  bar.children[2].onclick=()=>{if(S.uid)sl(SNK+S.uid,Date.now()+SNOOZE_DAYS*DAY);bkRefresh()};
-  const rc=$('#rcbar');m.insertBefore(bar,rc?rc.nextSibling:m.firstChild);
- }
- const n=S.tab=='saved'?bkNeed():null;
- if(!n){bar.style.display='none';return}
- bar.querySelector('.bk1').textContent=n.kind=='never'?'No backup yet':'Last backup: '+ago(n.bk);
- bar.querySelector('.bk2').textContent=n.kind=='never'
-  ?'Your records live only on this phone.'
-  :'You have saved or changed records since then.';
- bar.style.display='flex';
-}
-window.bkRefresh=bkRefresh;
-{const _sw=showWork,_ss=showSaved;showWork=function(){const r=_sw.apply(this,arguments);try{bkRefresh()}catch(e){}return r};showSaved=function(){const r=_ss.apply(this,arguments);try{bkRefresh()}catch(e){}return r}}
-window.bkChanged=function(){if(window.__bkBusy||!S.uid)return;sl(CHK+S.uid,Date.now());bkRefresh()};
-window.bkMark=function(){if(!S.uid)return;sl(BKK+S.uid,Date.now());try{localStorage.removeItem(SNK+S.uid)}catch(e){}bkRefresh()};
-window.bkRestored=function(uid,ms){if(uid&&ms)sl(BKK+uid,ms)};
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)try{bkRefresh()}catch(e){}});
-
-/* ----- CSV export (Saved tab) ----- */
-const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-const dcell=v=>{const d=Parser.pd(v);return d?iso(d):String(v||'')};
-const n2=v=>v==null||v===''?'':(+v).toFixed(2);
-/* quote for CSV; text that starts with = + - @ is prefixed with ' so a spreadsheet never treats scanned text as a formula */
-const q=(v,txt)=>{let s=v==null?'':String(v);if(txt&&/^[=+\-@\t\r]/.test(s))s="'"+s;return /[",\r\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s};
-const itemName=i=>String(i.n||'Item').replace(/\s*(\.{2,}|\u2026)\s*$/,'').trim();
-const shiftsTxt=r=>(r.shifts||[]).filter(x=>x&&(N(x.hours)!=null||(x.start&&x.end))).map(x=>[shDate(x.date),x.start&&x.end?t12(x.start)+' \u2013 '+t12(x.end):'',N(x.hours)!=null?(+N(x.hours).toFixed(2))+' h':''].filter(Boolean).join(' ')).join('; ');
-const hrs=v=>v==null?'':+v.toFixed(2);
-const X={name:'expenses',
- head:['Date','Merchant','Location','Category','Receipt/Invoice #','Items','Subtotal','Shipping','Discount','Tax','Total','Personal items removed'],
- tx:[0,1,2,3,4,5],
- row:r=>{const o=compute(r);return[dcell(r.date),niceMerch(r.merchant),r.location,r.category,r.number,(r.items||[]).filter(i=>!i.off).map(itemName).join('; '),n2(o.sub),o.ship?n2(o.ship):'',o.disc?n2(o.disc):'',N(r.tax)==null?'':n2(o.tax),n2(o.total),o.removed?n2(o.removed):'']}};
-const W={name:'work invoices',
- head:['Job date','Event end date','Employer','Client','Location','Invoice #','Regular hours','Overtime hours','Total hours','Shifts','Amount','Round-trip miles','IRS rate per mile','Mileage deduction','Net-30 payout date','Notes','Status'],
- tx:[0,1,2,3,4,5,9,14,15],
- row:r=>{const o=compute(r);return[dcell(r.jobDate),dcell(r.endDate),r.employer,r.client,r.location,r.invoice,hrs(N(r.hours)),hrs(N(r.overtime)),o.tot==null?'':n2(o.tot),shiftsTxt(r),N(r.amount)==null?'':n2(N(r.amount)),o.rt==null?'':o.rt,o.rate==null||o.rt==null?'':o.rate,o.wear==null?'':n2(o.wear),est(r)||'',String(r.notes||'').replace(/\s+/g,' ').trim(),stOf(r)=='open'?'Open':'Closed']}};
-
-const pdate=s=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(s||'');return m?new Date(+m[1],m[2]-1,+m[3]).getTime():null};
-function rangeOf(c){
- if(c.rng==='all')return null;
- if(c.rng==='custom')return{lo:pdate(c.from),hi:pdate(c.to),custom:true};
- const y=+c.rng;return{lo:new Date(y,0,1).getTime(),hi:new Date(y,11,31).getTime()};
-}
-/* what is on the Saved tab right now (Expenses or Work invoices, plus the category chip), narrowed by the chosen dates, oldest first */
-function csvPick(){
- const x=S.sv.sec==='x',T=x?X:W,list=svList().map(a=>a[0]),R=rangeOf(S.csv);let skipped=0,bad=false;
- if(R&&R.custom&&R.lo!=null&&R.hi!=null&&R.lo>R.hi)bad=true;
- const out=[];
- if(!bad)list.forEach(r=>{if(!R){out.push(r);return}const d=recDate(r);if(d==null){skipped++;return}if(R.lo!=null&&d<R.lo)return;if(R.hi!=null&&d>R.hi)return;out.push(r)});
- out.sort((p,r)=>(recDate(p)??Infinity)-(recDate(r)??Infinity));
- return{x,T,list,out,skipped,bad,R,wait:!!(R&&R.custom&&R.lo==null&&R.hi==null)};
-}
-function csvName(T){
- const c=S.csv;let part;
- if(c.rng==='all')part='all dates';
- else if(c.rng==='custom')part=c.from&&c.to?c.from+' to '+c.to:c.from?'from '+c.from:'to '+c.to;
- else part=c.rng;
- const cat=T===X&&S.sv.cat!=='All'?' - '+S.sv.cat:'';
- return ('PaperTrail '+T.name+cat+' '+part+'.csv').replace(/[\/\\:*?"<>|]/g,'-');
-}
-function csvUpdate(){
- const c=S.csv,sel=$('#csvr'),f=$('#csvf'),t=$('#csvt');
- if(sel)c.rng=sel.value;if(f)c.from=f.value;if(t)c.to=t.value;
- const cu=$('#csvc');if(cu)cu.style.display=c.rng==='custom'?'':'none';
- const p=csvPick(),n=p.out.length,tot=+p.out.reduce((s,r)=>s+(recAmt(r)||0),0).toFixed(2),word=p.x?'expense':'work invoice';
- let h;
- if(p.bad)h='The start date is after the end date.';
- else if(p.wait)h='Pick a start date, an end date, or both.';
- else if(!n)h='Nothing saved in this range.';
- else h='<b>'+n+' '+word+(n==1?'':'s')+'</b> \u00b7 '+M(tot);
- if(p.skipped)h+='<div class="hint" style="margin-top:4px">'+p.skipped+(p.skipped==1?' record has':' records have')+' no date and '+(p.skipped==1?'is':'are')+' left out. Choose All dates to include '+(p.skipped==1?'it':'them')+'.</div>';
- $('#csvsum').innerHTML=h;
- $('#csvgo').disabled=p.bad||p.wait||!n;
-}
-window.csvSet=csvUpdate;
-window.csvOpen=function(){
- if(!S.csv)S.csv={rng:'all',from:'',to:''};
- const x=S.sv.sec==='x',all=S.records.filter(r=>(r.mode=='purchase')==x),ys=[...new Set(all.map(recDate).filter(d=>d!=null).map(d=>new Date(d).getFullYear()))].sort((a,b)=>b-a);
- if(S.csv.rng!=='all'&&S.csv.rng!=='custom'&&!ys.includes(+S.csv.rng))S.csv.rng='all';
- closeRec();
- const c=S.csv,o=document.createElement('div');o.id='recmodal';o.className='rmo';o.onclick=e=>{if(e.target===o)closeRec()};
- const opts='<option value="all">All dates</option>'+ys.map(y=>'<option value="'+y+'"'+(c.rng==y?' selected':'')+'>'+y+'</option>').join('')+'<option value="custom"'+(c.rng==='custom'?' selected':'')+'>Custom range\u2026</option>';
- const what=x?'Expenses'+(S.sv.cat!=='All'?' \u00b7 '+esc(S.sv.cat):''):'Work invoices'+(S.sv.st&&S.sv.st!=='All'?' \u00b7 '+(S.sv.st==='open'?'Open only':'Closed only'):'');
- o.innerHTML='<div class="rm" role="dialog" aria-modal="true" aria-label="Export CSV"><div class="rmh"><h3>Export CSV</h3><button class="x" onclick="closeRec()" aria-label="Close">\u2715</button></div>'
-  +'<div class="rmb"><div style="display:flex;flex-direction:column;gap:12px">'
-  +'<div class="hint">'+what+(x&&S.sv.cat!=='All'?' (change the category on the Saved tab)':'')+(svSearching()?' matching \u201c'+esc(S.sv.q.trim())+'\u201d (clear the search on the Saved tab for everything)':'')+'. Opens in Excel, Numbers or Google Sheets.</div>'
-  +'<div><label for="csvr">Dates'+(x?'':' (job date)')+'</label><select id="csvr" onchange="csvSet()">'+opts+'</select></div>'
-  +'<div id="csvc" class="row" style="margin:0;'+(c.rng==='custom'?'':'display:none')+'"><div><label for="csvf">From</label><input id="csvf" type="date" value="'+esc(c.from)+'" onchange="csvSet()"></div><div><label for="csvt">To</label><input id="csvt" type="date" value="'+esc(c.to)+'" onchange="csvSet()"></div></div>'
-  +'<div id="csvsum" style="font-size:15px"></div></div></div>'
-  +'<div class="rmf"><button id="csvgo" class="pri" onclick="csvGo()">Download CSV</button><button onclick="closeRec()">Cancel</button></div></div>';
- document.body.appendChild(o);document.body.style.overflow='hidden';csvUpdate();
-};
-window.csvGo=async function(){
- const p=csvPick();if(p.bad||p.wait||!p.out.length)return;
- const T=p.T,lines=[T.head.map(h=>q(h)).join(','),...p.out.map(r=>T.row(r).map((v,i)=>q(v,T.tx.includes(i))).join(','))];
- const file=new File(['\uFEFF'+lines.join('\r\n')+'\r\n'],csvName(T),{type:'text/csv'});
- try{const r=await window.deliverFile(file);if(r==='cancel')return;closeRec();toast(r==='shared'?'CSV ready':'CSV saved')}catch(e){alert('Could not make the CSV file.')}
-};
-})();
-
-/* v86: cleaner item list + totals card (look only) */
-(function(){const s=document.createElement('style');s.textContent=[
-'.ic .nl{display:none!important}',
-'.ic .ib textarea.in{field-sizing:content}',
-'.ic{gap:12px;padding:14px;margin-bottom:12px;box-shadow:0 1px 2px rgba(35,47,58,.05)}',
-'.ic.off{opacity:.65;box-shadow:none}',
-'.ic .ib textarea.in{min-height:0!important;padding:8px 32px 8px 10px!important;font-size:15.5px!important;font-weight:600}',
-'.ic .il{margin-top:8px;padding-top:10px;border-top:1px solid var(--ln)}',
-'.ic:not(.f1) .il label{display:none}',
-'.ic .tt b{padding-bottom:9px;font-size:16px}',
-'.ihint{margin:0 0 12px!important}',
-'.cal2{background:var(--card)}',
-'.cal2 .crow{padding:9px 0!important;border-top:0!important;align-items:baseline}',
-'.cal2 .cl{padding-top:0!important}',
-'.cal2 .cv{font-size:16px!important;font-weight:600}',
-'.cal2 .crow.tot{margin-top:8px;padding:14px 16px!important;background:var(--g);color:#fff;border-radius:12px}',
-'.cal2 .crow.tot .cl{color:rgba(255,255,255,.85)}',
-'.cal2 .crow.tot .cv{font-size:26px!important;font-weight:800;letter-spacing:-.03em}',
-'.cal2 .crow.tot .cv small{color:rgba(255,255,255,.85);letter-spacing:0}'
-].join('');document.head.appendChild(s)})();
-
-/* v87: calmer Totals tab (look only) */
-(function(){const s=document.createElement('style');s.textContent=[
-'.sl .tr,.tcols{display:grid;grid-template-columns:minmax(0,1fr) 84px 92px;gap:6px;align-items:baseline}',
-'.tcols{padding:2px 15px 0;margin:2px 0 -4px;text-align:right;font:600 11px var(--mono);letter-spacing:.1em;color:var(--mut)}',
-'.tcols small{display:block;font:400 10.5px -apple-system,system-ui,sans-serif;letter-spacing:0;margin-top:1px;white-space:nowrap}',
-'.th1{font:600 11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--mut);padding:10px 0 4px}',
-'.sl .tr{padding:7px 0!important;border:0!important;font-size:14px;text-align:right}',
-'.sl .tr>span:first-child{text-align:left;font-weight:500}',
-'.sl .tr b{font-weight:600;font-size:14px}.sl .tr b.z{color:#c3c6c2;font-weight:400}',
-'.sl .tr.tot{margin:6px -8px 6px;padding:9px 8px!important;background:var(--ext);border-radius:10px}',
-'.sl .tr.tot b,.sl .tr.tot>span:first-child{font-weight:700;color:var(--gd)}',
-'.sl{padding:4px 14px 6px}'
-].join('');document.head.appendChild(s)})();
-
-/* ---------- v93: calculator. A small round button opens a compact pad in the corner; the page behind stays usable. It shows everything you type
-   (350 + 350) with a live answer above it, and the backspace key (or a swipe across the display) removes one character at a time. Nothing is stored. ---------- */
-(function(){
- const css=document.createElement('style');
- css.textContent='#calcfab{position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:45;width:48px;height:48px;min-height:0;padding:0;border-radius:50%;background:var(--g);color:#fff;border:0;box-shadow:0 2px 10px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center}'
- +'#calcfab svg{width:24px;height:24px}'
- +'#calcbox{position:fixed;right:14px;bottom:calc(72px + env(safe-area-inset-bottom,0px));z-index:46;width:252px;background:#000;border-radius:22px;box-shadow:0 8px 28px rgba(0,0,0,.4);padding:10px 10px 12px;display:none;-webkit-user-select:none;user-select:none}'
- +'#calcbox.on{display:block}'
- +'#calcbox .cc{display:flex;justify-content:space-between;align-items:center;color:#8e8e93;font-size:12px;padding:0 2px}#calcbox .cb{display:flex;gap:6px}'
- +'#calcbox .cc button{min-height:0;height:26px;padding:0 10px;margin:0;width:auto;font-size:12px;border-radius:13px;border:0;background:#333;color:#fff}'
- +'#calcbox .cw{display:flex;align-items:center}#calcbox .cr{flex:1;min-width:0;touch-action:none}#calcbox .cc button.bk,#calcbox .cw button.bk{min-height:0;height:32px;width:34px;padding:0;margin:0;border:0;background:transparent;color:#8e8e93;font-size:20px;flex:0 0 34px}'
- +'#calcbox .ce{color:#8e8e93;text-align:right;font:400 15px/1.2 -apple-system,system-ui,sans-serif;min-height:19px;padding:6px 4px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
- +'#calcbox .cr{color:#fff;text-align:right;font:300 44px/1.12 -apple-system,"SF Pro Display",system-ui,sans-serif;padding:2px 4px 10px;min-height:58px;white-space:normal;word-break:break-all;overflow:hidden}'
- +'#calcbox .ck{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}'
- +'#calcbox .ck button{min-height:0;height:50px;width:100%;padding:0;margin:0;border:0;border-radius:25px;font:400 22px -apple-system,system-ui,sans-serif;background:#333;color:#fff;-webkit-tap-highlight-color:transparent}'
- +'#calcbox .ck button:active{filter:brightness(1.35)}'
- +'#calcbox .ck .fn{background:#a5a5a5;color:#000;font-size:20px}#calcbox .ck .op{background:#ff9f0a;color:#fff;font-size:28px}#calcbox .ck .op.act{background:#fff;color:#ff9f0a}'
- +'#calcbox .ck .z{grid-column:span 2;text-align:left;padding-left:20px}'
- +'#app{padding-bottom:calc(70px + env(safe-area-inset-bottom,0px))}';
- document.head.appendChild(css);
- /* ex = what has been typed, shown as typed; done = ex is a finished answer (a digit starts a new sum, an operator carries on from it) */
- let ex='',done=false,last='';
- const SYM={'+':'+','-':'\u2212','*':'\u00d7','/':'\u00f7'},NUM=/\d*\.?\d+|\d+\./g;
- function calc(s){s=String(s).replace(/\s+/g,'').replace(/[+\-*/.]+$/,'');if(!s||!/^[0-9+\-*/.]+$/.test(s))return null;let i=0,bad=false;
-  const expr=()=>{let v=term();while(s[i]=='+'||s[i]=='-'){const o=s[i++],r=term();v=o=='+'?v+r:v-r}return v},
-   term=()=>{let v=fac();while(s[i]=='*'||s[i]=='/'){const o=s[i++],r=fac();v=o=='*'?v*r:v/r}return v},
-   fac=()=>{if(s[i]=='-'){i++;return -fac()}if(s[i]=='+'){i++;return fac()}const m=s.slice(i).match(/^(?:\d+\.?\d*|\.\d+)/);if(!m){bad=true;return 0}i+=m[0].length;return parseFloat(m[0])};
-  const v=expr();return bad||i<s.length||!isFinite(v)?null:v}
- const numStr=n=>{if(!isFinite(n))return 'Error';const t=String(+n.toPrecision(12));return /e/i.test(t)?'Error':t};
- const comma=m=>{const d=m.indexOf('.'),ip=d<0?m:m.slice(0,d),f=d<0?'':m.slice(d);return (ip===''?'0':(+ip).toLocaleString('en-US'))+f};
- function pretty(t){let o='',prevOp=true;String(t).replace(/(\d*\.?\d+|\d+\.)|([+\-*/])|(.)/g,(m,n,op,x)=>{if(n!==undefined){o+=comma(n);prevOp=false}else if(op){o+=prevOp?SYM[op]:' '+SYM[op]+' ';prevOp=true}else o+=x;return m});return o}
- const hasOp=()=>/[0-9.][+\-*/]/.test(ex);
- const answer=()=>{if(done)return ex==='Error'?'':ex;if(!hasOp())return '';const v=calc(ex);return v==null?'':numStr(v)};
- function paint(){const b=document.getElementById('calcbox');if(!b)return;const r=b.querySelector('.cr'),e=b.querySelector('.ce'),t=ex?pretty(ex):'0';
-  r.textContent=t;r.style.fontSize=t.length>22?'22px':t.length>16?'28px':t.length>11?'34px':t.length>8?'38px':'44px';
-  e.textContent=done&&last?pretty(last)+' =':(!done&&hasOp()&&calc(ex)!=null?'= '+pretty(numStr(calc(ex))):'')}
- function key(k){
-  if(ex==='Error'){if(k=='C'||k=='bs'||/^[0-9.]$/.test(k)){ex='';done=false;last='';if(k=='C'||k=='bs'){paint();return}}else{paint();return}}
-  if(k=='C'){ex='';done=false;last=''}
-  else if(k=='bs'){ex=ex.slice(0,-1);done=false;last=''}
-  else if(k=='='){if(!ex||done)return;const v=calc(ex);if(v==null){ex='Error';last=''}else{last=ex.replace(/[+\-*/.]+$/,'');ex=numStr(v)}done=true}
-  else if(k=='N'){let i=ex.length;while(i>0&&/[0-9.]/.test(ex[i-1]))i--;if(i===ex.length)return;const p=ex[i-1],q=ex[i-2];
-   if(p==='-'&&(i===1||/[+\-*/]/.test(q)))ex=ex.slice(0,i-1)+ex.slice(i);else if(p==='-')ex=ex.slice(0,i-1)+'+'+ex.slice(i);else if(p==='+')ex=ex.slice(0,i-1)+'-'+ex.slice(i);else ex=ex.slice(0,i)+'-'+ex.slice(i);done=false;last=''}
-  else if(k=='%'){const m=ex.match(/(\d*\.?\d+|\d+\.)$/);if(!m)return;const n=numStr(parseFloat(m[1])/100);if(n==='Error')return;ex=ex.slice(0,ex.length-m[1].length)+n;done=false;last=''}
-  else if('+-*/'.includes(k)){done=false;last='';
-   if(!ex){if(k!='-')return}else if(/[+\-*/]$/.test(ex)&&!(k=='-'&&/[*/]$/.test(ex))){ex=ex.replace(/[+\-*/]+$/,'');if(!ex&&k!='-')return}
-   ex+=k}
-  else{if(done){ex='';done=false;last=''}
-   const tail=ex.match(/(\d*\.?\d*)$/)[1];
-   if(k=='.'){if(tail.includes('.'))return;ex+=tail===''?'0.':'.'}
-   else{if(tail.replace('.','').length>=12)return;if(tail==='0')ex=ex.slice(0,-1)+k;else ex+=k}}
-  paint()}
- window.__calcAnswer=answer;
- function build(){
-  const f=document.createElement('button');f.id='calcfab';f.type='button';f.setAttribute('aria-label','Calculator');
-  f.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2.5" width="14" height="19" rx="2.5"/><rect x="8" y="5.5" width="8" height="3.5" rx=".8"/><path d="M8.5 13h.01M12 13h.01M15.5 13h.01M8.5 16.5h.01M12 16.5h.01M15.5 16.5h.01"/></svg>';
-  const b=document.createElement('div');b.id='calcbox';b.setAttribute('role','dialog');b.setAttribute('aria-label','Calculator');
-  const K=[['C','fn','AC'],['N','fn','\u00b1'],['%','fn','%'],['/','op',SYM['/']],['7'],['8'],['9'],['*','op',SYM['*']],['4'],['5'],['6'],['-','op',SYM['-']],['1'],['2'],['3'],['+','op',SYM['+']],['0','z'],['.'],['=','op','=']];
-  b.innerHTML='<div class="cc"><span></span><span class="cb"><button type="button" data-k="copy">Copy</button><button type="button" data-k="min" aria-label="Minimize calculator" style="width:34px;font-weight:700">\u2014</button></span></div><div class="ce"></div><div class="cw"><button type="button" class="bk" data-k="bs" aria-label="Delete last digit">\u232b</button><div class="cr">0</div></div><div class="ck">'
-   +K.map(([k,c,t])=>'<button type="button" class="'+(c||'')+'" data-k="'+k+'">'+(t||k)+'</button>').join('')+'</div>';
-  b.addEventListener('click',e=>{const t=e.target.closest('button');if(!t)return;const k=t.dataset.k;
-   if(k=='min'){b.classList.remove('on');f.setAttribute('aria-expanded','false');return}
-   if(k=='copy'){const v=window.__calcAnswer();if(v&&navigator.clipboard)navigator.clipboard.writeText(v).then(()=>{t.textContent='Copied';setTimeout(()=>t.textContent='Copy',1200)}).catch(()=>{});return}
-   key(k)});
-  {let sx=null,sy=0;const d=b.querySelector('.cr');
-   d.addEventListener('pointerdown',e=>{sx=e.clientX;sy=e.clientY});
-   d.addEventListener('pointerup',e=>{if(sx==null)return;const dx=e.clientX-sx,dy=e.clientY-sy;sx=null;if(Math.abs(dx)>24&&Math.abs(dx)>Math.abs(dy)*1.5)key('bs')});
-   d.addEventListener('pointercancel',()=>{sx=null})}
-  f.onclick=()=>{b.classList.toggle('on');f.setAttribute('aria-expanded',b.classList.contains('on'))};
-  document.body.appendChild(b);document.body.appendChild(f);paint()}
- if(document.body)build();else document.addEventListener('DOMContentLoaded',build);
- document.addEventListener('keydown',e=>{const b=document.getElementById('calcbox');if(e.key=='Escape'&&b)b.classList.remove('on')});
-})();
-
-/* ---------- Version + Home Screen self-update.
-   PT_BUILD is a plain number that only ever goes up (200, 201, 202...). PT_LABEL is what shows on screen (v-1, v-2...). Bump both, plus parser.js (V) and the ?v= numbers in index.html, on every release.
-   On launch the app asks the server for the newest app.js (bypassing the cache); if its build is higher, the page reloads once from a fresh address. Records stay in the same storage.
-   The two comment lines below are for older installed copies, which look for these exact patterns:
-   const PT_VER='v200'
-   const PT_VER='vv200'
-   ---------- */
-const PT_BUILD=288;
-const PT_LABEL='v88';
-(function(){
- const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
- if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
- async function check(){
-  try{
-   if(sessionStorage.getItem('pt-upd')==='1')return;
-   const r=await fetch('app.js?chk='+Date.now(),{cache:'no-store'});if(!r.ok)return;
-   const m=(await r.text()).match(/const PT_BUILD=(\d+)/);
-   if(m&&+m[1]>PT_BUILD){
-    sessionStorage.setItem('pt-upd','1');
-    const u=new URL(location.href);u.searchParams.set('u',Date.now());location.replace(u.toString())}
-  }catch(e){}}
- if(document.readyState==='complete')setTimeout(check,800);else window.addEventListener('load',()=>setTimeout(check,800));
-})();
-
-/* v7: Saved list polish (cards, week headers, amounts, chevrons) */
-(function(){const st=document.createElement('style');st.textContent=
-'.svsum{background:var(--ext);border-radius:14px;padding:12px 16px;align-items:center;margin:4px 0 2px}'
-+'.svsum b{font-size:17px;color:var(--gd);letter-spacing:-.3px;font-variant-numeric:tabular-nums}'
-+'.wkh{margin:20px 0 -2px;padding:0 2px;align-items:center}'
-+'.wkh span:first-child{color:var(--fg);font-size:13px;font-weight:700;letter-spacing:-.1px}'
-+'.wkh span+span{background:var(--ext);color:var(--gd);font-weight:700;font-size:13px;padding:3px 11px;border-radius:999px;font-variant-numeric:tabular-nums}'
-+'.sl{border-radius:16px;padding:2px 16px;box-shadow:0 1px 2px rgba(35,47,58,.05),0 6px 18px rgba(35,47,58,.06);border-color:rgba(226,224,216,.7)}'
-+'.srow{padding:14px 0;gap:12px}'
-+'.srow .sm{flex:1;min-width:0}'
-+'.srow .s1{font-size:14px;font-weight:650;letter-spacing:-.1px}'
-+'.srow b{font-size:14px;font-weight:700;color:var(--fg);font-variant-numeric:tabular-nums}'
-+'.srow.tap::after{content:"\\203A";color:#b9c0c6;font-size:20px;line-height:1;margin-left:-2px}'
-+'.dp{font-size:12px;padding:2px 9px;margin-top:6px;font-weight:600;background:var(--ext);color:var(--gd)}'
-+'.srow .s2{color:var(--mut)}';
-document.head.appendChild(st)})();
-
-
-/* ---------- v26: straighten tilted receipt photos so black bars and highlights sit on the text lines ---------- */
-/* Returns the tilt in radians (positive = lines slope down to the right), from chains of neighbouring words, or null when the page is already straight enough. */
-function skewOf(ws,W){const a=(ws||[]).filter(w=>w.bbox&&String(w.text||'').trim().length>=2).map(w=>({x:(w.bbox.x0+w.bbox.x1)/2,y:(w.bbox.y0+w.bbox.y1)/2,h:w.bbox.y1-w.bbox.y0})).sort((p,q)=>p.x-q.x);
- if(a.length<12)return null;const nx=new Array(a.length).fill(-1),hasP=new Array(a.length).fill(false);
- for(let i=0;i<a.length;i++){let bj=-1,bd=1e9;for(let j=i+1;j<a.length;j++){const dx=a[j].x-a[i].x;if(dx>a[i].h*9)break;if(dx<=0||hasP[j])continue;const dy=Math.abs(a[j].y-a[i].y);if(dy>Math.max(a[i].h,a[j].h)*.7)continue;const d=dx+dy*3;if(d<bd){bd=d;bj=j}}if(bj>=0){nx[i]=bj;hasP[bj]=true}}
- const sl=[];for(let i=0;i<a.length;i++){if(hasP[i])continue;const ch=[];for(let j=i;j>=0;j=nx[j])ch.push(a[j]);if(ch.length<4)continue;const span=ch[ch.length-1].x-ch[0].x;if(span<W*.22)continue;
-  const n=ch.length,mx=ch.reduce((t,q)=>t+q.x,0)/n,my=ch.reduce((t,q)=>t+q.y,0)/n;let num=0,den=0;ch.forEach(q=>{num+=(q.x-mx)*(q.y-my);den+=(q.x-mx)*(q.x-mx)});if(den>0)sl.push(num/den)}
- if(sl.length<2)return null;sl.sort((p,q)=>p-q);const m=sl[sl.length>>1],t=Math.atan(m);return Math.abs(t)<.0055||Math.abs(t)>.14?null:t}
-function deskewPage(c,ws){try{const W=c.width,H=c.height,t=skewOf(ws,W);if(t==null)return null;
- const o=document.createElement('canvas');o.width=W;o.height=H;const x=o.getContext('2d'),g=c.getContext('2d');let r=0,gg=0,b=0,n=0;
- const smp=(px,py)=>{const d=g.getImageData(Math.min(W-1,Math.max(0,px)),Math.min(H-1,Math.max(0,py)),1,1).data;r+=d[0];gg+=d[1];b+=d[2];n++};
- for(let i=0;i<=12;i++){smp(Math.round(W*i/12),0);smp(Math.round(W*i/12),H-1);smp(0,Math.round(H*i/12));smp(W-1,Math.round(H*i/12))}
- x.fillStyle='rgb('+Math.round(r/n)+','+Math.round(gg/n)+','+Math.round(b/n)+')';x.fillRect(0,0,W,H);x.imageSmoothingQuality='high';x.translate(W/2,H/2);x.rotate(-t);x.drawImage(c,-W/2,-H/2);
- const cs=Math.cos(t),sn=Math.sin(t),cx=W/2,cy=H/2;
- const words=(ws||[]).map(w=>{if(!w.bbox)return w;const q=w.bbox,mx=(q.x0+q.x1)/2-cx,my=(q.y0+q.y1)/2-cy,px=mx*cs+my*sn+cx,py=-mx*sn+my*cs+cy,hw=(q.x1-q.x0)/2,hh=(q.y1-q.y0)/2,sh=Math.max(hh*.6,hh-hw*Math.abs(sn));return{...w,bbox:{x0:px-hw,x1:px+hw,y0:py-sh,y1:py+sh}}});
- return{c:o,words}}catch(e){return null}}
-
-/* ---------- v26: every big action asks first and can be undone ---------- */
-(function(){
- const pl=(n,w)=>n+' '+w+(n==1?'':'s');
- delRec=function(i){const r=S.records[i];if(!r)return;if(!confirm('Are you sure you want to delete this saved record?'))return;S.records.splice(i,1);renderRecs();store();snack('Record deleted',()=>{S.records.splice(Math.min(i,S.records.length),0,r);renderRecs();store()})};
- delOpen=function(i){const r=S.records[i];if(!r)return;if(!confirm('Are you sure you want to delete this saved record?'))return;S.records.splice(i,1);closeRec();renderRecs();store();snack('Record deleted',()=>{S.records.splice(Math.min(i,S.records.length),0,r);renderRecs();store()})};
- delAllRecs=function(){const old=S.records;if(!old.length)return;if(!confirm('Are you sure you want to delete all '+pl(old.length,'saved record')+' from this phone?'))return;S.records=[];renderRecs();store();snack('All '+pl(old.length,'record')+' deleted',()=>{S.records=old;renderRecs();store()})};
- const _nuke=nuke;nuke=async function(){const old=S.records,learn=S.learn;if(!confirm('Are you sure you want to delete every saved record from this phone and clear the screen? Your passcode stays.'))return;try{await idb('del')}catch(e){}S.noStore=false;wipe();st('Saved data deleted.');window.bkRefresh&&window.bkRefresh();
-  snack('All saved data deleted',async()=>{S.records=old;S.learn=learn;S.noStore=false;st('');try{await store()}catch(e){}renderRecs()})};
- const _ca=clearAll;clearAll=function(){if(S.rec&&(S.rec.loaded||S.pages.length)&&!confirm('Are you sure you want to clear this record from the screen?'))return;_ca()};
- const _cm=clearMarks;clearMarks=function(){if(!S.pages.some(p=>p.marks.length))return;if(!confirm('Are you sure you want to remove every black bar and highlight on all pages?'))return;_cm()};
- rmPage=function(i){if(!confirm('Are you sure you want to remove page '+(i+1)+' from the PDF?'))return;pushU();S.pages.splice(i,1);renderPages();snack('Page removed',undoMark)};
- rmImg=function(i){const r=S.records[i];if(!r||!r.imgs)return;if(!confirm('Are you sure you want to remove the attached '+(r.mode=='purchase'?'receipt':'invoice')+' from this saved item? Its details stay.'))return;const old=r.imgs;delete r.imgs;store();renderRecs();openRec(i);snack((r.mode=='purchase'?'Receipt':'Invoice')+' removed',()=>{r.imgs=old;store();renderRecs();openRec(S.records.indexOf(r))})};
- fixAll=function(){if(!confirm('Are you sure you want to forget every remembered fix? Saved records are not changed.'))return;const old=S.learn;S.learn={m:{},mi:{}};store();learnUI();fixOpen();snack('Remembered fixes cleared',()=>{S.learn=old;store();learnUI();fixOpen()})};
- const st2=document.createElement('style');st2.textContent='.s3{font-size:12px;font-weight:400;color:var(--amb);opacity:.85;margin-top:2px}.invm{font-size:12px;font-weight:400;color:var(--mut);margin:4px 2px 8px}.rmb .invm{margin:0 0 8px;color:var(--amb);opacity:.85}';document.head.appendChild(st2)})();
-
-
-/* ---------- v34: press and hold a week on the Saved tab: iOS-style peek with that week's total; collapsible Expense totals ---------- */
-(function(){
- let tm=null,x0=0,y0=0,fired=0,open=null,swallow=0;
- const stop=()=>{clearTimeout(tm);tm=null};
- const close=()=>{if(!open)return;const o=open;open=null;o.c.classList.remove('wtl');o.bd.classList.remove('on');o.pop.classList.remove('on');setTimeout(()=>{o.bd.remove();o.pop.remove()},260)};
- const show=(c,x,y)=>{close();
-  const bd=document.createElement('div');bd.className='wtbd';
-  const pop=document.createElement('div');pop.className='wtpop';pop.setAttribute('role','status');
-  pop.innerHTML='<div class="wtl1"></div><div class="wtv"></div><div class="wtn"></div>';
-  pop.children[0].textContent=c.getAttribute('data-wl')||'Week total';pop.children[1].textContent=c.getAttribute('data-wt')||'';pop.children[2].textContent=c.getAttribute('data-wn')||'';
-  document.body.appendChild(bd);document.body.appendChild(pop);
-  const r=c.getBoundingClientRect(),w=pop.offsetWidth,h=pop.offsetHeight,min=64;
-  let top=r.top-h-14,above=true;if(top<min){above=false;top=Math.min(Math.max(y-h-30,min),innerHeight-h-24)}
-  const left=Math.min(Math.max(x-w/2,12),innerWidth-w-12);
-  pop.style.top=top+'px';pop.style.left=left+'px';pop.style.transformOrigin=Math.round(x-left)+'px '+(above||top<y?'100%':'0%');
-  c.classList.add('wtl');open={c,bd,pop};
-  requestAnimationFrame(()=>{bd.classList.add('on');pop.classList.add('on')})};
- document.addEventListener('pointerdown',e=>{if(open){close();swallow=Date.now();return}
-  const c=e.target.closest&&e.target.closest('.sl[data-wt]');if(!c)return;x0=e.clientX;y0=e.clientY;stop();
-  tm=setTimeout(()=>{tm=null;fired=Date.now();try{navigator.vibrate&&navigator.vibrate(12)}catch(_){}show(c,x0,y0)},450)},true);
- document.addEventListener('pointermove',e=>{if(tm&&(Math.abs(e.clientX-x0)>10||Math.abs(e.clientY-y0)>10))stop()},true);
- ['pointerup','pointercancel'].forEach(t=>document.addEventListener(t,stop,true));
- ['scroll','resize','orientationchange'].forEach(t=>addEventListener(t,()=>{stop();close()},true));
- document.addEventListener('keydown',e=>{if(e.key=='Escape')close()});
- document.addEventListener('click',e=>{const n=Date.now(),on=e.target.closest&&e.target.closest('.sl[data-wt]');if((fired&&n-fired<700&&on)||(swallow&&n-swallow<600)){e.stopPropagation();e.preventDefault();fired=0;swallow=0}},true);
- document.addEventListener('contextmenu',e=>{if(e.target.closest&&e.target.closest('.sl[data-wt]'))e.preventDefault()},true);
- const st=document.createElement('style');st.textContent=[
- '.sl[data-wt]{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;transition:transform .32s cubic-bezier(.2,.9,.3,1.2),box-shadow .32s}',
- '.sl.wtl{position:relative;z-index:59;transform:scale(1.025);box-shadow:0 20px 56px rgba(0,0,0,.55)}',
- '.wtbd{position:fixed;inset:0;z-index:58;touch-action:none;background:rgba(0,0,0,0);-webkit-backdrop-filter:blur(0);backdrop-filter:blur(0);transition:background .28s,-webkit-backdrop-filter .28s,backdrop-filter .28s}',
- '.wtbd.on{background:rgba(0,0,0,.38);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}',
- '.wtpop{position:fixed;z-index:60;box-sizing:border-box;min-width:176px;max-width:calc(100vw - 24px);padding:13px 22px 14px;border-radius:20px;text-align:center;color:#fff;background:rgba(48,50,55,.74);-webkit-backdrop-filter:saturate(180%) blur(30px);backdrop-filter:saturate(180%) blur(30px);border:.5px solid rgba(255,255,255,.16);box-shadow:0 14px 44px rgba(0,0,0,.5);opacity:0;transform:scale(.8);pointer-events:none;transition:transform .34s cubic-bezier(.2,.9,.3,1.25),opacity .2s}',
- '.wtpop.on{opacity:1;transform:scale(1)}',
- '.wtl1{font:600 11px/1.2 -apple-system,"SF Pro Text",system-ui,sans-serif;letter-spacing:.07em;text-transform:uppercase;color:rgba(235,235,245,.6)}',
- '.wtv{font:700 30px/1.15 -apple-system,"SF Pro Display",system-ui,sans-serif;letter-spacing:-.5px;font-variant-numeric:tabular-nums;margin-top:5px}',
- '.wtn{font-size:12.5px;color:rgba(235,235,245,.6);margin-top:2px}',
- /* collapsible Expense totals */
- '.tgl{padding-top:0!important;padding-bottom:0!important}',
- '.tgh{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:10px;width:100%;min-height:50px;cursor:pointer;-webkit-tap-highlight-color:transparent;font-size:14px}',
- '.tgh:active{opacity:.6}.tgh:focus-visible{outline:2px solid var(--gd);outline-offset:2px;border-radius:8px}',
- '.tgt{flex:1;min-width:0;font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}',
- '.tgv{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}',
- '.tgc{flex:0 0 auto;width:8px;height:8px;margin:0 3px 0 4px;border:solid var(--mut);border-width:0 2px 2px 0;transform:rotate(-45deg);transition:transform .3s cubic-bezier(.32,.72,0,1)}',
- '.tgl.open .tgc{transform:rotate(45deg) translate(-2px,-2px)}',
- '.tgb{display:grid;grid-template-rows:0fr;visibility:hidden;transition:grid-template-rows .3s cubic-bezier(.32,.72,0,1),visibility 0s .3s}',
- '.tgl.open .tgb{grid-template-rows:1fr;visibility:visible;transition:grid-template-rows .3s cubic-bezier(.32,.72,0,1),visibility 0s}',
- '.tgi{min-height:0;overflow:hidden}',
- '.tgi .srow{padding:10px 0}.tgi .srow:first-child{border-top:1px solid var(--hair,var(--ln))}',
- '.onsaved .head{margin-bottom:6px;min-height:0}.onsaved .head h1:empty{display:none}',
- '#savedview .seg{padding:3px}#savedview .seg button{padding:6px 4px;font-size:13.5px}',
- '.svq{display:flex;gap:8px;align-items:stretch}.svq .svs{flex:1;min-width:0}.svq .svs input{margin:0;padding-top:9px;padding-bottom:9px}',
- '.svsb{position:relative;flex:0 0 auto;display:flex;align-items:center;gap:5px;margin:0;padding:0 12px;border:1px solid var(--hair,var(--ln));border-radius:12px;background:var(--card);color:var(--fg);font:600 13px -apple-system,system-ui,sans-serif;letter-spacing:0;text-transform:none;white-space:nowrap}',
- '.svsb i{width:6px;height:6px;border:solid var(--mut);border-width:0 2px 2px 0;transform:rotate(45deg) translate(-1px,-1px)}',
- '.svsb select{position:absolute;inset:0;width:100%;height:100%;opacity:0;font-size:16px;margin:0;padding:0;border:0}',
- '.chips{flex-wrap:nowrap!important;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;margin:0 -2px;padding:0 2px}.chips::-webkit-scrollbar{display:none}.chips button{flex:0 0 auto;padding:4px 11px!important}',
- '.svact button{padding:9px 10px;min-height:0;font-size:14px}',
- '.svact{display:flex;gap:8px}.svact button{flex:1;width:auto;min-width:0}',
- '.side .setrow{display:flex;align-items:center;gap:10px;margin-top:8px}.side .setrow label{flex:1;min-width:0;margin:0;font:12px/1.35 -apple-system,system-ui,sans-serif;letter-spacing:0;text-transform:none;color:var(--mut)}.side .setrow input{flex:0 0 64px;width:64px;margin:0;padding:8px 6px;text-align:center}',
- '.side details .setgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.side details .setgrid button{width:auto;margin:0;min-height:40px;padding:8px 6px;font-size:13.5px;line-height:1.2}.side details .setgrid #bkinfo{grid-column:1/-1;order:9;margin:0!important;font-size:12px}',
- '.side .disc{padding-top:6px}.side .logout{min-height:0;padding:9px 12px}',
- '@media (prefers-reduced-motion:reduce){.sl[data-wt],.wtbd,.wtpop,.tgb,.tgc{transition:none!important}}'
- ].join('');document.head.appendChild(st)})();
-
-
-/* ---------- v33: crop a saved receipt or invoice picture ---------- */
-var CR=null;
-function cropRec(i,idx){const r=S.records[i];if(!r||!r.imgs||!r.imgs.length)return;cropClose();
- const o=document.createElement('div');o.id='cropmod';o.className='cmo';
- o.innerHTML='<div class="cmh"><button type="button" onclick="cropClose()">Cancel</button><span id="cmp"></span><button type="button" class="pri" onclick="cropApply()">Crop</button></div><div class="cmw"><div class="cmb" id="cmb"><img id="cmi" alt="" draggable="false"><div class="cms" id="cms">'+['nw','n','ne','e','se','s','sw','w'].map(h=>'<i data-h="'+h+'"></i>').join('')+'</div></div></div>'+(r.imgs.length>1?'<div class="cmf"><button type="button" onclick="cropPage(-1)">Previous page</button><button type="button" onclick="cropPage(1)">Next page</button></div>':'');
- document.body.appendChild(o);CR={i,idx:Math.min(idx||0,r.imgs.length-1),sel:null,W:0,H:0,im:null};cropLoad();cropBind()}
-function cropLoad(){const r=S.records[CR.i];if(!r||!r.imgs||!r.imgs[CR.idx])return cropClose();const x=r.imgs[CR.idx],im=new Image();
- im.onload=()=>{if(!CR)return;CR.im=im;const b=$('#cmb'),mw=Math.min(innerWidth-60,900),mh=innerHeight*.62,sc=Math.min(mw/im.naturalWidth,mh/im.naturalHeight),W=Math.max(40,Math.round(im.naturalWidth*sc)),H=Math.max(40,Math.round(im.naturalHeight*sc));
-  CR.W=W;CR.H=H;b.style.width=W+'px';b.style.height=H+'px';const e=$('#cmi');e.style.width=W+'px';e.style.height=H+'px';e.src=x.u;CR.sel={x:0,y:0,w:W,h:H};cropPaint();
-  const p=$('#cmp');if(p)p.textContent=r.imgs.length>1?'Page '+(CR.idx+1)+' of '+r.imgs.length:''};
- im.src=x.u}
-function cropPaint(){const s=$('#cms');if(!s||!CR||!CR.sel)return;const q=CR.sel;s.style.left=(18+q.x)+'px';s.style.top=(18+q.y)+'px';s.style.width=q.w+'px';s.style.height=q.h+'px'}
-function cropBind(){const s=$('#cms');let d=null;
- s.addEventListener('pointerdown',e=>{if(!CR||!CR.sel)return;const h=e.target.dataset&&e.target.dataset.h;d={h:h||'m',x:e.clientX,y:e.clientY,s:{...CR.sel}};try{s.setPointerCapture(e.pointerId)}catch(_){}e.preventDefault()});
- s.addEventListener('pointermove',e=>{if(!d||!CR)return;const dx=e.clientX-d.x,dy=e.clientY-d.y,S0=d.s,W=CR.W,H=CR.H,M=36;let{x,y,w,h}=S0;
-  if(d.h=='m'){x=Math.min(Math.max(0,S0.x+dx),W-S0.w);y=Math.min(Math.max(0,S0.y+dy),H-S0.h)}
-  else{if(d.h.includes('w')){x=Math.min(Math.max(0,S0.x+dx),S0.x+S0.w-M);w=S0.x+S0.w-x}
-   if(d.h.includes('e'))w=Math.min(Math.max(M,S0.w+dx),W-S0.x);
-   if(d.h.includes('n')){y=Math.min(Math.max(0,S0.y+dy),S0.y+S0.h-M);h=S0.y+S0.h-y}
-   if(d.h.includes('s'))h=Math.min(Math.max(M,S0.h+dy),H-S0.y)}
-  CR.sel={x,y,w,h};cropPaint();e.preventDefault()});
- const end=()=>{d=null};s.addEventListener('pointerup',end);s.addEventListener('pointercancel',end)}
-function cropPage(dir){const r=CR&&S.records[CR.i];if(!r)return;const n=r.imgs.length;CR.idx=(CR.idx+dir+n)%n;cropLoad()}
-function cropClose(){const o=$('#cropmod');if(o)o.remove();CR=null}
-async function cropApply(){if(!CR||!CR.im||!CR.sel)return;const r=S.records[CR.i];if(!r)return;const{im,sel,W,H}=CR,i=CR.i,idx=CR.idx;
- if(sel.w>=W-1&&sel.h>=H-1){cropClose();return}
- const k=im.naturalWidth/W,sx=Math.round(sel.x*k),sy=Math.round(sel.y*k),sw=Math.max(1,Math.round(sel.w*k)),sh=Math.max(1,Math.round(sel.h*k)),sc=Math.min(1,1300/sw),
-  c=document.createElement('canvas');c.width=Math.max(1,Math.round(sw*sc));c.height=Math.max(1,Math.round(sh*sc));const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);g.imageSmoothingQuality='high';g.drawImage(im,sx,sy,sw,sh,0,0,c.width,c.height);
- const out={u:c.toDataURL('image/jpeg',.8),w:c.width,h:c.height},old=r.imgs[idx];r.imgs[idx]=out;store();cropClose();renderRecs();openRec(i);
- snack('Cropped',()=>{r.imgs[idx]=old;store();renderRecs();if($('#recmodal')){const q=S.records.indexOf(r);if(q>=0)openRec(q)}})}
-(function(){const st=document.createElement('style');st.textContent='.cmo{position:fixed;inset:0;z-index:10000;background:#000;display:flex;flex-direction:column;padding:max(10px,env(safe-area-inset-top)) 12px max(10px,env(safe-area-inset-bottom))}.cmh{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0 10px}.cmh span{font-size:13px;color:var(--mut)}.cmw{flex:1;display:flex;align-items:center;justify-content:center;min-height:0}.cmb{position:relative;padding:18px;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;box-sizing:content-box}.cmb img{display:block;pointer-events:none}.cms{position:absolute;border:2px solid #fff;box-sizing:border-box;box-shadow:0 0 0 9999px rgba(0,0,0,.6);touch-action:none;cursor:move}.cms i{position:absolute;width:40px;height:40px;margin:-20px 0 0 -20px;touch-action:none}.cms i::after{content:"";position:absolute;left:50%;top:50%;width:14px;height:14px;margin:-7px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.4)}.cms i[data-h=nw]{left:0;top:0}.cms i[data-h=n]{left:50%;top:0}.cms i[data-h=ne]{left:100%;top:0}.cms i[data-h=e]{left:100%;top:50%}.cms i[data-h=se]{left:100%;top:100%}.cms i[data-h=s]{left:50%;top:100%}.cms i[data-h=sw]{left:0;top:100%}.cms i[data-h=w]{left:0;top:50%}.cmf{display:flex;gap:10px;padding:10px 0}.cmf button{flex:1}';document.head.appendChild(st)})();
-
-/* v48: Open / Closed invoice status (badge, toggle, filter chip) */
-(function(){const c=document.createElement('style');c.textContent='.stb{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;font-size:11.5px;font-weight:700;letter-spacing:.02em;vertical-align:1px;background:rgba(214,69,69,.18);color:#e0544f;border:1px solid rgba(214,69,69,.4)}'+'.stn{display:flex;align-items:center;gap:8px;margin:0 0 10px;padding:9px 12px;border-radius:12px;font-size:13px;color:var(--mut);background:rgba(214,69,69,.1);border:1px solid rgba(214,69,69,.3)}.stn .stb{margin:0;flex:0 0 auto}'+'.stb.cl{background:rgba(46,125,90,.14);color:#2e7d5a;border-color:rgba(46,125,90,.4)}.stn.cl{background:rgba(46,125,90,.08);border-color:rgba(46,125,90,.3)}.stn .stsw{flex:0 0 auto}'+'.stsw{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600;color:var(--mut)}.stsw .on{color:var(--fg)}.sw{position:relative;width:52px;height:30px;padding:0;border-radius:999px;border:1px solid rgba(0,0,0,.15);background:#2e7d5a;cursor:pointer;flex:0 0 auto;transition:background .2s}.sw.on{background:#e0544f}.sw i{position:absolute;top:2px;left:2px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.35);transition:transform .2s}.sw.on i{transform:translateX(22px)}'+'.stb{background:none!important;border:0!important;padding:0!important;font-size:12px;font-weight:500!important;letter-spacing:0;color:#c9625d!important;opacity:.85}.stb{font-variant:small-caps;font-style:italic;letter-spacing:.04em;font-size:13px;font-weight:600!important;opacity:1}.stb::before{content:none!important}.stb.cl{color:#4a9d78!important}.stn,.stn.cl{background:none!important;border:0!important;padding:4px 0!important}.sw,.sw.on{background:rgba(128,128,128,.38)!important}.sw{border-color:transparent}';document.head.appendChild(c)})();
-
-(function(){const c=document.createElement('style');c.textContent='.srow .ra{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:0 0 auto}.srow .stb,.stn .stb{display:block;margin:0!important;padding:0!important;font:400 11.5px -apple-system,system-ui,sans-serif!important;font-variant:normal!important;font-style:normal!important;letter-spacing:0!important;color:var(--mut)!important;opacity:.85!important}.srow .stb.cl{opacity:.5!important}';document.head.appendChild(c)})();
-(function(){const c=document.createElement('style');c.textContent='.stw{margin:-4px 0 10px;font-size:12px;color:var(--mut);opacity:.85}';document.head.appendChild(c)})();
-/* v263: Open / Closed look. Written in parentheses (no bullet, no switch): Open in amber, Closed in green, set in small caps. In the invoice window the two words sit side by side and the current one is lit. */
-(function(){const c=document.createElement('style');c.textContent='.srow .stb,.stn .stb{font:600 12.5px/1.2 -apple-system,system-ui,sans-serif!important;font-variant:small-caps!important;letter-spacing:.06em!important;opacity:1!important;color:#d9953a!important}.srow .stb.cl{color:#4a9d78!important;opacity:1!important}.stsw2{display:flex;align-items:center;gap:18px}.stsw2 .stp{background:none;border:0;padding:6px 0;margin:0;min-height:36px;cursor:pointer;font:600 16px/1 -apple-system,system-ui,sans-serif;font-variant:small-caps;letter-spacing:.06em;color:var(--mut);opacity:.5;border-bottom:2px solid transparent;border-radius:0}.stsw2 .stp.on{opacity:1;cursor:default}.stsw2 .stp.o.on{color:#d9953a;border-bottom-color:#d9953a}.stsw2 .stp.c.on{color:#4a9d78;border-bottom-color:#4a9d78}';document.head.appendChild(c)})();
-/* v279: one font sitewide (the one Open/Closed uses), no all-caps. */
-(function(){const c=document.createElement('style');c.textContent=':root{--mono:-apple-system,"SF Pro Text",system-ui,sans-serif}*{text-transform:none!important}h3,.gt,label,.tile span,.cal2 .hero span,.cal2 .cl,#ocr,.side details label{font-family:-apple-system,"SF Pro Text",system-ui,sans-serif!important;letter-spacing:.02em!important}.srow .stb,.stsw2 .stp{font-family:-apple-system,"SF Pro Text",system-ui,sans-serif!important}';document.head.appendChild(c)})();
+(function(){const s=document.createElement('style');s.textContent=['.sv{display:flex;flex-direction:column;gap:10px}.sv .sl{margin:0}.sv>button{width:100%}.sv .seg{margin:0}','.chips{display:flex;flex-wrap:wrap;gap:6px}.chips button{padding:6px 12px;border-radius:999px;font-size:13px;font-weight:600;background:#fff;color:var(--mut);border-color:var(--ln)}.chips button.on{background:var(--g);color:#fff;border-color:var(--g)}','.srt{display:flex;align-items:center;gap:10px}.srt label{flex:0 0 auto;margin:0}','.svsum{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:var(--mut);padding:0 2px}.svsum b{color:var(--fg);font-size:17px}','.sm{flex:1;min-width:0}.s1{font-weight:600;overflow-wrap:anywhere}.s2{font-size:12px;color:var(--mut);margin-top:1px}','.empty2{border:2px dashed var(--ln);border-radius:16px;padding:28px 16px;text-align:center;color:var(--mut)}','@media(max-width:900px){.nav button{padding:10px 6px;font-size:14px}}'].join('');document.head.appendChild(s)})();
+(function(){const s=document.createElement('style');s.textContent='.sl{background:var(--card);border:1px solid var(--ln);border-radius:14px;padding:6px 14px;margin:10px 0}.sl h4{margin:10px 0 2px;font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}.srow{display:flex;align-items:center;gap:10px;padding:9px 0;font-size:14px}.srow+.srow{border-top:1px solid var(--ln)}.srow span{flex:1;min-width:0}.srow b{white-space:nowrap}.srow .x{flex:0 0 32px;height:32px;padding:0}#f_category{width:100%}';document.head.appendChild(s)})();

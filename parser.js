@@ -1,59 +1,31 @@
 'use strict';
-/* self-update (V must match the ?v= number in index.html): the iPhone Home Screen app keeps its own cached copy of the page and ignores no-cache hints. On launch, ask the server (bypassing the cache) which version is current;
-   if it is newer than this file, re-download every file once and reload. Runs from parser.js so even an old cached index.html picks it up. Once per session, so it can never loop. */
-(function(){var V=288;try{if(typeof window==='undefined'||!window.fetch||!navigator.onLine||sessionStorage.getItem('pt_upd'))return;
- fetch('index.html',{cache:'reload'}).then(function(r){return r.text()}).then(function(h){var m=h.match(/parser\.js\?v=(\d+)/);if(!m||+m[1]<=V)return;
-  try{sessionStorage.setItem('pt_upd','1')}catch(e){}
-  return Promise.all(['parser.js','scan.js','app.js'].map(function(f){return fetch(f+'?v='+m[1],{cache:'reload'})})).then(function(){location.reload()})}).catch(function(){})}catch(e){}})();
 /* Deterministic receipt/invoice parser. Pure function: parse(text, mode) -> {fields, items, found}. Never invents values. */
 (function(root){
 const fix=s=>s.replace(/(?<=\d)[Oo](?=\d|\b)/g,'0').replace(/(?<=\d)[lI](?=\d)/g,'1');
-/* v64: second way to find a printed total, used only when the main search found none. Looks for a total-type label (Total, Total Due, Balance Due, Payment Due, Amount Due, Grand Total, Invoice Total, Net Pay...) with a dollar amount on the same line or the next one. Subtotals, total hours/miles, tax and bare "Amount" column headers never count. */
-const TOTLAB=/\b(?:grand\s*total|invoice\s*total|total\s*(?:due|amount|invoice|charges?|pay(?:ment)?|compensation|earnings|owed|paid|cost|price)?|amount\s*(?:due|owed|payable)|balance\s*(?:due|owing)|payment\s*due|net\s*pay|pay\s*total)\b/i,TOTBAD=/sub\s*-?\s*tota|total\s*(?:hours?|hrs?|time|miles?|mileage|distance|days?|shifts?)\b|\btax\b|\brate\b/i;
-function printedTotal(L,fx){const f=fx||(s=>s),mon=s=>{const m=String(s).match(/\$\s?(\d[\d,]*(?:\.\d{1,2})?)|(\d[\d,]*\.\d{2})\b/g);if(!m)return null;const v=m[m.length-1].replace(/[$,\s]/g,'');return v&&!isNaN(+v)?(+v).toFixed(2):null};
- for(let i=0;i<L.length;i++){const l=f(L[i]).replace(/\btota[1l|]\b/i,'total');if(!TOTLAB.test(l)||TOTBAD.test(l.replace(TOTLAB,'')))continue;let v=mon(l.slice(l.search(TOTLAB)));if(v==null&&i+1<L.length){const n=f(L[i+1]).trim();if(/^\$?\s?\d[\d,]*\.\d{2}$/.test(n))v=mon(n)}if(v!=null)return v}return null}
-const PRICE=/(-?\$?\s?\d{1,3}(?:,\d{3})*[.,]\d{2}|-?\$?\s?\d+[.,]\d{2})\s*-?\s*[A-Z]{0,2}\d?\s*$/;
+const PRICE=/(-?\$?\s?\d{1,3}(?:,\d{3})*[.,]\d{2}|-?\$?\s?\d+[.,]\d{2})\s*-?\s*[A-Z]?\s*$/;
 const num=s=>{let n=parseFloat(s.replace(/[$\s]/g,'').replace(/,(?=\d{3})/g,'').replace(',','.'));return isNaN(n)?null:n};
 const MON='(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\\.?';
 const DATE=new RegExp('\\b(\\d{4}-\\d{2}-\\d{2}|\\d{1,2}[\\/.\\-]\\d{1,2}[\\/.\\-]\\d{2,4}|'+MON+'\\s+\\d{1,2},?\\s+\\d{4}|\\d{1,2}\\s+'+MON+'\\s+\\d{4})\\b','i');
-/* v89: a date must be a real date. "1/1.00" (Items/Quantity) used to pass as one, which also stopped the photo re-read. */
-const MONS=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
-function okDate(s){s=String(s).trim();let m=s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
- if(m)return +m[2]>=1&&+m[2]<=12&&+m[3]>=1&&+m[3]<=31&&+m[1]>=1990&&+m[1]<=2100;
- m=s.match(/^(\d{1,2})([\/.\-])(\d{1,2})\2(\d{2}|\d{4})$/);
- if(m){const y=+m[4];return +m[1]>=1&&+m[1]<=12&&+m[3]>=1&&+m[3]<=31&&(m[4].length==4?y>=1990&&y<=2100:y>=1)}
- m=s.match(/(\d{1,2}),?\s+\w+\.?\s+(\d{4})$/)||s.match(/\w+\.?\s+(\d{1,2}),?\s+(\d{4})$/);
- return m?(+m[1]>=1&&+m[1]<=31&&+m[2]>=1990&&+m[2]<=2100):true}
-/* "dct 9, 2026" / "0ct 9 2026": month word damaged by one letter, but day and year are clear */
-function fuzzyDate(l){const m=String(l).match(/(?:^|[^A-Za-z0-9])([A-Za-z0]{3,4})\.?\s*(\d{1,2})\s*[,.)]?\s*[,.]?\s*(20\d\d)\b/),Y=new Date().getFullYear();if(!m||+m[2]<1||+m[2]>31||+m[3]>Y||+m[3]<Y-5)return null;/* a damaged read must still land on a recent year */
- const t=m[1].toLowerCase().replace(/0/g,'o').slice(0,3);let best=-1,bd=9,tie=false;
- MONS.forEach((x,i)=>{let d=0;for(let k=0;k<3;k++)if(x[k]!==t[k])d++;if(d<bd){bd=d;best=i;tie=false}else if(d===bd)tie=true});
- if(bd>1||tie||t.length<3)return null;return MONS[best][0].toUpperCase()+MONS[best].slice(1)+' '+(+m[2])+', '+m[3]}
-/* a purchase date is recent and not in the future: OCR turns 2026 into 2006 or 2028, and a wrong date is worse than an empty field */
-const recentDate=s=>{const d=pd(s);if(!d)return false;const n=new Date();return d.getFullYear()>=n.getFullYear()-7&&d<=new Date(n.getFullYear(),n.getMonth(),n.getDate()+2)};
-const findDate=(l,fz)=>{const g=new RegExp(DATE.source,'gi');for(const m of String(l).matchAll(g))if(okDate(m[1])&&recentDate(m[1]))return m[1];return fz===false?null:fuzzyDate(l)};
 const PAY=/\b(visa|mastercard|master card|amex|american express|discover|debit|credit|cash|check|cheque|paypal|venmo|zelle|ach|apple pay|direct deposit)\b/i;
-const SKIP=/\bchange\b|cash tender|tendered|\b(?:credit|debit)\s*card\b|\bcard\s*(?:#|no\b|number|ending|\*|x{2,}|\d{4})|visa|mastercard|amex|debit|balance due|thank|\bauth|\bref\b|approval|points|savings total|you saved/i;
+const SKIP=/\bchange\b|cash tender|tendered|\bcard\b|visa|mastercard|amex|debit|balance due|thank|\bauth|\bref\b|approval|points|savings total|you saved/i;
 const LBL=/^(?:bill(?:ed)?\s*to|client|employer|customer|company|job|event|service|work|invoice|payment|pay|location|venue|address|site|hours|total|amount|mileage|miles|distance|fuel|gas|date|paid|one[\s-]*way|round[\s-]*trip|wear|vehicle|net|gross)\b/i;
 const PK=/^\d+(?:\/\d+)+\s*pcs?$/i;
-/* payment methods printed with an amount (Apple Pay $19.92, Google Pay, PayPal...) are how the order was paid, never products */
-const WALLET=/\b(?:apple|google|samsung|shop|amazon|click\s*to)\s*pay\b|\bg\s?pay\b|pay\s?pal|\bvenmo\b|\bzelle\b|\bklarna\b|\bafterpay\b|\baffirm\b|\bcash\s?app\b|\bpay\W*$|\bpaid\s+on\b|one-?click\s+pay/i;
 /* Turn a raw OCR'd marketplace title into a readable product name. v = variant line (e.g. "Blue 2") */
 /* ALL-CAPS brand words (4+ letters) become Title case: DURATECH -> Duratech. Short ones (LED, USB) stay. */
 const uncap=s=>String(s).replace(/\b[A-Z]{4,}\b/g,w=>w[0]+w.slice(1).toLowerCase());
-const cleanName=(n,v,keep)=>{let t=n.replace(/\s{2,}/g,' ').trim().split(' ');
+const cleanName=(n,v)=>{let t=n.replace(/\s{2,}/g,' ').trim().split(' ');
  /* truncated by the app ("Wire Cutters Se..."): drop the ellipsis and any cut-off fragment glued to it */
  let last=t[t.length-1]||'';if(/(\.{2,}|\u2026)$/.test(last)){const b=last.replace(/(\.{2,}|\u2026)$/,'');if(b)t[t.length-1]=b;else t.pop();}
  /* product-photo text read in front of the title: stray 1-2 letter bits, "OPCS", etc. */
- while(!keep&&t.length>2&&(/^[^\w]*$/.test(t[0])||(t[0].length<=2&&!/\d/.test(t[0])&&!/^[AI]$/.test(t[0]))||/^[O0]pcs$/i.test(t[0])))t.shift();
- if(/^A(?=p(?:cs?|es)$)/.test(t[0]||''))t[0]='4'+t[0].slice(1);
+ while(t.length>2&&(/^[^\w]*$/.test(t[0])||(t[0].length<=2&&!/\d/.test(t[0])&&!/^[AI]$/.test(t[0]))||/^[O0]pcs$/i.test(t[0])))t.shift();
+ if(/^A(?=pcs?$)/.test(t[0]||''))t[0]='4'+t[0].slice(1);
  /* "2pcs 2/5/10pcs ...": the photo's count echoed in front of the pack options */
  if(t.length>2&&/^\d+p(?:cs|es)$/i.test(t[0])&&PK.test(t[1])){t[0]=t[0].replace(/pes$/i,'pcs');t.splice(1,1)}
  /* "2/5/10pcs ..." with variant "Blue 2": the number in the variant is the pack actually bought */
  else if(t.length&&PK.test(t[0])&&v){const opts=t[0].match(/\d+/g),m=(v.match(/\b\d+\b/g)||[]).find(x=>opts.includes(x));if(m)t[0]=m+'pcs'}
  let s=t.join(' ').replace(/\s+\S{0,3}\s+(?:sold|shipped)\s*by\b.*$/i,'').replace(/\s*(?:sold|shipped)\s*by\b.*$/i,'');
  const seen=new Set();s=s.split(' ').filter(w=>{const k=w.toLowerCase().replace(/[^a-z0-9]/g,'');if(k.length<4)return true;if(seen.has(k))return false;seen.add(k);return true}).join(' ');
- return uncap(s.replace(/[\s|\\\/_~.]+$/,'').replace(/\s*[-\u2013\u2014,:;]+\s*$/,'').trim())};
+ return uncap(s.replace(/\s*[-\u2013\u2014,:;]+\s*$/,'').trim())};
 
 /* Short, readable product name from a cleaned marketplace title + variant line. Rules only; never invents a product. */
 const WORDS=['Set','Kit','Protector','Protectors','Protective','Combination','Mirror','Stickers','Sticker','Holder','Band','Brace','Bag','Case','Cover','Cutters','Screwdriver','Organizer','Charger','Cable','Adapter','Lights','Light','Clips','Clip','Pads','Pad','Storage','Handle','Strap','Gloves','Wrench','Pliers','Tape','Brush','Cleaner','Insoles','Lock'];
@@ -75,47 +47,7 @@ function shortName(title,v,cut){let t=title.split(' ').filter(Boolean),q=null,se
  const qs=q>1?q+'pc ':'';
  if(set)return q>1?qs+'Set of '+n:n+' Set';
  return qs+n}
-/* Register receipts print short product codes (ELCTRIC, STK, 2PK). Expand the common ones and repair one damaged letter in common product words. */
-const ABBR={oil:'Oil',puc:'PVC',pvc:'PVC',elctric:'Electrical',electric:'Electrical',elec:'Electrical',tpe:'Tape',tp:'Tape',stk:'Sticks',stks:'Sticks',lav:'Lavender',mnt:'Mint',van:'Vanilla',papya:'Papaya',papy:'Papaya',strwbry:'Strawberry',strawbry:'Strawberry',choc:'Chocolate',ckn:'Chicken',org:'Organic',pnut:'Peanut',btl:'Bottle',btls:'Bottles',bx:'Box',clnr:'Cleaner',clnsr:'Cleaner',dtrgnt:'Detergent',dtgt:'Detergent',shmp:'Shampoo',cndtnr:'Conditioner',tthpste:'Toothpaste',nsl:'Nasal',ref:'Refill',refl:'Refill',asst:'Assorted',assrt:'Assorted',wht:'White',blk:'Black',gry:'Gray',grn:'Green',blu:'Blue',slv:'Silver',pk:'Pack',ct:'Count'};
-const VOCAB=['Airwick','Airpop','Strawberry','Electrical','Tape','Nasal','Lavender','Vanilla','Papaya','Refill','Batteries','Battery','Scissors','Marker','Markers','Notebook','Folder','Folders','Envelopes','Envelope','Stapler','Staples','Pencils','Pencil','Pens','Highlighters','Sharpie','Duct','Masking','Painter','Gloves','Trash','Bags','Sponges','Sponge','Bleach','Cleaner','Water','Bottle','Charger','Cable','Adapter','Extension','Flashlight','Screwdriver','Hammer','Pliers','Zip','Ties','Glue','Paper','Towels','Towel','Tissue','Napkins','Plates','Cups','Forks','Spoons','Snacks','Crackers','Cookies','Candy','Chips','Cereal','Coffee','Sugar','Cleaning','Laundry','Detergent','Soap','Shampoo','Toothpaste','Mouthwash','Deodorant','Lotion','Sanitizer','Wipes','Mints','Gum','Granola','Fruit','Grain','Bars','Bar','Sticks','Mint','Pack','Count','Assorted'];
-const nice=n=>{if(!n||n==='Item')return n;let t=String(n).replace(/\s+/g,' ').trim();
- /* sizes and dimensions are noise in a product name (".71INX50F", "2PK", "5CT") -> keep the pack count readable */
- t=t.replace(/\s+\.?\d+(?:\.\d+)?\s?(?:in|inch|ft|f|oz|ml|l|lb|g)(?:\s?x\s?\.?\d+(?:\.\d+)?\s?(?:in|inch|ft|f|oz|ml|l|lb|g)?)?\b/ig,'').replace(/\s+\.?\d+(?:\.\d+)?\s?in\s?x\s?\d+\s?f\b/ig,'');
- const out=t.split(' ').map(w=>{w=w.replace(/^[SsOoIl|](?=(?:pk|ct|pcs?)$)/i,c=>/[Ss]/.test(c)?'5':/[Oo]/.test(c)?'0':'1');let m=w.match(/^(\d+)\s?(pk|ct|pcs?)$/i);if(m)return m[1]+(/^pk$/i.test(m[2])?'-pack':/^ct$/i.test(m[2])?'-count':' pc');
-  const raw=w.replace(/[^A-Za-z]/g,'');if(!raw)return w;const lo=raw.toLowerCase();if(ABBR[lo])return ABBR[lo];
-  if(raw.length===3&&raw===raw.toUpperCase()){for(const k of ['mnt','lav','stk','tpe','oil']){if(lev(lo,k)<=1)return ABBR[k]}}
-  if(raw.length>=5){let best=null,bd=2;for(const v of VOCAB){if(Math.abs(v.length-raw.length)>1)continue;const d=lev(lo,v.toLowerCase());if(d<bd){bd=d;best=v}}if(best&&bd<=1)return best;const pf=VOCAB.find(v=>v.length>=5&&lo.length>=v.length&&lo.startsWith(v.toLowerCase().slice(0,5))&&lo.length<=v.length+5);if(pf)return pf}
-  return /^[A-Z&]{2,}$/.test(w)&&w.length>3?w[0]+w.slice(1).toLowerCase():w});
- return out.join(' ').replace(/\bvan\w{0,3}\s*&?\s*pap\w*/i,'Vanilla & Papaya').replace(/\bOIL\b/,'Oil').replace(/\bF[&R]?G\b/i,'Fruit & Grain').replace(/\bVan\s*&\s*Papaya\b/i,'Vanilla & Papaya').replace(/\bVan&Papaya\b/i,'Vanilla & Papaya').replace(/\bVanilla&Papaya\b/i,'Vanilla & Papaya').replace(/\s+/g,' ').trim()};
-/* v21: register receipts (Dollar Tree style): every line between the DESCRIPTION header and the Sub Total line is an item, and the LAST number on the line is its total.
-   Tolerates the usual photo damage: 1.50T read as 1.507, 1.25T as 125], qty/price columns turned to junk. */
-function regRows(L){
- let a=L.findIndex(l=>/descr/i.test(l)&&/(qty|price|total|ary|pr[il]ce)/i.test(l));if(a<0)a=L.findIndex(l=>/\bdescri/i.test(l));
- if(a<0)return [];
- let z=L.findIndex((l,i)=>i>a&&/sub\s?-?\s?tot|subtota|general\s+exempt|sales\s+tax|\btotal\b/i.test(l));if(z<0)return [];
- const out=[],PK=/^\d{1,2}(pk|ct|pc|pcs)$/i;
- for(let i=a+1;i<z;i++){const l=L[i].replace(/^[\s|!:;.,'`~_\-\u2014\u2018\u2019]+/,'').trim();
-  if(!/[A-Za-z]{3}/.test(l)||/^(reason|bag\s?fee|customer|coupon|discount|savings)|brought\s?bag/i.test(l))continue;
-  const tk=l.split(/\s+/),last=tk[tk.length-1],m=last.match(/^\$?(\d{1,3}?)[.,]?(\d{2})([A-Za-z7\]|)!1])?$/);
-  if(tk.length<2)continue;let unk=false,price;
-  if(m){price=+(m[1]+'.'+m[2]);if(!(price>0))continue}else if(/\d/.test(last)&&last.length>=3&&/[A-Za-z]{4}/.test(tk.slice(0,-1).join(' '))){unk=true;price=0}else continue;
-  let nm=tk.slice(0,-1);const dropped=[];
-  while(nm.length>1&&dropped.length<3){const t=nm[nm.length-1],lt=(t.match(/[A-Za-z]/g)||[]).length;if(PK.test(t))break;
-   if(t.length<=2||(/[a-z]/.test(t)&&nm.length>2&&/^[^a-z]*$/.test(nm.slice(0,2).join(''))&&dropped.length<2)||(t.length<=5&&lt*2<=t.length)||/[|!]/.test(t)){dropped.push(t);nm.pop()}else break}
-  let q=1;const dq=dropped.slice().reverse().find(t=>/^[1-9]$/.test(t));if(dq)q=+dq;
-  /* size codes (.71INX50F, INX5SOF) are noise */
-  const sz=t=>!PK.test(t)&&(/^\.?\d+(?:\.\d+)?[A-Za-z]{1,5}\d*[A-Za-z]*$/.test(t)||/^[A-Za-z]{1,3}\d+[A-Za-z]*$/.test(t)),keep=nm.map(t=>!sz(t));
-  for(let k=0;k<nm.length-1;k++)if(!keep[k+1]&&/^\.?\d{1,3}$/.test(nm[k]))keep[k]=false;
-  const name=nm.filter((t,k)=>keep[k]).join(' ').replace(/[|]/g,'').replace(/\s+/g,' ').trim();if(!name||(name.match(/[A-Za-z]/g)||[]).length<3)continue;
-  out.push({n:nice(name),full:nice(name),cut:false,n0:l,q,p:+(price/q).toFixed(2),tx:/[T7]$/.test(last)?1:0,ext:1,u:unk?2:(/[.,]/.test(last)?0:1)})}
- return out}
-/* item names: letters, digits, spaces, - and / only */
-const cleanItem=n=>String(n).replace(/\s*&\s*/g,' & ').replace(/['\u2019\u2018]/g,'').replace(/[^A-Za-z0-9\s\-\/&]/g,' ').replace(/\s*-\s*$/,'').replace(/\s+/g,' ').trim();
-const readable=n=>((n.match(/[A-Za-z]/g)||[]).length>=3)&&!/^\W*(items?|qty|quantity|price)\W*$/i.test(n);
-/* price typed with a space instead of a point: '10 00', '4. 99', '$4 99' */
-const np=l=>PRICE.test(l)?l.replace(/(\d)\s?[.,]\s+(\d{2})(?=\s*-?\s*[A-Z]{0,2}\d?\s*$)/,'$1.$2'):l.replace(/^(.*[A-Za-z]{3}.*?)\s\$?(\d{1,3})\s(\d{2})(\s*-?\s*[A-Z]{0,2})\s*$/,(m,a,d,c,f)=>+c<=99&&!/\d\s*$/.test(a)?a+' '+d+'.'+c+f:m);
-/* words that mean a line is part of the totals/payment block, never a product name */
-const NOTNAME=/\b(?:subt?\s?-?tota[l1jy|\]]|total|tax|balance|change|cash|tender(?:ed)?|amount|due|visa|master\s?card|amex|debit|credit|payment|savings|discount|coupon|shipping|thank|receipt|survey|cashier|store|tel|phone|www|order|invoice|date|time|register)\b|^\W*\d+(?:[\s\-.,]|$)/i;
+const readable=n=>/[A-Za-z]{3,}/.test(n)&&!/^\W*(items?|qty|quantity|price)\W*$/i.test(n);
 function lines(t){const L=t.replace(/\r/g,'').replace(/\t/g,'   ').replace(/\u00a0/g,' ').split('\n').map(s=>s.trim()).filter(Boolean),out=[];
  for(let i=0;i<L.length;i++){if(/^[A-Za-z][A-Za-z &\/#.\-]{1,30}$/.test(L[i])&&LBL.test(L[i])&&i+1<L.length&&!LBL.test(L[i+1])&&L[i+1].split(/\s{3,}/).length===1){out.push(L[i]+': '+L[i+1]);i++;continue}
   const seg=L[i].split(/\s{3,}/);
@@ -124,88 +56,22 @@ function lines(t){const L=t.replace(/\r/g,'').replace(/\t/g,'   ').replace(/\u00
    seg.forEach(x=>out.push(x));continue}
   out.push(L[i])}
  return out}
-
-/* ---------- v90: call sheets / estimates laid out as tables (header row, values under it) ---------- */
-/* dates with a damaged separator: "10:15 2026", "10.10 2026", "10. 10-2026", "10:11:2026" -> M/D/YYYY. The year must be recent, so phone numbers and times never match. */
-const FDS='(?<![\\d:])(\\d{1,2})\\s?[\\/.:\\-\\u00b0]\\s?(\\d{1,2})\\s?[\\/.:\\-\\u00b0 ]\\s?(20\\d\\d)(?!\\d)';
-function fdates(l){const Y=new Date().getFullYear(),out=[];for(const m of String(l).matchAll(new RegExp(FDS,'g'))){const mo=+m[1],d=+m[2],y=+m[3];if(mo>=1&&mo<=12&&d>=1&&d<=31&&y>=Y-3&&y<=Y+1)out.push(String(mo).padStart(2,'0')+'/'+String(d).padStart(2,'0')+'/'+y)}return out}
-const noFd=l=>String(l).replace(new RegExp(FDS,'g'),' ');
-const tail=(L,i,n)=>{const o=[];for(let j=i;j<Math.min(L.length,i+n)&&!(j>i&&/additional\s*info/i.test(L[j]));j++)o.push(L[j]);return o};
-/* Event Start / Event End: the OCR can interleave the header row with its values, so take the dates near it and sort them (earlier = start) */
-function evDates(L){const hi=L.findIndex(l=>/event\s*start|event\s*end|start\s*date|end\s*date/i.test(l));if(hi<0)return null;
- const ds=[];tail(L,hi,10).forEach(l=>fdates(l).forEach(d=>ds.push(d)));if(!ds.length)return null;
- const u=[...new Set(ds)].sort((a,b)=>pd(a)-pd(b));return{start:u[0],end:u.length>1?u[u.length-1]:null}}
-/* the number printed under the "Invoice Number" column: the longest letters+digits token (the event number AVL9749 is shorter and sits in the same row) */
-function evInvoice(L){const hi=L.findIndex(l=>/invoice\s*number/i.test(l));if(hi<0)return null;let best=null;
- tail(L,hi,10).forEach(l=>l.split(/\s+/).forEach(t=>{const c=fix(t.replace(/[^A-Za-z0-9\-]/g,''));if(c.length>=8&&/[A-Za-z]/.test(c)&&/\d/.test(c)&&/^[A-Z0-9\-]+$/.test(c)&&(!best||c.length>best.length))best=c}));return best}
-/* "2100 Costa Del Mar Rd. Carlsbad. CA 92009" (periods where the commas were) -> "2100 Costa Del Mar Rd, Carlsbad, CA 92009" */
-function fixAddr(s){s=String(s).replace(/\s+/g,' ').trim();
- if(new RegExp(',\\s*[^,]+,\\s*(?:'+ST+')\\s+\\d{5}').test(s))return s.replace(/\s*,\s*/g,', ');
- const m=s.match(new RegExp('^(.*?)[.,;]?\\s+('+ST+')[.,]?\\s+(\\d{5}(?:-\\d{4})?)\\W*$'));if(!m)return s;
- const tk=m[1].split(' '),city=[];
- while(tk.length>1&&city.length<3){const w=tk[tk.length-1].replace(/[.,;]+$/,'');if(!/^[A-Z][A-Za-z'\-]+$/.test(w)||STREETW.test(w))break;city.unshift(w);tk.pop()}
- if(!city.length)return s;return tk.join(' ').replace(/[.,;\s]+$/,'')+', '+city.join(' ')+', '+m[2]+' '+m[3]}
-function evLocation(L){const k=L.findIndex(l=>/^\W*event\s*location\b/i.test(l));if(k<0)return null;
- let s=L[k].replace(/^\W*event\s*location\s*[:\-]?\s*/i,'').trim();
- if(!s||HDR.test(s)){s='';for(let j=k+1;j<Math.min(L.length,k+3);j++)if(/\d{2,5}\s+[A-Za-z]/.test(L[j])&&!HDR.test(L[j])){s=L[j];break}}
- return s?fixAddr(s):null}
-/* position row of a call sheet: "10/10/2026 - 10/11/2026" (the dates she works) under the Date / Position / Hours / Rate / Amount header */
-function posRange(L){const h=L.findIndex(l=>/^\W*date\W+position/i.test(l)||/^\W*position\W*$/i.test(l));if(h<0)return null;
- for(let i=h+1;i<L.length;i++){const f=fdates(L[i]);if(f.length>=2)return[f[0],f[1]];
-  if(f.length==1&&/^\s*[-\u2013\u2014]/.test(noFd(L[i]).replace(/^\s+/,''))){for(let j=i+1;j<Math.min(L.length,i+9);j++){const g=fdates(L[j]);if(g.length)return[f[0],g[0]]}return[f[0],null]}}
- return null}
-/* "Regular Time  5  $35.00  $175.00" rows (hours, rate, amount). When the OCR dropped the hours or split the row over lines, hours = amount / rate. */
-function timeRows(L){const out=[],M=/^\W*\$?\s?([\d,]+\.\d{2})\W*$/,K=/^\W*(re\w{3,}|ov\w{3,}|ot|double|dbl)\b/i;
- for(let i=0;i<L.length;i++){const l=fix(L[i]);if(!K.test(l)||!/time/i.test(l))continue;
-  const m=l.match(/^\W*(re\w{3,}|ov\w{3,}|ot|double|dbl)\b[^\d$]*?(\d+(?:\.\d+)?)\s+\$\s?([\d,]+\.\d{2})\s+\$\s?([\d,]+\.\d{2})\s*$/i);
-  if(m){out.push({ot:!/^re/i.test(m[1]),h:+m[2],r:+m[3].replace(/,/g,''),a:+m[4].replace(/,/g,'')});continue}
-  if(/^\W*[A-Za-z ]+time\W*$/i.test(l)){const mv=[];for(let j=i+1;j<Math.min(L.length,i+4)&&mv.length<2;j++){const x=fix(L[j]).match(M);if(x)mv.push(+x[1].replace(/,/g,''));else if(mv.length)break}
-   if(mv.length==2&&mv[0]>0){const h=+(mv[1]/mv[0]).toFixed(2);if(h>0&&h<=24*14)out.push({ot:!/^re/i.test(l.trim()),h,r:mv[0],a:mv[1]})}}}
- return out}
 const ONLYP=/^-?\$?\s?\d{1,6}[.,]\d{2}$/,QTY=/\d+\s*[x@]\s*\$?\d+[.,]\d{2}$/;
 /* OCR sometimes emits a price column after all the labels: pair loose prices with price-less labels, in order, only when counts match. */
 
 /* Summary labels with their prices split onto separate lines (right-aligned price column): pair them in order. */
-const SUMLBL=/^\W*(?:item\(s\)\s*subtotal|items?\s*subtotal|subt?\s?-?tota[l1jy|\]]|shipping(?:\s*&\s*handling)?|total before tax|estimated tax(?:\s*to be collected)?|(?:sales\s*)?tax|rewards?\s*points?|promotion(?:\s*applied)?|discount|gift card|grand total|order total|total)\s*:?\s*$/i;
+const SUMLBL=/^\W*(?:item\(s\)\s*subtotal|items?\s*subtotal|sub\s?-?total|shipping(?:\s*&\s*handling)?|total before tax|estimated tax(?:\s*to be collected)?|(?:sales\s*)?tax|rewards?\s*points?|promotion(?:\s*applied)?|discount|gift card|grand total|order total|total)\s*:?\s*$/i;
 function pairSummary(L){const li=[];L.forEach((l,i)=>{if(SUMLBL.test(l))li.push(i)});if(li.length<2)return L;
  const last=li[li.length-1],pr=[];for(let i=last+1;i<L.length&&pr.length<li.length;i++){if(ONLYP.test(fix(L[i])))pr.push(i);else if(pr.length)break}
  if(pr.length!==li.length)return L;const out=L.slice();li.forEach((i,k)=>{out[i]=L[i].replace(/\s*:?\s*$/,': ')+L[pr[k]]});pr.forEach(i=>out[i]=null);return out.filter(x=>x!=null)}
-function pairColumns(L){
- const isLab=(l,i)=>i>0&&!ONLYP.test(l)&&/[A-Za-z]{3}/.test(l)&&(!PRICE.test(l)||QTY.test(l))&&!DATE.test(l)&&!/paid|thank|invoice|receipt|card|tel|phone|www|total|tax|balance|change|cash/i.test(l)&&!/[:@]/.test(l);
- let f=-1;for(let i=0;i<L.length;i++){if(ONLYP.test(L[i])&&i+1<L.length&&ONLYP.test(L[i+1])){f=i;break}}
- if(f<0)return L;let e=f;while(e<L.length&&ONLYP.test(L[e]))e++;const k=e-f;
- const lab=[];for(let i=f-1;i>0&&lab.length<k;i--){if(isLab(L[i],i))lab.unshift(i);else if(lab.length&&!ONLYP.test(L[i]))break}
- if(lab.length!==k)return L;
- const out=L.slice();lab.forEach((i,n)=>{out[i]=L[i]+' '+L[f+n]});for(let i=f;i<e;i++)out[i]=null;return out.filter(x=>x!=null)}
-/* v90: a label with nothing after it takes the next line as its value only when that line is not itself a label / column header ("Client" followed by "Event Location" has no value) */
-const HDR=/^\W*(?:event|invoice|number|date|name|start|end|position|hours?|rate|amount|additional|onsite|labor|estimate|to|client|location)\b/i;
-function label(L,re){for(let i=0;i<L.length;i++){const m=L[i].match(re);if(m){const v=(m[1]||'').trim();if(v)return v;if(L[i+1]&&!HDR.test(L[i+1]))return L[i+1]}}return null}
-function dateNear(L,re){for(const fz of [false,true])for(const l of L)if(re.test(l)){const m=findDate(l,fz);if(m)return m}return null}
-const firstDate=L=>{for(const fz of [false,true])for(const l of L){const m=findDate(l,fz);if(m)return m}return null};
-/* Unlabeled document numbers. Register receipts print a bare number under the barcode (store + register + transaction + date, e.g. "0214 03 40317 0928 26"): it is the receipt number even though no label says so. Only the last lines are searched; phones, dates, prices, card/auth lines and item UPCs are skipped. */
-function bareNo(L){const z=y=>y.replace(/[Oo]/g,'0').replace(/[Il]/g,'1'),BADL=/\b(?:auth(?:orization)?|appr(?:oval)?|aid|acct|account|rrn|terminal|batch|visa|mastercard|amex|card|tel|phone|fax|zip)\b/i,
- RX=/^\W*((?:[\dOoIl]+[ \-]){2,}[\dOoIl]+|[\dOoIl]{12,}|\d{2,4}-\d{6,})\W*$/;
- for(let i=L.length-1;i>=Math.max(0,L.length-10);i--){const l=L[i];if(BADL.test(l)||DATE.test(l)||PRICE.test(l))continue;const m=l.match(RX);if(!m)continue;
-  const raw=m[1].trim().replace(/\s+/g,' '),g=raw.split(/[ \-]/),dg=z(raw).replace(/\D/g,'');
-  if(dg.length<10||dg.length>24||!/\d{3}/.test(z(raw)))continue;
-  if(g.length==4&&g[0].length==1&&g[1].length==5&&g[2].length==5&&g[3].length==1)continue;/* item UPC-A (0 47821 30956 3) */
-  if(/^\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}$/.test(z(raw)))continue;/* phone */
-  return z(raw)}
- return null}
-/* Invoice-style number with no label word: a line that is just "#1042" / "No. 1042", or a prefixed token such as INV-2026-0042. */
-function looseNo(L){for(const l of L){const m=l.match(/^\s*(?:no\.?|n[o\u00ba\u00b0]|#)\s*[:.]?\s*([A-Z]{0,4}-?\d{3,}[A-Z0-9\-]*)\W*$/i)||l.match(/\b(?:invoice|receipt)\s*:\s*#?\s*([A-Z]{0,4}-?\d{3,}[A-Z0-9\-]*)\s*$/i)||l.match(/\b((?:INV|RCPT|REC|ORD|PO)[-\s]?\d{3,}[A-Z0-9\-]*)\b/);if(!m)continue;const d=m[1].match(DATE);if(d&&d.index===0)continue;return m[1].replace(/\s+/g,'-')}return null}
+function pairColumns(L){const loose=L.filter(l=>ONLYP.test(l));if(!loose.length)return L;
+ const lab=L.map((l,i)=>(!ONLYP.test(l)&&i>0&&/[A-Za-z]{3}/.test(l)&&(!PRICE.test(l)||QTY.test(l))&&!DATE.test(l)&&!/paid|thank|invoice|receipt|card|tel|phone|www/i.test(l))?i:-1).filter(i=>i>=0);
+ if(lab.length!==loose.length)return L;const out=[...L.filter(l=>!ONLYP.test(l))];const res=L.filter(l=>!ONLYP.test(l)).map(l=>l);
+ let k=0;return L.filter(l=>!ONLYP.test(l)).map((l,_)=>{const i=L.indexOf(l);return lab.includes(i)?l+' '+loose[k++]:l})}
+function label(L,re){for(let i=0;i<L.length;i++){const m=L[i].match(re);if(m){const v=(m[1]||'').trim();if(v)return v;if(L[i+1])return L[i+1]}}return null}
+function dateNear(L,re){for(const l of L)if(re.test(l)){const m=l.match(DATE);if(m)return m[1]}return null}
 function invNo(L,tr){const re=new RegExp('\\b(?:invoice|inv|receipt|order|ticket'+(tr?'|trans(?:action)?':'')+')\\s*(?:no\\.?|number|num|#|id)\\s*[:#.]?\\s*([A-Z0-9][A-Z0-9\\-]*\\d[A-Z0-9\\-]*)','i'),re2=/\b(?:invoice|receipt)\s+#?\s*([A-Z]{0,4}-?\d{3,}[A-Z0-9\-]*)/i;
- for(const l of L)for(const r of [re,re2]){const m=l.match(r);if(!m)continue;const d=l.slice(m.index+m[0].length-m[1].length).match(DATE);if(d&&d.index===0)continue;return [0,m[1]]}
- if(tr){/* register receipts: TRN 40317, TXN: 0092, TR# 03294, TC# 4827 3092 1184, CHECK 1042, REF 55102 (card lines are skipped) */
-  const T2=/\b(?:(?:trn|trm|trh|irn|txn|tran|trans(?:action)?|chk|check|sale|sls|rcpt)\s*(?:no\.?|num(?:ber)?|id|#)?|(?:tr|tc)\s*#)\s*[:#.]?\s*([\dOoIl][\dOoIl\-]{2,}(?:\s[\dOoIl]{2,}){0,4})(?![\d:\/])/i,FIXN=x=>{x=x.trim();if(!/\d/.test(x))return null;const g=x.split(/\s+/),z=y=>y.replace(/[Oo]/g,'0').replace(/[Il]/g,'1');return g.every(y=>y.length==4)?g.map(z).join(' '):g.map(z).join('')},T3=/\b(?:ref(?:erence)?)\s*(?:no\.?|num(?:ber)?|id|#)?\s*[:#.]?\s*(\d[\d\-]{3,})(?![\d:\/])/i,BAD=/\b(?:auth(?:orization)?|appr(?:oval)?|aid|acct|account|rrn|terminal|batch|visa|mastercard|amex)\b/i;
-  const bn=bareNo(L);if(bn)return [0,bn];
-  for(const r of [T2,T3])for(const l of L){if(BAD.test(l))continue;const m=l.match(r);if(!m)continue;const d=l.slice(m.index+m[0].length-m[1].length).match(DATE);if(d&&d.index===0)continue;const fx=FIXN(m[1]);if(fx)return [0,fx]}}
- const ln=looseNo(L);if(ln)return [0,ln];
- return null}
-/* tax flag letters printed after prices (T taxable, F or N non-taxable). A legend such as "T = TAXABLE  F = NON-TAXABLE" overrides the defaults. */
-function taxFlags(text){const nt=new Set(['N','F','E']),tx=new Set(['T','X','A','B','Y']);
- for(const m of String(text).matchAll(/\b([A-Z])\s*=\s*(non[\s-]?tax\w*|tax[\s-]?(?:free|exempt)|exempt|food|grocer\w*|tax\w*)/gi)){const c=m[1].toUpperCase(),w=m[2].toLowerCase();if(/^(non|tax[\s-]?(free|exempt)|exempt|food|grocer)/.test(w)){nt.add(c);tx.delete(c)}else{tx.add(c);nt.delete(c)}}
- return l=>l?(nt.has(l)?0:tx.has(l)?1:undefined):undefined}
+ for(const l of L)for(const r of [re,re2]){const m=l.match(r);if(!m)continue;const d=l.slice(m.index+m[0].length-m[1].length).match(DATE);if(d&&d.index===0)continue;return [0,m[1]]}return null}
 
 
 /* ---------- city & state ---------- */
@@ -221,43 +87,17 @@ function cityState(L){const rx=[new RegExp(',\\s*('+ST+')\\b\\s+\\d{5}(?:-\\d{4}
   if(city.length){const c=city.join(' ');return (c===c.toUpperCase()&&c.length>3?tcase(c.toLowerCase()):c)+', '+m[1]}}}
  return null}
 
-
-/* \"City\" on one line and \"California, 92110\" (state spelled out) on the next. OCR often damages a letter or two, so the state name is matched loosely. */
-const STN={alabama:'AL',alaska:'AK',arizona:'AZ',arkansas:'AR',california:'CA',colorado:'CO',connecticut:'CT',delaware:'DE',florida:'FL',georgia:'GA',hawaii:'HI',idaho:'ID',illinois:'IL',indiana:'IN',iowa:'IA',kansas:'KS',kentucky:'KY',louisiana:'LA',maine:'ME',maryland:'MD',massachusetts:'MA',michigan:'MI',minnesota:'MN',mississippi:'MS',missouri:'MO',montana:'MT',nebraska:'NE',nevada:'NV','new hampshire':'NH','new jersey':'NJ','new mexico':'NM','new york':'NY','north carolina':'NC','north dakota':'ND',ohio:'OH',oklahoma:'OK',oregon:'OR',pennsylvania:'PA','rhode island':'RI','south carolina':'SC','south dakota':'SD',tennessee:'TN',texas:'TX',utah:'UT',vermont:'VT',virginia:'VA',washington:'WA','west virginia':'WV',wisconsin:'WI',wyoming:'WY'};
-const lev=(a,b)=>{const d=[...Array(b.length+1).keys()];for(let i=1;i<=a.length;i++){let p=d[0];d[0]=i;for(let j=1;j<=b.length;j++){const t=d[j];d[j]=Math.min(d[j]+1,d[j-1]+1,p+(a[i-1]===b[j-1]?0:1));p=t}}return d[b.length]};
-/* first three zip digits -> state (USPS ranges); only a fallback when the state's name is too damaged to read */
-const ZR=[[5,5,'NY'],[10,27,'MA'],[28,29,'RI'],[30,38,'NH'],[39,49,'ME'],[50,59,'VT'],[60,69,'CT'],[70,89,'NJ'],[100,149,'NY'],[150,196,'PA'],[197,199,'DE'],[200,205,'DC'],[206,219,'MD'],[220,246,'VA'],[247,268,'WV'],[270,289,'NC'],[290,299,'SC'],[300,319,'GA'],[320,349,'FL'],[350,369,'AL'],[370,385,'TN'],[386,397,'MS'],[398,399,'GA'],[400,427,'KY'],[430,459,'OH'],[460,479,'IN'],[480,499,'MI'],[500,528,'IA'],[530,549,'WI'],[550,567,'MN'],[570,577,'SD'],[580,588,'ND'],[590,599,'MT'],[600,629,'IL'],[630,658,'MO'],[660,679,'KS'],[680,693,'NE'],[700,714,'LA'],[716,729,'AR'],[730,749,'OK'],[750,799,'TX'],[800,816,'CO'],[820,831,'WY'],[832,838,'ID'],[840,847,'UT'],[850,865,'AZ'],[870,884,'NM'],[889,898,'NV'],[900,961,'CA'],[967,968,'HI'],[970,979,'OR'],[980,994,'WA'],[995,999,'AK']];
-function zipState(z){const p=+String(z).slice(0,3),r=ZR.find(([a,b])=>p>=a&&p<=b);return r?r[2]:null}
-function stateOf(tok){const t=tok.toLowerCase().replace(/[^a-z ]/g,'').trim();if(t.length<5)return null;if(STN[t])return STN[t];let best=null,bd=9;for(const n in STN){if(Math.abs(n.length-t.length)>2)continue;const d=lev(t,n);if(d<bd){bd=d;best=n}}return best&&bd<=(best.length>=8?2:1)?STN[best]:null}
-function cityStateName(L){for(let i=1;i<L.length;i++){const m=L[i].match(/^\W{0,2}([A-Za-z]{3,14}(?:\s[A-Za-z]{3,10})?)\s*(,)?\s*(\d{5}(?:-\d{4})?)?/);if(!m||!(m[2]||m[3]))continue;
-  let st=null;for(const tk of [m[1],m[1].split(' ')[0]]){st=stateOf(tk);if(st)break}
-  if(!st&&m[3])st=zipState(m[3]);/* state word unreadable but the zip is clear */
-  if(!st)continue;
-  const prev=L[i-1].replace(/^(?:\W*[A-Za-z0-9]\b\W*)+/,'').replace(/^[^A-Za-z]+/,'').replace(/[^A-Za-z]+$/,'').replace(/(?:\s+[A-Za-z])+$/,'').trim();
-  if(!/^[A-Za-z][A-Za-z .'\-]{2,24}$/.test(prev)||STREETW.test(prev.split(' ').pop())||NOTCITY.test(prev))continue;
-  const c=prev.replace(/\s+/g,' ');return (c===c.toUpperCase()?tcase(c.toLowerCase()):c)+', '+st}return null}
-/* last resort for a damaged address line: the zip is clear, so the state comes from it and the city from the words in front ("Encinitas CA 92024-2847", "Encinitas (A 92024~2847") */
-function cityZip(L){for(let i=0;i<Math.min(L.length,30);i++){const m=L[i].match(/^\W{0,2}([A-Za-z][A-Za-z.'\-]{2,}(?:\s[A-Za-z][A-Za-z.'\-]{2,}){0,2})[\s,]+\S{1,3}[\s,]*(\d{5})(?:[-~\s]\d{4})?(?:\s+\S{1,2})?\W*$/);if(!m)continue;
-  const st=zipState(m[2]);if(!st)continue;const c=m[1].replace(/\s+/g,' ');if(STREETW.test(c.split(' ').pop())||NOTCITY.test(c))continue;return (c===c.toUpperCase()?tcase(c.toLowerCase()):c)+', '+st}return null}
-/* register line printed before the date: store  register  transaction number ... then the date (Dollar Tree: "0895 04162 03 028 50120119 10/10/26 18:06") */
-function regNo(L){for(const l of L){const m=l.match(/^\W*(\d{3,5}(?:\s+\d{2,8}){3,5})\s+\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\b/);if(m)return m[1].replace(/\s+/g,' ')}return null}
 /* ---------- merchant + item-block helpers (layout-agnostic: Amazon app/web, Temu, receipts without a logo line) ---------- */
 const KNOWN=/\b(temu|amazon|walmart|target|costco|home depot|lowe's|lowes|best buy|harbor freight|staples|aliexpress|shein|ebay|etsy|walgreens|cvs|ikea|wayfair|newegg|adorama|sweetwater|guitar center|autozone|o'reilly|michaels|ace hardware|office depot|trader joe's|whole foods|safeway|kroger|7-eleven|starbucks|uber|lyft|doordash|apple|b&h)\b/i;
 const tcase=s=>s.replace(/(^|[\s'-])[a-z]/g,c=>c.toUpperCase());
-/* a word printed in the text, allowing one damaged letter: "sdgoodwill.ong", "G00dwill" */
-function fuzzyHas(text,w){const n=w.length;for(const tk of String(text).toLowerCase().split(/\s+/)){const t=tk.replace(/[^a-z0-9]/g,'');if(t.length<n-1)continue;
- for(const len of [n-1,n,n+1])for(let i=0;i+len<=t.length;i++)if(lev(t.slice(i,i+len),w)<=1)return true}return false}
-const UIJUNK=/item details|order id|order time|payment|search|ask a question|\?|order details|order summary|ordered on|order placed|order\s*#|items? ordered|buy it again|your orders|sign in|hello,|deliver(?:ing)? to|returns|\bcart\b|\bmenu\b|view order|invoice|receipt|^\W*orders?\W*$|^\W*(?:back|done|share|help|close|edit)\W*$|status|delivered|arriving|tracking|\bqty\b|total|subtotal|\btax\b|shipping|payment|\bprime\b|\bsold by\b/i;
+const UIJUNK=/search|ask a question|\?|order details|order summary|ordered on|order placed|order\s*#|items? ordered|buy it again|your orders|sign in|hello,|deliver(?:ing)? to|returns|\bcart\b|\bmenu\b|view order|invoice|receipt|^\W*orders?\W*$|^\W*(?:back|done|share|help|close|edit)\W*$|status|delivered|arriving|tracking|\bqty\b|total|subtotal|\btax\b|shipping|payment|\bprime\b|\bsold by\b/i;
 function guessMerchant(text,L){
  if(/\b\d{3}-\d{7}-\d{7}\b/.test(text)||/item\(s\)\s*subtotal|estimated tax to be collected|\bamazon\b/i.test(text))return{n:'Amazon',sure:1};
- if(/\bgood\s?wi[l1i|]{1,3}\b|\b(?:sd|shop)goodwi/i.test(text)||fuzzyHas(text,'goodwill')||(L.slice(0,5).some(x=>/^\W*go[oa0]d\W*$/i.test(x))&&/donation|goodwi|vip\s*shopp|outlet\s*cent|no\s*refunds/i.test(text)))return{n:'Goodwill',sure:1};
- if(/dollar\s?tree/i.test(text))return{n:'Dollar Tree',sure:1};
  const km=text.match(KNOWN);if(km)return{n:tcase(km[1]),sure:1};
  const ty=text.match(/(?:thank you for (?:shopping|visiting)(?:\s+(?:at|with))?|order(?:ed)? from|purchased from)\s*:?\s*([A-Z][A-Za-z0-9&'.\- ]{2,28})/);if(ty)return{n:ty[1].trim(),sure:0};
- const d=text.match(/\b(?:www\.)?([a-z0-9][a-z0-9-]{2,})\.(?:com|net|org|co|shop|store|us)\b/i);if(d&&!/^(google|gmail|apple|icloud|yahoo|outlook|hotmail|facebook|paypal|gstatic)$/i.test(d[1])){const dn=d[1].replace(/(feedback|survey|careers?|reviews?|receipts?|tellus)$/i,'');if(dn.length>=3)return{n:tcase(dn),sure:0}}
- const l=L.slice(0,12).map(x=>x.replace(/^[^A-Za-z0-9]*[Qq]\s+(?=[A-Z])/,'').trim()).find(l=>/[A-Za-z]{3}/.test(l)&&l.length<=40&&!DATE.test(l)&&!PRICE.test(l)&&!UIJUNK.test(l)&&!/\d{3}[-. ]\d{4}|^\W*(tel|phone|www|http)/i.test(l)&&l.split(/\s+/).length<=7&&/^[A-Z0-9]/.test(l)&&(()=>{const w=l.split(/\s+/);return w.filter(x=>x.replace(/[^A-Za-z]/g,'').length>=3).length*2>=w.length})());
- /* stray marks after the name ("Good | 3") are logo/background noise, not part of it */
- return l?{n:l.replace(/\s+[|\\\/_~¦]+.*$/,'').replace(/[\s|\\\/_~¦.,;:]+$/,'').trim()||l,sure:0}:null}
+ const d=text.match(/\b(?:www\.)?([a-z0-9][a-z0-9-]{2,})\.(?:com|net|org|co|shop|store|us)\b/i);if(d&&!/^(google|gmail|apple|icloud|yahoo|outlook|hotmail|facebook|paypal|gstatic)$/i.test(d[1]))return{n:tcase(d[1]),sure:0};
+ const l=L.slice(0,12).map(x=>x.replace(/^[^A-Za-z0-9]*[Qq]\s+(?=[A-Z])/,'').trim()).find(l=>/[A-Za-z]{3}/.test(l)&&l.length<=40&&!DATE.test(l)&&!PRICE.test(l)&&!UIJUNK.test(l)&&!/\d{3}[-. ]\d{4}|^\W*(tel|phone|www|http)/i.test(l)&&/^[A-Z0-9]/.test(l));
+ return l?{n:l,sure:0}:null}
 /* Item block for marketplace-style pages: a (wrapped) product title above a price that sits alone on its own line. */
 const ONLINE=/\b\d{3}-\d{7}-\d{7}\b|item\(s\)\s*subtotal|\b(?:amazon|temu|aliexpress|shein|ebay|etsy|wayfair|newegg)\b/i;
 const SELLER=/\b(?:sold|shipped|fulfilled|ships)\s*(?:by|from)\b|\bsold\s*by\s*:/i;
@@ -271,196 +111,81 @@ function complete(cn,cut){if(!cut||HASNOUN.test(cn))return null;
  const t=cn.replace(/[\s,.\u2026-]+$/,'');if(!/\bpair\b/i.test(t))return null;
  if(GLOVEMOD.test(t)||/\bsafety\s+work$/i.test(t))return t.replace(/\b1\s+pair\b\s*/i,'')+' Gloves';return null}
 function blockItems(L){
- const si=L.findIndex(l=>/order summary|item\(s\)\s*subtotal|subt?\s?-?tota[l1jy|\]]|total before tax/i.test(l)),out=[];
+ const si=L.findIndex(l=>/order summary|item\(s\)\s*subtotal|sub\s?-?total|total before tax/i.test(l)),out=[];
  for(const end of [si>0?si:L.length,L.length]){if(out.length)break;
  for(let i=0;i<end;i++){const l=fix(L[i]);if(!ONLYP.test(l))continue;const v=num(l);if(v==null||v<=0)continue;
   const t=[];let seen=false;
-  for(let j=i-1;j>=0&&i-j<=7;j--){const x=L[j];if(ONLYP.test(fix(x))||PRICE.test(fix(x)))break;const ok=readable(x)&&x.length>3&&!NOTTITLE.test(x)&&!SELLER.test(x)&&!DATE.test(x);if(ok){t.unshift(x);seen=true}else if(seen)break}
+  for(let j=i-1;j>=0&&i-j<=7;j--){const x=L[j];if(ONLYP.test(fix(x)))break;const ok=readable(x)&&x.length>3&&!NOTTITLE.test(x)&&!SELLER.test(x)&&!DATE.test(x);if(ok){t.unshift(x);seen=true}else if(seen)break}
   if(!t.length)continue;
   let q=1;for(let j=Math.max(0,i-7);j<Math.min(L.length,i+3);j++){const m=L[j].match(/^\W*(?:qty|quantity)\s*:?\s*(\d{1,3})\b/i);if(m){q=+m[1];break}}
   const title=t.join(' '),cut=/\S(\.{2,}|\u2026)\s*$/.test(title),cn=cleanName(title);if(!readable(cn))continue;
   {const cp=complete(cn,cut);out.push({n:cp||shortName(crisp(cn),null,false),full:cp||cn,cut,n0:title,q,p:v,ext:1,inf:cp?1:0})}}}
  return out}
 /* Best guess at a product title when the page shows no per-item price (used only as a name for a single-item fallback). */
-function titleGuess(L){const si=L.findIndex(l=>/order summary|item\(s\)\s*subtotal|subt?\s?-?tota[l1jy|\]]|total before tax/i.test(l)),end=si>0?si:L.length;
+function titleGuess(L){const si=L.findIndex(l=>/order summary|item\(s\)\s*subtotal|sub\s?-?total|total before tax/i.test(l)),end=si>0?si:L.length;
  const c=L.slice(0,end).filter(x=>x.length>=12&&readable(x)&&!NOTTITLE.test(x)&&!SELLER.test(x)&&!DATE.test(x)&&!UIJUNK.test(x)&&!ONLYP.test(x));
  return c.length?crisp(cleanName(c.sort((a,b)=>b.length-a.length)[0])):null}
-/* OCR leaves stray marks after prices ('$4,00 fe', '4.00. 0,00'): drop them so the price still ends the line */
-const tidyL=l=>l.replace(/\u00a7/g,'S').replace(/(\d[.,]\d{2})\s+[a-z]{1,2}(?=[A-Z]\s*$)/,'$1 ').replace(/(\d[.,]\d{2})[.,]\s+(?=\$?\d)/g,'$1 ').replace(/(\d[.,]\d{2})\s+(?!ea\b|each\b)[^\dA-Z\s]{0,2}[a-z]{0,2}\s*$/,'$1');
-/* summary labels the OCR misspelled ("Distount", "Mount Due") are put back, so they are read as totals and not as products */
-const CANON=[['discount','Discount'],['subtotal','Subtotal'],['amountdue','Amount Due'],['tenderamount','Tender Amount'],['changedue','Change Due'],['balancedue','Balance Due'],['grandtotal','Grand Total']];
-function fzl(l){const m=l.match(PRICE);if(!m)return l;const head=l.slice(0,m.index).trim();if(/\d/.test(head))return l;const t=head.toLowerCase().replace(/[^a-z]/g,'');if(t.length<5||t.length>14)return l;
- for(const[k,c]of CANON)if(lev(t,k)<=(k.length>=8?2:1)&&Math.abs(t.length-k.length)<=2)return c+' '+l.slice(m.index);return l}
-const COLROW=/^\W*(\d+(?:[.,]\d+)?)\s+\$?(\d+[.,]\d{2})\s+\$?(\d+[.,]\d{2})\s+\$?(\d+[.,]\d{2})\s*$/;
-/* one flagged line at the receipt's subtotal, named from the row under "Sales Items" when that row is readable */
-function fallbackItem(L,F){if(!(F.extSub>0))return null;
- const si=L.map(l=>/sales\s*it[eo]ms/i.test(l)).lastIndexOf(true),plain=l=>(l.match(/[A-Za-z0-9 ()#\-\/]/g)||[]).length>=l.length*.8,
-  cand=si>=0?L.slice(si+1,si+4).find(l=>/[A-Za-z]{3}/.test(l)&&plain(l)&&!PRICE.test(fix(l))&&!NOTNAME.test(l)&&!SUMLBL.test(l)&&!/uant|antit|price|iscount|otal|^\W*sales/i.test(l)&&l.length<=40):null,
-  nm=cand?cleanName(cand.replace(/^[^A-Za-z0-9(]+/,''),null,true):'',ok=readable(nm);
- return{n:ok?nm:'Item',full:ok?nm:'Item',cut:0,n0:ok?nm:'',q:1,p:F.extSub,ext:1,chk:1}}
-function parse1(text,mode){text=String(text||'');{const m=text.match(/^[ \t]*invoice summary[ \t]*\n(?:[^\n]*\n){0,4}?[ \t]*employer\b/im);if(m)text=text.slice(0,m.index)}let guess=null;const L=pairColumns(pairSummary(lines(text))),F={},items=[],found={};const set=(k,v)=>{if(v!=null&&v!==''){F[k]=v;found[k]=1}};
- const inv=invNo(L,mode==='purchase'),txf=taxFlags(text);
+function parse(text,mode){let guess=null;const L=pairColumns(pairSummary(lines(text))),F={},items=[],found={};const set=(k,v)=>{if(v!=null&&v!==''){F[k]=v;found[k]=1}};
+ const inv=invNo(L,mode==='purchase');
  if(mode==='purchase'){
   {const gm=guessMerchant(text,L);if(gm){set('merchant',gm.n);if(gm.sure)found.mk=1}}
-  if(!ONLINE.test(text)){const cs=cityState(L.slice(0,25))||cityZip(L.slice(0,25))||cityStateName(L.slice(0,25));if(cs)set('location',cs)}
-  set('date',dateNear(L,/ordered on|order placed|order date|order time|purchase date|date of purchase|date placed|invoice date|\bdate?\b|transaction|print date/i)||firstDate(L));{const ic=text.match(/item details\s*\(\s*(\d+)\s*\)/i);if(ic)set('expected',+ic[1])}set('number',(text.match(/\b(\d{3}-\d{7}-\d{7})\b/)||[])[1]||(inv&&inv[1])||(mode==='purchase'?regNo(L):null));
-  const mk=ONLINE.test(text)||/item details|\ba[fl]ter\s+(?:promos?|credit)/i.test(text),dp=x=>mk&&!PRICE.test(x)?x.replace(/\$\s?(\d{1,2})(\d{2})\s*$/,'$$$1.$2'):x;
-  let pend=null,tnd=null,chg=null;const skipped=[],pays=[];let derivedT=0;
-  for(const raw of L){const l0=np(dp(fix(raw))),l=fzl(tidyL(l0)),cm=l.match(COLROW);if(cm&&pend&&!mk){/* register row: qty  price  discount  total, with the name on the line above */const q=+num(cm[1])||1,tv=num(cm[4]),dv=num(cm[3]);if(tv!=null&&tv>0){let cn=cleanName(pend.replace(/^[^A-Za-z0-9(]+/,''),null,true);if(readable(cn)){if(dv)set('discount',(F.discount||0)+dv);items.push({n:shortName(cn,null,false),full:cn,cut:false,n0:pend,q:q>0?q:1,p:+(tv/(q>0?q:1)).toFixed(2),tx:undefined,ext:1});pend=null;continue}}}
-   const pm=l.match(PRICE),fm=l.match(/\d[.,]\d{2}\s*-?\s*([A-Z])(?:[A-Z]|\d)?\s*$/),neg=/\d[.,]\d{2}\s*-\s*[A-Z]{0,2}\d?\s*$/.test(l);if(!pm){if(!mk&&!NOTNAME.test(l)&&!SUMLBL.test(l)&&readable(l)&&l.length>=3&&l.length<=60&&!DATE.test(l)&&!/[:@]/.test(l))pend=l;else if(!/^\W*(?:qty|quantity|ea|each)\b/i.test(l))pend=null;const qm=l.match(/(?:^|\s)[x×]\s?(\d+)\s*$/i),li=items[items.length-1];if(qm&&li&&+qm[1]>1&&li.q==1&&!li.qs){li.q=+qm[1];li.qs=1}if(qm&&li&&!li.v){li.v=l.replace(/\s*[x×]\s?\d+\s*$/i,'').trim();li.n=shortName(li.full||li.n,li.v,li.cut)}continue}const v=num(pm[1]);if(v==null)continue;const head=l.slice(0,pm.index).trim();
-   if(/[il1]tems?\s*\)?\s*\(?s?\)?\s*(total|discount)|extra bonus|tota.?\s+it[eo]ms|items?\s*\/\s*qu/i.test(head))continue;
-   if(/(?:items?|ttams?|tens?|ttens?)\s*\/|\buant|antit|ntit[yv]|\/\s*qu/i.test(head))continue;/* Total Items/Quantity, however misspelled */
+  if(!ONLINE.test(text)){const cs=cityState(L.slice(0,25));if(cs)set('location',cs)}
+  set('date',dateNear(L,/ordered on|order placed|order date|purchase date|date of purchase|date placed|invoice date|\bdate\b/i)||(text.match(DATE)||[])[1]);{const ic=text.match(/item details\s*\(\s*(\d+)\s*\)/i);if(ic)set('expected',+ic[1])}set('number',(text.match(/\b(\d{3}-\d{7}-\d{7})\b/)||[])[1]||(inv&&inv[1]));
+  for(const raw of L){const l=fix(raw),pm=l.match(PRICE);if(!pm){const qm=l.match(/(?:^|\s)[x×]\s?(\d+)\s*$/i),li=items[items.length-1];if(qm&&li&&+qm[1]>1&&li.q==1&&!li.qs){li.q=+qm[1];li.qs=1}if(qm&&li&&!li.v){li.v=l.replace(/\s*[x×]\s?\d+\s*$/i,'').trim();li.n=shortName(li.full||li.n,li.v,li.cut)}continue}const v=num(pm[1]);if(v==null)continue;const head=l.slice(0,pm.index).trim();
+   if(/[il1]tems?\s*\)?\s*\(?s?\)?\s*(total|discount)|extra bonus/i.test(head))continue;
    if(/^\W*(items?|qty|quantity|price|amount|each|unit)\W*$/i.test(head))continue;
-   if(/\ba[fl]ter\s+(?:promos?|credits?|discounts?|coupons?)\b|^\W*a[fl]ter\b/i.test(head)&&items.length){const it=items[items.length-1],nv=+(v/(it.q||1)).toFixed(2);if(it.lp==null)it.lp=it.p;if(nv<=Math.max(it.lp*2,it.lp+1))it.p=nv;continue}
+   if(/after\s+promos?/i.test(head)&&items.length){const it=items[items.length-1];it.p=+(v/(it.q||1)).toFixed(2);continue}
    if(/\b(shipping|delivery|handling)\b/i.test(head)&&!/item/i.test(head)){set('shipping',v);continue}
    if(/total before tax|before tax|pre-?tax/i.test(head)){if(F.extSub==null)set('extSub',v)}
-   else if(/subt?\s?-?tota[l1jy|\]]/i.test(head))set('extSub',v);
+   else if(/sub\s?-?total/i.test(head))set('extSub',v);
    else if(/\b(grand total|order total|total for this order|total payment)\b/i.test(head)&&!/savings|saved/i.test(head)){set('extTotal',v);found.gt=1}
-   else if((/\b(total|amount due)\b/i.test(head)||/\b\w{0,3}[mn]ount\s+due\b/i.test(head))&&!/savings|saved/i.test(head)){if(!found.gt)set('extTotal',v)}
+   else if(/\b(total|amount due)\b/i.test(head)&&!/savings|saved/i.test(head)){if(!found.gt)set('extTotal',v)}
    else if(/\b(sales\s)?tax\b|\bvat\b|\bgst\b/i.test(head))set('tax',(F.tax||0)+v);
-   else if(WALLET.test(head)||/\b(?:visa|master\s?card|amex|american express|discover|debit|cash|tender(?:ed)?|change)\b|^\W*credit(?:\s+card)?\W*$/i.test(head)){if(v>0)pays.push(v);if(/\bchange\b/i.test(head)&&/due|given|back|\$/i.test(head+'$'))chg=v;else if(/\btender(?:ed)?\s*(?:amount|amt)\b|\bamount\s*tender/i.test(head)&&tnd==null)tnd=v}
-   else if(neg&&!mk&&!/discount|\bdisc\b|coupon|\bcpn\b|\bmfr\b|\bbogo\b|\bsave\b|promo|savings|rewards?|points|store credit|credit applied|\bcredit\b|gift/i.test(head)&&(head.match(/[A-Za-z]/g)||[]).length>=8){/* a product line whose price got a stray dash (1.50 read as 4-201) is not a discount */}
-   else if(neg||/discount|\bdisc\b|coupon|\bcpn\b|\bmfr\b|\bbogo\b|\bsave\b|promo|savings|rewards?|points|store credit|credit applied|\bcredit\b/i.test(head)||(/gift\s*card/i.test(head)&&/appl|redeem|balance|tender/i.test(head)))set('discount',(F.discount||0)+Math.abs(v));
-   else if(/\b(?:tip|gratuity)\b/i.test(head)){}
-   else if(/gift\s*card/i.test(head)&&F.extTotal!=null){}
-   else if(!SKIP.test(head)){
+   else if(/discount|coupon|promo|savings|rewards?|points|gift\s*card|store credit|credit applied|\bcredit\b/i.test(head))set('discount',(F.discount||0)+Math.abs(v));
+   else if(/tip|gratuity/i.test(head)){} else if(!SKIP.test(head)&&head.length>1){
     let q=1,p=v,n=head,m;
-    const QL=/^(\d+)\s*[x@]\s*\$?(\d+[.,]\d{2})(?:\s*(?:ea|each))?$/i,WL=/^\d+(?:\.\d+)?\s*(?:lbs?|kg|oz|ea|each)\b/i;
-    if(m=head.match(QL)){q=+m[1]||1;p=v/q;n=''}
-    /* register columns: NAME  qty  unit-price  [total printed as v] -> keep only the name */
-    else if(!mk&&(m=n.match(/^(.+?)[:\s]+(\d{1,2}|[lI|])\s+\$?(\d+[.,]\d{2})$/))&&/[A-Za-z]{3}/.test(m[1])&&(()=>{const qq=/^\d/.test(m[2])?+m[2]:1;return qq>0&&(Math.abs(qq*num(m[3])-v)<=0.02||qq===1)})()){const qq=/^\d/.test(m[2])?+m[2]:1;n=m[1].replace(/[:\s]+$/,'');q=qq;p=qq===1?v:num(m[3])}
-    else if(WL.test(head)||/^\W*(?:qty|quantity)\b/i.test(head)){n=''}
-    else if(m=n.match(/^(\d+)\s*[x@]\s*(.+)/i)){q=+m[1];n=m[2];p=v/q}
+    if(m=n.match(/^(\d+)\s*[x@]\s*(.+)/i)){q=+m[1];n=m[2];p=v/q}
     else if(m=n.match(/^(.+?)\s+(\d+)\s*[x@]\s*\$?(\d+[.,]\d{2})$/i)){n=m[1];q=+m[2];p=num(m[3])}
     else if(m=n.match(/^(.+?)\s+[x@]\s*(\d+)$/i)){n=m[1];q=+m[2];p=v/q}
-    if(v<0||neg){set('discount',(F.discount||0)+Math.abs(v));pend=null;continue}
-    /* a $0.00 line is a summary row ("Discount $0.00", "Change Due $0.00") the OCR misspelled, never a purchase */
-    if(!(v>0))continue;
-    /* product code printed in front of / behind the name (UPC, SKU, dept number) is not part of the name */
-    const nocode=x=>x.replace(/^\s*\d{5,14}\s+(?=[A-Za-z])/,'').replace(/\s+\d{8,14}\s*$/,'').trim();
-    n=nocode(n);let cn=cleanName(n,null,!mk);
-    /* the name sits on the line above (price or '2 @ 3.99' / '1.2 lb @ 0.59/lb' on its own line), or the name wrapped and this line only holds its tail ('5OZ') */
-    if((!n||!readable(cn))&&pend&&!mk){n=nocode(pend)+(n&&n.length<=10?' '+n:'');cn=cleanName(n,null,!mk)}
-    if(!readable(cn)){if(v>0)skipped.push({n:nocode(head),p:+v.toFixed(2)});continue}
-    {const pv=items[items.length-1],nz=x=>x.toLowerCase().replace(/[^a-z0-9]/g,'');
-     /* an identical consecutive line is a second unit on a register receipt, but a repeated line on a marketplace page */
-     if(mk&&pv&&pv.p==+p.toFixed(2)&&pv.q==q&&(nz(pv.n).includes(nz(cn))||nz(cn).includes(nz(pv.n))))continue;
-     const cut=/\S(\.{2,}|\u2026)$/.test(n.trim());
-     items.push({n:shortName(cn,null,cut),full:cn,cut,n0:n,q,p:+p.toFixed(2),tx:txf(fm&&fm[1]),ext:1});pend=null}}}
+    if(v<0){set('discount',(F.discount||0)+Math.abs(v));continue}
+    {const cn=cleanName(n),pv=items[items.length-1],nz=x=>x.toLowerCase().replace(/[^a-z0-9]/g,'');if(!readable(cn))continue;if(pv&&pv.p==+p.toFixed(2)&&pv.q==q&&(nz(pv.n).includes(nz(cn))||nz(cn).includes(nz(pv.n))))continue;items.push({n:shortName(cn,null,/\S(\.{2,}|\u2026)$/.test(n.trim())),full:cn,cut:/\S(\.{2,}|\u2026)$/.test(n.trim()),n0:n,q,p:+p.toFixed(2),ext:1})}}}
   if(!items.length)blockItems(L).forEach(x=>items.push(x));
-  /* Nothing readable but the receipt's own subtotal: the purchase is one line at that price. Flag it so the name gets checked. */
-  if(!items.length&&!mk){const fi=fallbackItem(L,F);if(fi)items.push(fi)}
-  /* no printed total: the amount tendered less change given back is what was paid; else subtotal - discount + tax + shipping */
-  if(F.extTotal==null){derivedT=1;if(tnd!=null&&tnd>0)set('extTotal',+(tnd-(chg||0)).toFixed(2));else if(F.extSub!=null)set('extTotal',+(F.extSub-(F.discount||0)+(F.tax||0)+(F.shipping||0)).toFixed(2))}
-  if(!mk)items.forEach(it=>{if(it.n&&!it.chk){it.n=nice(it.n)}});
-  /* the total read does not equal subtotal + tax, but the card/payment line does: the total was misread */
-  if(F.extSub!=null&&F.tax!=null&&F.extTotal!=null&&!F.discount&&!F.shipping){const ex=+(F.extSub+F.tax).toFixed(2);if(Math.abs(ex-F.extTotal)>0.02&&(pays.some(x=>Math.abs(x-ex)<=0.005)||F.extTotal<F.extSub-0.005))F.extTotal=ex}
-  if(F.extSub==null&&items.length&&F.extTotal!=null&&F.tax!=null&&F.discount==null&&!F.shipping)set('extSub',+(F.extTotal-F.tax).toFixed(2));
-  /* Missing-item recovery: when the items do not add up to the receipt's own subtotal (or to total - tax - shipping), and a line that was set aside
-     (unreadable name, gift card, etc.) accounts for exactly the gap (one line, or two), put it back and mark it for checking. */
-  /* register-style receipts: when the normal read does not add up to the printed subtotal, but the row-by-row read does, use the row-by-row read */
-  if(!mk){try{const alt=regRows(L);if(alt.length){const d0=F.discount||0,t0=F.extSub!=null?F.extSub:(F.extTotal!=null?+(F.extTotal-(F.tax||0)-(F.shipping||0)+d0).toFixed(2):null),sm=a=>+a.reduce((x,i)=>x+i.q*i.p,0).toFixed(2),okS=a=>t0!=null&&Math.abs(sm(a)-t0)<=0.02;
-    {const unk=alt.filter(x=>x.u===2);if(unk.length){if(unk.length===1&&t0!=null){const r=unk[0],need=+(t0-sm(alt.filter(x=>x!==r))).toFixed(2);if(need>0&&need<=20){r.p=need;r.u=0;r.chk=1}else alt.splice(alt.indexOf(r),1)}else unk.forEach(r=>alt.splice(alt.indexOf(r),1))}}
-    if(t0!=null&&!okS(alt)){const un=alt.filter(x=>x.u===1);if(un.length===1){const r=un[0],need=+(t0-(sm(alt)-r.q*r.p)).toFixed(2);if(need>0&&need<=r.q*r.p*3+5){r.p=+(need/r.q).toFixed(2);r.chk=1}}}
-    if(!items.length||(t0==null&&alt.length>=2)||(okS(alt)&&!okS(items))||(t0!=null&&!okS(items)&&Math.abs(sm(alt)-t0)<Math.abs(sm(items)-t0))){items.length=0;alt.forEach(x=>items.push(x))}}}catch(e){}}
-  {const sumI=()=>+items.reduce((a,i)=>a+i.q*i.p,0).toFixed(2),d=F.discount||0;
-   let t=F.extSub;if(t==null&&F.extTotal!=null)t=+(F.extTotal-(F.tax||0)-(F.shipping||0)+d).toFixed(2);
-   if(t!=null&&skipped.length&&items.length){const sum=sumI(),ok=x=>Math.abs(x-t)<=0.02;
-    if(!ok(sum)&&!ok(sum-d)){let hit=null;
-     for(const need of [+(t-sum).toFixed(2),+(t+d-sum).toFixed(2)]){if(need<=0.004||hit)continue;
-      const one=skipped.find(c=>Math.abs(c.p-need)<=0.005);if(one){hit=[one];break}
-      for(let i=0;i<skipped.length&&!hit;i++)for(let j=i+1;j<skipped.length;j++)if(Math.abs(skipped[i].p+skipped[j].p-need)<=0.005){hit=[skipped[i],skipped[j]];break}}
-     if(hit)hit.forEach(c=>items.push({n:c.n&&readable(c.n)?shortName(cleanName(c.n),null,false):'Item',full:c.n||'Item',cut:0,n0:c.n||'',q:1,p:c.p,ext:1,chk:1}))}}
-   var recon=(()=>{let t2=F.extSub;if(t2==null&&F.extTotal!=null)t2=+(F.extTotal-(F.tax||0)-(F.shipping||0)+d).toFixed(2);const sum=sumI();return {sum,target:t2==null?null:t2,ok:t2!=null&&items.length>0&&(Math.abs(sum-t2)<=0.02||Math.abs(sum-d-t2)<=0.02)}})()}
-  /* a total that was worked out (not read) is subtotal + tax: a stray discount from a damaged line must not pull it down */
-  if(!mk&&derivedT&&F.extSub!=null&&F.tax!=null&&F.discount&&recon&&recon.ok){delete F.discount;F.extTotal=+(F.extSub+F.tax+(F.shipping||0)).toFixed(2)}
   if(F.discount!=null)F.discount=+F.discount.toFixed(2);if(F.tax!=null)F.tax=+F.tax.toFixed(2);guess=titleGuess(L)}
  else{
   var D=new RegExp(DATE.source,'gi'),dts=l=>[...l.matchAll(D)].map(m=>m[1]);
   var ev=w=>{for(let i=0;i<L.length;i++)if(new RegExp('event\\s*'+w+'\\s*date','i').test(L[i])){for(let j=i;j<Math.min(L.length,i+4);j++){const d=dts(L[j]);if(d.length)return w=='start'?d[0]:d[d.length>1?1:0]}}return null};
   var tri=/(\d+(?:\.\d+)?)\s+\$\s?([\d,]+\.\d{2})\s+\$\s?([\d,]+\.\d{2})\s*$/,drow=L.filter(l=>/^\d{1,2}\/\d{1,2}\/\d{2,4}\b/.test(l)&&tri.test(l));
   {const c=label(L,/^(?:bill(?:ed)?\s*to|client(?:\s*name)?|customer|company)\s*[:\-]?\s*(.*)$/i);if(c&&!DATE.test(c)&&!/^\$?[\d,.]+$/.test(c))set('client',c.split(/\s{3,}/)[0])}
-  set('invoice',evInvoice(L)||(inv&&inv[1]));
+  set('invoice',inv&&inv[1]);
   set('jobDate',dateNear(L,/(job|service|work|shift|event|date of service)\s*date|date of service|worked/i));
-  if(!F.jobDate){/* v16: skip payment-terms lines (Net 30, due dates); of the dates left, the earliest is the work date */const c=L.filter(l=>DATE.test(l)&&!/invoice|payment|paid|due|issued|deposit|net\s*-?\s*\d|terms|pay\s*by|remit/i.test(l)).map(l=>l.match(DATE)[1]).map(v=>({v,d:pd(v)})).filter(x=>x.d).sort((a,b)=>a.d-b.d);if(c.length)F.jobDate=c[0].v}
+  if(!F.jobDate){const l=L.find(l=>DATE.test(l)&&!/invoice|payment|paid|due|issued|deposit/i.test(l));if(l)F.jobDate=l.match(DATE)[1]}
   set('location',label(L,/^(?:site|job\s*site|location|venue|address|job location)\s*[:\-]\s*(.*)$/i));
   const hrs=[...text.matchAll(/(\d+(?:\.\d+)?)\s*(?:hrs?|hours)\b/gi)].map(m=>+m[1]);
   const tot=label(L,/^(?:total\s*hours|hours\s*worked|hours)\s*[:\-]?\s*(\d+(?:\.\d+)?)\b(?!\s*[x×@])/i);
   set('hours',tot!=null&&!isNaN(+tot)?tot:hrs.length?String(hrs.reduce((a,b)=>a+b,0)):null);
   const ot=text.match(/\b(?:overtime|OT)\b\D{0,12}(\d+(?:\.\d+)?)/i);if(ot){F.notes='Overtime hours mentioned: '+ot[1]+' (verify).';found.notes=1}
-  let amt=null;for(const re of [/amount paid|total paid|total pay|net pay|gross pay/i,/amount due|total due/i,/(?<!sub)\btotal\b/i]){for(const raw of L){const l=fix(raw);if(!re.test(l)||/\btax\b|\brate\b|hours|hrs|subt?\s?-?tota[l1jy|\]]/i.test(l.replace(re,'')))continue;const a=[...l.matchAll(/\$?\s?(\d[\d,]*\.\d{2})\b/g)];if(a.length){amt=a[a.length-1][1].replace(/,/g,'');if(/\best(?:imated|\.)?\s*(?:total|amount|pay)/i.test(l))F.estTotal=1}}if(amt)break}
-  if(!amt){const pt=printedTotal(L,fix);if(pt!=null)amt=pt}
-  set('amount',amt);if(amt&&+String(amt).replace(/,/g,'')>0)F.tp=1}
+  let amt=null;for(const re of [/amount paid|total paid|total pay|net pay|gross pay/i,/amount due|total due/i,/(?<!sub)\btotal\b/i]){for(const raw of L){const l=fix(raw);if(!re.test(l)||/\btax\b|\brate\b|hours|hrs|sub\s?-?total/i.test(l.replace(re,'')))continue;const a=[...l.matchAll(/\$?\s?(\d[\d,]*\.\d{2})\b/g)];if(a.length)amt=a[a.length-1][1].replace(/,/g,'')}if(amt)break}
+  set('amount',amt)}
   if(mode!=='purchase'){
    const sd=ev('start'),ed=ev('end');if(sd)set('jobDate',sd);if(ed)set('endDate',ed);
    if(!sd||!ed){const l=L.find(l=>/\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\s+\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\s*$/.test(l));if(l){const d=l.match(/(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})\s+(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})\s*$/);if(!sd)set('jobDate',d[1]);if(!ed)set('endDate',d[2])}}
    for(const l of L){const m=l.match(/(?<!\w\s)\bDate\s+(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})/);if(m){set('closeDate',m[1]);break}}if(!F.closeDate){const d=dateNear(L,/invoice\s*date|date\s*issued|issued/i);if(d)set('closeDate',d)}
    const loc=label(L,/^(?:event\s*location|job\s*location|service\s*location|work\s*location|job\s*site|site|venue|location|address)\s*[:\-]?\s*(.*)$/i);if(loc&&!/^\$?[\d,.]+$/.test(loc))set('location',loc.split(/\s{3,}/)[0]);
    if(F.location&&!HASST.test(F.location)){const k=L.findIndex(l=>/^(?:event\s*location|job\s*location|service\s*location|work\s*location|job\s*site|site|venue|location|address)\b/i.test(l)),cs=k>=0?cityState(L.slice(k,k+4)):null;if(cs)F.location=F.location+', '+cs}
-   {/* v90: table-style call sheets */
-    const ed2=evDates(L),pr=posRange(L);
-    if(ed2){set('jobDate',ed2.start);if(ed2.end)set('endDate',ed2.end)}
-    if(pr){set('jobDate',pr[0]);if(pr[1]&&pr[1]!==pr[0])set('endDate',pr[1])}/* the dates she works beat the whole event's span */
-    const el=evLocation(L);if(el)set('location',el)}
    const nv=re=>{for(const raw of L){const m=fix(raw).match(re);if(m)return m}return null};
    {const m=nv(/^(?:(round[\s-]*trip|one[\s-]*way)(?:\s*(?:miles?|mileage|distance))?|mileage|miles|distance)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(?:mi\b|miles?\b)?(.*)$/i);if(m){let v=+m[2];if(/one/i.test(m[1]||'')||/one[\s-]*way/i.test(m[3]||''))v=v*2;set('roundTrip',String(+v.toFixed(2)))}}
    if(drow.length){const r=drow.map(l=>l.match(tri)),h=r.reduce((a,m)=>a+ +m[1],0),amt=r.reduce((a,m)=>a+ +m[3].replace(/,/g,''),0),low=Math.min(...r.map(m=>+m[2].replace(/,/g,'')));
-    set('hours',String(h));if(!found.amount||(!(+String(F.amount).replace(/,/g,'')>0)&&amt>0)){set('amount',amt.toFixed(2));delete F.tp;F.estTotal=1}
+    set('hours',String(h));if(!found.amount)set('amount',amt.toFixed(2));
     const ot=L.filter(l=>!/^\d{1,2}\/\d{1,2}\/\d{2,4}/.test(l)&&tri.test(l)).map(l=>l.match(tri)).filter(m=>+m[2].replace(/,/g,'')>low+.01).reduce((a,m)=>a+ +m[1],0);
     const sub=L.filter(l=>!/^\d{1,2}\/\d{1,2}\/\d{2,4}/.test(l)&&tri.test(l)).map(l=>l.match(tri)),money=v=>'$'+(+v.replace(/,/g,'')).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
     if(ot){set('overtime',String(ot));set('hours',String(+(h-ot).toFixed(2)));delete F.notes;delete found.notes;
      if(sub.length>1){const pr=sub.map(m=>m[1]+' hrs × '+money(m[2])+' = '+money(m[3]));const lo=Math.min(...sub.map(m=>+m[2].replace(/,/g,''))),hi=Math.max(...sub.map(m=>+m[2].replace(/,/g,'')));
       set('notes','Regular: '+pr[0]+'. Overtime: '+pr[pr.length-1]+(Math.abs(hi/lo-1.5)<.01?' (1.5× regular rate)':'')+'.')}}}}
- if(mode!=='purchase'&&!(typeof drow!=='undefined'&&drow.length)){const tr2=timeRows(L);
-  if(tr2.length){const reg=tr2.filter(r=>!r.ot),ot2=tr2.filter(r=>r.ot),sm=(a,k)=>+a.reduce((t,r)=>t+r[k],0).toFixed(2);
-   if(reg.length)set('hours',String(sm(reg,'h')));if(ot2.length)set('overtime',String(sm(ot2,'h')));
-   const sum=sm(tr2,'a'),zero=found.amount&&!(+String(F.amount).replace(/,/g,'')>0);
-   if(!found.amount||(zero&&sum>0)){set('amount',sum.toFixed(2));delete F.tp;F.estTotal=1}
-   if(/\bestimate\b/i.test(text)&&/\best\.?\s*\$?\d/i.test(text)&&!F.notes)set('notes','Invoice is an estimate ("est."): hours and pay may change when final.');
-   if(zero&&sum>0)F.notes=(F.notes?F.notes+' ':'')+'Printed total was $0.00, so the amount is the sum of the line items.'}}
- var shifts=[];
- if(mode!=='purchase'){
-  const T=/(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m?\.?\s*(?:-|–|—|to)\s*(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m?\.?|(\d{1,2}):(\d{2})\s*(?:-|–|—|to)\s*(\d{1,2}):(\d{2})|(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m?\.?\s*(?:-|–|—|to)\s*(\d{1,2})(?::(\d{2}))?(?!\s*[:\d]|\s*[ap]\.?m)/gi;
-  const to24=(h,m,ap)=>{h=+h;m=+(m||0);if(m>59||h>23)return null;if(ap){if(h<1||h>12)return null;h=h%12+(ap=='p'?12:0)}return h*60+m};
-  const pad=n=>String(n).padStart(2,'0'),hm=v=>pad(Math.floor(v/60))+':'+pad(v%60);
-  let cur='',hold=false;
-  for(const raw of L){
-   let l=fix(raw);const fd=fdates(l);
-   if(fd.length){if(hold)hold=false;else cur=fd[0];if(fd.length==1&&/^\s*[-\u2013\u2014]/.test(noFd(l).replace(/^\s+/,'')))hold=true;l=noFd(l)}/* a range ("10/10 - 10/11") keeps its first date: the shift starts that day */
-   else{const dm=l.match(DATE),yr=dm&&+((dm[1].match(/(\d{4})\s*$/)||[])[1]||0),Y0=new Date().getFullYear();if(dm){if(!yr||(yr>=Y0-3&&yr<=Y0+1))cur=dm[1];l=l.replace(DATE,' ')}}/* a misread year (2028) never becomes the shift date */
-   if(/\b(?:invoice|due|issued|paid|deposit)\b/i.test(l)&&!/\d\s*[ap]\.?m/i.test(l))continue;
-   for(const m of l.matchAll(T)){
-    let s,e;
-    if(m[1]!==undefined){ // both sides have am/pm letters
-     s=to24(m[1],m[2],m[3].toLowerCase());e=to24(m[4],m[5],m[6].toLowerCase())}
-    else if(m[7]!==undefined){ // 24-hour style hh:mm - hh:mm (needs a 24h hint)
-     if(!(+m[7]>=13||+m[9]>=13||/^0\d$/.test(m[7])))continue;s=to24(m[7],m[8]);e=to24(m[9],m[10])}
-    else{ // am/pm on the start side only, e.g. 7am - 3
-     const ap=m[13].toLowerCase();s=to24(m[11],m[12],ap);e=to24(m[14],m[15],ap);
-     if(s!=null&&e!=null&&e<=s)e=to24(m[14],m[15],ap=='a'?'p':'a')}
-    if(s==null||e==null)continue;
-    let d=e-s;if(d<0)d+=1440;if(d<=0||d>16*60)continue;
-    shifts.push({date:cur,start:hm(s),end:hm(e),hours:+(d/60).toFixed(2)})}
-  }
-  if(!shifts.length&&typeof drow!=='undefined'&&drow.length)drow.forEach(l=>{const m=l.match(/^(\d{1,2}\/\d{1,2}\/\d{2,4})\b/),t=l.match(tri);if(m&&t)shifts.push({date:m[1],start:'',end:'',hours:+t[1]})});
- }
- if(mode!=='purchase'&&!F.hours&&shifts.length){const h=+shifts.reduce((a,s)=>a+s.hours,0).toFixed(2);if(h>0){F.hours=String(h);found.hours=1}}
- /* v87: an event's start date is not the day you worked. When the shifts show the first real work day inside the event's start-to-end span, that day is the job date. */
- if(mode!=='purchase'&&shifts.length&&F.jobDate&&F.endDate){const a=pd(F.jobDate),b=pd(F.endDate),c=shifts.filter(s=>s&&pd(s.date)).sort((x,y)=>pd(x.date)-pd(y.date))[0];if(a&&b&&c){const d=pd(c.date);if(d>a&&d<=b)F.jobDate=c.date}}
- try{items.forEach(it=>{if(it&&it.n)it.n=cleanItem(it.n);if(it&&it.full)it.full=cleanItem(it.full)})}catch(e){}
- return {fields:F,items,found,guess,shifts,L,recon:(typeof recon!=='undefined'?recon:null)}}
-/* Other reads of the same photo (different cleanup / layout) fill what the best read missed. Items and amounts stay with the best read. */
-function parse(text,mode,alts){const R=parse1(text,mode);if(mode!=='purchase'||!alts||!alts.length)return R;
- for(const a of alts){if(!a||a===text)continue;let Q;try{Q=parse1(a,mode)}catch(e){continue}
-  for(const k of ['merchant','location','date','number','extSub','extTotal','tax']){if(R.fields[k]!=null&&R.fields[k]!=='')continue;const v=Q.fields[k];if(v==null||v==='')continue;
-   if(k==='merchant'&&!Q.found.mk)continue;if(k==='tax'&&Q.fields.tax===0&&R.fields.extTotal!=null&&R.fields.extSub!=null&&R.fields.extTotal-R.fields.extSub>.005)continue;R.fields[k]=v;R.found[k]=1;if(k==='merchant')R.found.mk=1}}
- /* another read supplied the subtotal this one lacked */
- if(!R.items.length&&!ONLINE.test(text)){const fi=fallbackItem(R.L,R.fields);if(fi)R.items.push(fi)}
- return R}
+ return {fields:F,items,found,guess}}
 function pd(s){s=String(s||'').trim();let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);if(m)return new Date(+m[1],m[2]-1,+m[3]);
  m=s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2}|\d{4})$/);if(m&&+m[1]>=1&&+m[1]<=12&&+m[2]>=1&&+m[2]<=31){let y=+m[3];if(y<100)y+=2000;return new Date(y,m[1]-1,+m[2])}
  const d=new Date(s);return isNaN(d)?null:new Date(d.getFullYear(),d.getMonth(),d.getDate())}
-function net30(s,days){const d=pd(s);if(!d)return null;if(!days){const y=d.getFullYear(),m=d.getMonth(),last=new Date(y,m+2,0).getDate();d.setFullYear(y,m+1,Math.min(d.getDate(),last))}else d.setDate(d.getDate()+days);const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())}
+function net30(s,days){const d=pd(s);if(!d)return null;d.setDate(d.getDate()+(days||30));const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())}
 function irs(s){const d=pd(s);if(!d)return null;const y=d.getFullYear();if(y==2025)return 0.70;if(y==2026)return d>=new Date(2026,6,1)?0.76:0.725;return null}
-const dateIn=s=>findDate(s||'');
+const dateIn=s=>{const m=String(s||'').match(DATE);return m?m[1]:null};
 const api={parse,pd,net30,irs,dateIn,cityState};if(typeof module!=='undefined')module.exports=api;root.Parser=api})(typeof globalThis!=='undefined'?globalThis:this);
