@@ -59,8 +59,8 @@ function prep(c){const o=document.createElement('canvas');o.width=c.width;o.heig
 /* v90: enlarge 2x, then the same light-gray-to-black cut. Pale gray values on work invoices (client, address, dates) are only read reliably when the photo is enlarged first. */
 function prepUp(c){const z=Math.min(2,2800/Math.max(c.width,c.height)),o=document.createElement('canvas');o.width=Math.round(c.width*z);o.height=Math.round(c.height*z);const x=o.getContext('2d');x.imageSmoothingQuality='high';x.drawImage(c,0,0,o.width,o.height);return prep(o)}
 const st=m=>$('#status').textContent=m||'';
-async function handle(f){if(!f)return;S.rec=newRec();S.pages=[];S.undo=[];S.redo=[];S.rec.loaded=true;S.rec.doc=true;S.sel=[];S.words=[];S.conf=null;st('Reading…');try{
- let canvas,text='',pw=[],more=[],ex=[];
+async function handle(f){const fl=(Array.isArray(f)?f:[f]).filter(Boolean);f=fl[0];if(!f)return;const keep=S.mode!='purchase'&&S.rec&&S.rec.loaded&&S.rec.rid?{rid:S.rec.rid,addedAt:S.rec.addedAt,editedAt:S.rec.editedAt,roundTrip:S.rec.roundTrip}:null;S.rec=newRec();if(keep)Object.assign(S.rec,keep);S.pages=[];S.undo=[];S.redo=[];S.rec.loaded=true;S.rec.doc=true;S.sel=[];S.words=[];S.conf=null;st('Reading…');try{
+ let canvas,text='',pw=[],more=[],ex=[],extraC=[],restTxt='';
  if(f.type=='application/pdf'||/\.pdf$/i.test(f.name)){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   const pdf=await pdfjsLib.getDocument({data:await f.arrayBuffer()}).promise,pg=await pdf.getPage(1),NP=Math.min(pdf.numPages,10),pit=[];
   let one=0,tot=0;
@@ -69,20 +69,21 @@ async function handle(f){if(!f)return;S.rec=newRec();S.pages=[];S.undo=[];S.redo
   const imgOnly=text.trim().length<30,sc=imgOnly?Math.min(4,2200/pg.getViewport({scale:1}).width):2,vp=pg.getViewport({scale:sc}),
    renderN=async n=>{const p=await pdf.getPage(n),v=p.getViewport({scale:sc}),c=document.createElement('canvas');c.width=v.width;c.height=v.height;await p.render({canvasContext:c.getContext('2d'),viewport:v}).promise;return c};
   if(imgOnly&&S.rec.mode=='purchase'){const cap=Math.min(pdf.numPages,6),lz=[];for(let n=1;n<=cap;n++)lz.push(()=>renderN(n));return await addShots(lz,{pdf:1,all:pdf.numPages})}
-  if(imgOnly)for(let n=2;n<=Math.min(pdf.numPages,4);n++)more.push(()=>renderN(n));
+  if(S.rec.mode!='purchase'){for(let n=2;n<=Math.min(pdf.numPages,6);n++){const c=await renderN(n);extraC.push(c);if(imgOnly)more.push(()=>c)}}else if(imgOnly)for(let n=2;n<=Math.min(pdf.numPages,4);n++)more.push(()=>renderN(n));
   if(!imgOnly){pw=pdfWords(pit[0],vp);if(S.rec.mode=='purchase')for(let n=2;n<=NP;n++){const v=(await pdf.getPage(n)).getViewport({scale:sc}),c=await renderN(n);ex.push({c,words:pdfWords(pit[n-1],v)})}}
   canvas=await renderN(1);
   if(imgOnly)text=''}
  else if(/^image\//.test(f.type)){const b=await createImageBitmap(f),sc=Math.min(1,1600/Math.max(b.width,b.height));canvas=document.createElement('canvas');canvas.width=b.width*sc;canvas.height=b.height*sc;canvas.getContext('2d').drawImage(b,0,0,canvas.width,canvas.height)}
  else{return st('Unsupported file. Use PDF, JPG or PNG.')}
- S.img=canvas.toDataURL('image/jpeg',.85);S.dim=[canvas.width,canvas.height];showDoc(S.img);if(text&&pw.length){S.words=pw;drawWords(canvas.width,canvas.height)}
+ if(S.rec.mode!='purchase'&&fl.length>1){for(const g of fl.slice(1)){if(extraC.length>=5)break;try{(await filePages(g,6-1-extraC.length)).forEach(p=>{extraC.push(p.c);if(p.t)restTxt+=p.t+'\n';else more.push(()=>p.c)})}catch(e){}}}
+ S.img=canvas.toDataURL('image/jpeg',.85);S.dim=[canvas.width,canvas.height];S.docPgs=[{u:S.img,w:canvas.width,h:canvas.height}].concat(S.rec.mode=='purchase'?[]:extraC.map(c=>({u:c.toDataURL('image/jpeg',.85),w:c.width,h:c.height})));showDoc(S.img,S.docPgs.slice(1).map(p=>p.u));if(text&&pw.length){S.words=pw;drawWords(canvas.width,canvas.height)}
  {const key=S.rec.mode=='purchase'?['merchant','date','extTotal']:['jobDate','client','amount','location','hours'],cnt=t=>{const f=Parser.parse(t||'',S.rec.mode).found;return key.filter(k=>f[k]).length},need=S.rec.mode=='purchase'?Math.min(3,key.length):4;
   const ocr=async(c,z)=>{const r=await Promise.race([Tesseract.recognize(c,'eng'),new Promise((_,j)=>setTimeout(()=>j(0),60000))]);return {t:r.data.text,w:(r.data.words||[]).filter(w=>w.text.trim()).map(w=>z>1&&w.bbox?{...w,bbox:{x0:w.bbox.x0/z,y0:w.bbox.y0/z,x1:w.bbox.x1/z,y1:w.bbox.y1/z}}:w),c:r.data.confidence}};
   let best=text?{t:text,w:S.words,c:null,n:cnt(text)}:null;
   for(const pre of (S.rec.mode=='purchase'?[0,1]:[0,2,1])){if(best&&best.n>=need)break;st('Running OCR on this device (first run downloads language data)…');try{const uz=pre==2?Math.min(2,2800/Math.max(canvas.width,canvas.height)):1,o=await ocr(pre==2?prepUp(canvas):pre?prep(canvas):canvas,uz),n=cnt(o.t);if(!best||n>best.n)best={t:o.t,w:o.w,c:o.c,n}}catch(e){}}
   if(best&&best.t!==text){document.querySelectorAll('.wb').forEach(e=>e.remove());text=best.t;S.words=best.w;S.conf=best.c;drawWords(canvas.width,canvas.height)}
   for(let k=0;k<more.length;k++){st('Reading page '+(k+2)+' of the PDF…');try{const c2=await more[k](),o2=await ocr(c2);text+='\n'+o2.t}catch(e){}}}
- $('#ocr').textContent=text;parse(text);if(S.rec.mode=='purchase'&&canvas){const td=topRightDate(S.words,canvas.width,canvas.height);if(td){S.rec.date=td;S.rec.src.date=1}}lowConf();if(S.rec.mode=='purchase'&&canvas){S.pages=[{id:++PGID,words:S.words,c:canvas,url:S.img,w:canvas.width,h:canvas.height,marks:autoHL(S.words,canvas.width,canvas.height)}];ex.forEach(e=>S.pages.push({id:++PGID,words:e.words,c:e.c,url:e.c.toDataURL('image/jpeg',.85),w:e.c.width,h:e.c.height,marks:autoHL(e.words,e.c.width,e.c.height,seenHL())}));S.pages.forEach(pg=>locate(pg,S.rec.items))}const q=[];if(S.conf!=null&&S.conf<70)q.push('Low scan quality ('+Math.round(S.conf)+'% confidence). Retake in good light if fields look wrong.');if(canvas&&Math.min(canvas.width,canvas.height)<500)q.push('Low-resolution image.');if(S.rec.mode=='purchase'&&/\bhours\b/i.test(text)&&/\brate\b/i.test(text)&&/position|event|crew|technician|labor/i.test(text))q.push('This looks like a work invoice. Tap Work Invoice above and upload again.');st(text.trim()?q.join(' ')||(Object.keys(S.rec.src).length?'':'Text was read but no fields matched. Enter values manually.'):'No text found. Enter values manually.');render();renderPages()
+ if(restTxt)text+='\n'+restTxt;$('#ocr').textContent=text;parse(text);if(S.rec.mode=='purchase'&&canvas){const td=topRightDate(S.words,canvas.width,canvas.height);if(td){S.rec.date=td;S.rec.src.date=1}}lowConf();if(S.rec.mode=='purchase'&&canvas){S.pages=[{id:++PGID,words:S.words,c:canvas,url:S.img,w:canvas.width,h:canvas.height,marks:autoHL(S.words,canvas.width,canvas.height)}];ex.forEach(e=>S.pages.push({id:++PGID,words:e.words,c:e.c,url:e.c.toDataURL('image/jpeg',.85),w:e.c.width,h:e.c.height,marks:autoHL(e.words,e.c.width,e.c.height,seenHL())}));S.pages.forEach(pg=>locate(pg,S.rec.items))}const q=[];if(S.conf!=null&&S.conf<70)q.push('Low scan quality ('+Math.round(S.conf)+'% confidence). Retake in good light if fields look wrong.');if(canvas&&Math.min(canvas.width,canvas.height)<500)q.push('Low-resolution image.');if(S.rec.mode=='purchase'&&/\bhours\b/i.test(text)&&/\brate\b/i.test(text)&&/position|event|crew|technician|labor/i.test(text))q.push('This looks like a work invoice. Tap Work Invoice above and upload again.');st(text.trim()?q.join(' ')||(Object.keys(S.rec.src).length?'':'Text was read but no fields matched. Enter values manually.'):'No text found. Enter values manually.');render();renderPages()
 }catch(e){st('Extraction failed ('+((e&&e.message)||e||'unknown')+'). Enter values manually or try a clearer file.');showOcr();render()}}
 /* The receipt's own date is printed at the top right. When a date is read there it beats any other date on the page (order, delivery, etc.). */
 function topRightDate(ws,W,H){try{const a=(ws||[]).filter(w=>w.bbox&&(w.bbox.x0+w.bbox.x1)/2>W*.5&&w.bbox.y1<H*.2);for(const l of wLines(a).sort((p,q)=>p.y0-q.y0)){const d=Parser.dateIn(l.t);if(d)return d}}catch(e){}return null}
@@ -101,7 +102,7 @@ async function copySel(){const t=(S.psel&&S.psel.length)?selText():selLines();if
  if(!ok){try{const a=document.createElement('textarea');a.value=t;a.setAttribute('readonly','');a.style.cssText='position:fixed;top:0;left:0;opacity:0;font-size:16px';document.body.appendChild(a);a.focus();a.select();a.setSelectionRange(0,t.length);ok=document.execCommand('copy');a.remove()}catch(e){}}
  toast(ok?'Copied':'Could not copy. Try again.')}
 /* v60: the invoice sits in the page at full height, so one finger scrolls the page. Pinch (or the Enlarge button) zooms; only while zoomed does one finger pan the image. */
-function showDoc(u){showOcr();const v=$('#view');v.style.height='';v.innerHTML='<div id="layer" style="position:absolute;top:0;left:0;width:100%;transform-origin:0 0"><img src="'+u+'" style="position:static;width:100%;display:block"></div><button type="button" class="zbtn">Enlarge</button>';
+function showDoc(u,extra){showOcr();const v=$('#view');v.style.height='';{const o=$('#morepg');if(o)o.remove();if(extra&&extra.length){const m=document.createElement('div');m.id='morepg';m.innerHTML=extra.map((x,k)=>'<div class="pgl">Page '+(k+2)+' of '+(extra.length+1)+'</div><img src="'+x+'" alt="Page '+(k+2)+'">').join('');v.after(m)}}v.innerHTML='<div id="layer" style="position:absolute;top:0;left:0;width:100%;transform-origin:0 0"><img src="'+u+'" style="position:static;width:100%;display:block"></div><button type="button" class="zbtn">Enlarge</button>';
  const im=v.firstChild,pic=im.firstChild,rb=v.lastChild;S.z=1;S.x=S.y=0;
  const fit=()=>{if(S.z<=1&&im.offsetHeight)v.style.height=im.offsetHeight+'px'},
  clampP=()=>{if(S.z<=1){S.x=S.y=0;return}const W=v.clientWidth,H=v.clientHeight,w=W*S.z,h=im.offsetHeight*S.z;S.x=w<=W?0:Math.min(0,Math.max(W-w,S.x));S.y=h<=H?0:Math.min(0,Math.max(H-h,S.y))},
@@ -270,7 +271,7 @@ const noun=()=>S.mode=='purchase'?'Receipt':'Call Sheet';const cpLabel=()=>'Copy
 let ct;const copyRec=async()=>{learnRec(S.rec);if(await copy([S.rec])){const b=$('#cpbtn');clearTimeout(ct);requestAnimationFrame(()=>{b.textContent='Copied'});ct=setTimeout(()=>requestAnimationFrame(()=>{b.textContent=cpLabel()}),2500)}};
 /* v11: the saved record keeps a small compressed copy of the invoice / receipt so the summary PDF can be downloaded with it attached (stored encrypted on this phone like the rest) */
 function shrinkImg(u,w,h){return new Promise(res=>{const im=new Image();im.onload=()=>{try{const sc=Math.min(1,1300/im.naturalWidth),cw=Math.max(1,Math.round(im.naturalWidth*sc)),ch=Math.max(1,Math.round(im.naturalHeight*sc)),cv=document.createElement('canvas');cv.width=cw;cv.height=ch;const x=cv.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,cw,ch);x.drawImage(im,0,0,cw,ch);res({u:cv.toDataURL('image/jpeg',.72),w:cw,h:ch})}catch(e){res(null)}};im.onerror=()=>res(null);im.src=u})}
-async function attachImgs(r){if(r.imgs&&r.imgs.length)return;let src=[];try{if(r.mode=='purchase')src=(S.pages||[]).map(p=>({u:baked(p).toDataURL('image/jpeg',.9),w:p.w,h:p.h}));else if(r.doc&&S.img&&S.dim)src=[{u:S.img,w:S.dim[0],h:S.dim[1]}]}catch(e){src=[]}
+async function attachImgs(r){if(r.imgs&&r.imgs.length)return;let src=[];try{if(r.mode=='purchase')src=(S.pages||[]).map(p=>({u:baked(p).toDataURL('image/jpeg',.9),w:p.w,h:p.h}));else if(r.doc&&S.img&&S.dim)src=S.docPgs&&S.docPgs.length?S.docPgs:[{u:S.img,w:S.dim[0],h:S.dim[1]}]}catch(e){src=[]}
  if(!src.length)return;const out=(await Promise.all(src.map(x=>shrinkImg(x.u,x.w,x.h)))).filter(Boolean);if(out.length)r.imgs=out}
 async function saveRec(){if(!S.rec||!S.rec.loaded)return;await attachImgs(S.rec);learnRec(S.rec);const j=JSON.stringify(S.rec);
  if(S.rec.rid){const k=S.records.findIndex(x=>x.rid===S.rec.rid);if(k>=0){const same=noTs(S.records[k])===noTs(S.rec);if(!same){const o=S.records[k];S.records[k]=JSON.parse(j);const a=tsAdded(o);if(a)S.records[k].addedAt=a;S.records[k].editedAt=Date.now();S.sv.sec=S.rec.mode=='purchase'?'x':'w';S.sv.cat='All';S.sv.q='';store()}endEdit();showSaved();return toast(same?'No changes to save':'Changes saved')}}
@@ -531,7 +532,7 @@ async function barcodeNo(c){const w=c.width,h=c.height;if(w<300||h<300)return nu
  let full='',head='';try{full=await rd(L.full);head=await rd(L.head)}catch(e){}
  try{await WD.setParameters({tessedit_char_whitelist:'',tessedit_pageseg_mode:'3'})}catch(e){}
  const R=Scan.reconcile(full,head,L.glyphs);if(R.text.replace(/\D/g,'').length<8)return null;return{text:R.text,ok:R.ok,box:L.box}}
-function handleFiles(fl){const a=[...(fl||[])];if(!a.length)return;dismissRestore();if(S.mode!='purchase'||a.some(f=>!/^image\//.test(f.type)))return handle(a[0]);return addShots(a)}
+function handleFiles(fl){const a=[...(fl||[])];if(!a.length)return;dismissRestore();if(S.mode!='purchase'||a.some(f=>!/^image\//.test(f.type)))return handle(S.mode=='purchase'?a[0]:a);return addShots(a)}
 async function addShots(files,opts){opts=opts||{};let r=S.rec;if(!r.doc){S.rec=r=newRec();r.loaded=true;r.doc=true;S.sel=[];S.words=[];S.pages=[];S.undo=[];S.redo=[]}r.shots=r.shots||0;let dup=0,bad=0;
  const kf=x=>String(x.n).toLowerCase().replace(/[^a-z0-9]/g,'')+'|'+x.p;
  for(let i=0;i<files.length;i++){st((opts.pdf?'Reading page ':'Reading screenshot ')+(i+1)+' of '+files.length+'… (first run downloads language data)');
@@ -946,12 +947,38 @@ function stripSummary(c,ptW){try{const x=c.getContext('2d'),W=c.width,H=c.height
  const rowHit=y=>{const d=x.getImageData(0,y,W,1).data;let run=0,best=0;for(let k=0;k<W;k++){const o=k*4;if(near(d[o],d[o+1],d[o+2])){run++;if(run>best)best=run}else run=0}return best>=need};
  let y=H-1;while(y>=0&&!rowHit(y))y--;if(y<0)return c;while(y>0&&rowHit(y-1))y--;
  const nh=Math.round(y-32*s);if(nh<40*s)return null;if(nh>=H)return c;const o=document.createElement('canvas');o.width=W;o.height=nh;o.getContext('2d').drawImage(c,0,0);return o}catch(e){return c}}
-function attachRec(i){const r=S.records[i];if(!r)return;const inp=document.createElement('input');inp.type='file';inp.accept='application/pdf,image/*';inp.style.cssText='position:fixed;left:-9999px;opacity:0';document.body.appendChild(inp);
- inp.onchange=async()=>{const f=inp.files&&inp.files[0];inp.remove();if(!f)return;toast('Adding invoice\u2026');
-  try{const cs=[];
-   if(f.type=='application/pdf'||/\.pdf$/i.test(f.name)){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';const pdf=await pdfjsLib.getDocument({data:await f.arrayBuffer()}).promise;
-    for(let n=1;n<=Math.min(pdf.numPages,r.mode=='purchase'?6:4);n++){const p=await pdf.getPage(n),v=p.getViewport({scale:Math.min(2,1500/p.getViewport({scale:1}).width)}),c=document.createElement('canvas');c.width=v.width;c.height=v.height;await p.render({canvasContext:c.getContext('2d'),viewport:v}).promise;const keep=n==pdf.numPages?stripSummary(c,p.getViewport({scale:1}).width):c;if(keep)cs.push(keep)}}
-   else if(/^image\//.test(f.type)){const b=await createImageBitmap(f),sc=Math.min(1,1600/Math.max(b.width,b.height)),c=document.createElement('canvas');c.width=Math.round(b.width*sc);c.height=Math.round(b.height*sc);c.getContext('2d').drawImage(b,0,0,c.width,c.height);cs.push(c)}
+const isPdfF=f=>f.type=='application/pdf'||/\.pdf$/i.test(f.name);
+/* every page of a PDF, or one page for an image: [{c: canvas, t: text-layer text or ''}] */
+async function filePages(f,cap,strip){const out=[];
+ if(isPdfF(f)){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';const pdf=await pdfjsLib.getDocument({data:await f.arrayBuffer()}).promise;
+  for(let n=1;n<=pdf.numPages&&out.length<cap;n++){const p=await pdf.getPage(n),tc=await p.getTextContent(),t=pdfLines(tc.items).trim(),w1=p.getViewport({scale:1}).width,v=p.getViewport({scale:Math.min(2,1500/w1)}),c=document.createElement('canvas');c.width=v.width;c.height=v.height;await p.render({canvasContext:c.getContext('2d'),viewport:v}).promise;
+   const k=strip&&n==pdf.numPages?stripSummary(c,w1):c;if(k)out.push({c:k,t:k===c&&t.length>=15?t:''})}}
+ else if(/^image\//.test(f.type)){const b=await createImageBitmap(f),sc=Math.min(1,1600/Math.max(b.width,b.height)),c=document.createElement('canvas');c.width=Math.round(b.width*sc);c.height=Math.round(b.height*sc);c.getContext('2d').drawImage(b,0,0,c.width,c.height);out.push({c,t:''})}
+ return out}
+/* read the pages and the text of one or more invoice files */
+async function readInvoiceFiles(files,mode){const pages=[],q=[];let layer='';
+ for(const f of files){if(pages.length>=6)break;for(const p of await filePages(f,6-pages.length,true)){pages.push(p.c);if(p.t)layer+=p.t+'\n';else q.push(p.c)}}
+ const ocr1=async c=>{try{const r=await Promise.race([Tesseract.recognize(c,'eng'),new Promise((_,j)=>setTimeout(()=>j(0),60000))]);return r.data.text}catch(e){return ''}},
+  cnt=t=>['jobDate','client','amount','location','hours'].filter(k=>Parser.parse(t||'',mode).found[k]).length;
+ let t1='';for(const c of q)t1+=await ocr1(c)+'\n';
+ if(q.length&&cnt(layer+t1)<4){let t2='';for(const c of q)t2+=await ocr1(prepUp(c))+'\n';if(cnt(layer+t2)>cnt(layer+t1))t1=t2}
+ return{pages,text:layer+t1}}
+/* a replaced invoice: the hours, pay, days and status all come from the new invoice. The saved client, location, round-trip miles and anything typed by hand stay. */
+function applyReread(r,o){['amount','hours','overtime','shifts','endDate','estTotal','estOff','stMan','status'].forEach(k=>delete r[k]);
+ if(/^(Invoice is an estimate|Printed total was)/.test(String(r.notes||'')))delete r.notes;
+ Object.assign(r,o.fields);r.shifts=o.shifts||[];r.src=Object.assign({},o.found)}
+function attachRec(i){const r=S.records[i];if(!r)return;const work=r.mode!='purchase',inp=document.createElement('input');inp.type='file';inp.accept='application/pdf,image/*';if(work)inp.multiple=true;inp.style.cssText='position:fixed;left:-9999px;opacity:0';document.body.appendChild(inp);
+ inp.onchange=async()=>{const fs=[...(inp.files||[])];inp.remove();if(!fs.length)return;toast(work?'Reading the new invoice\u2026':'Adding invoice\u2026');
+  try{
+   if(work){const rd=await readInvoiceFiles(fs,'freelance');if(!rd.pages.length)return toast('Use a PDF, JPG or PNG');
+    const out=(await Promise.all(rd.pages.map(c=>shrinkImg(c.toDataURL('image/jpeg',.85))))).filter(Boolean);if(!out.length)return toast('Could not read that file');
+    r.imgs=out;r.editedAt=Date.now();const o=Parser.parse(rd.text,'freelance');
+    if(!rd.text.trim()||Object.keys(o.found||{}).length<2){store();renderRecs();toast('Invoice replaced, but I could not read it. Tap Edit to update the details.');openRec(i);return}
+    applyReread(r,o);store();renderRecs();toast('Invoice replaced and details updated');openRec(i);return}
+   const cs=[];
+   if(isPdfF(fs[0])){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';const pdf=await pdfjsLib.getDocument({data:await fs[0].arrayBuffer()}).promise;
+    for(let n=1;n<=Math.min(pdf.numPages,6);n++){const p=await pdf.getPage(n),v=p.getViewport({scale:Math.min(2,1500/p.getViewport({scale:1}).width)}),c=document.createElement('canvas');c.width=v.width;c.height=v.height;await p.render({canvasContext:c.getContext('2d'),viewport:v}).promise;cs.push(c)}}
+   else if(/^image\//.test(fs[0].type)){const b=await createImageBitmap(fs[0]),sc=Math.min(1,1600/Math.max(b.width,b.height)),c=document.createElement('canvas');c.width=Math.round(b.width*sc);c.height=Math.round(b.height*sc);c.getContext('2d').drawImage(b,0,0,c.width,c.height);cs.push(c)}
    else return toast('Use a PDF, JPG or PNG');
    const out=(await Promise.all(cs.map(c=>shrinkImg(c.toDataURL('image/jpeg',.85))))).filter(Boolean);if(!out.length)return toast('Could not read that file');
    r.imgs=out;r.editedAt=Date.now();store();renderRecs();toast('Invoice added');openRec(i)}catch(e){toast('Could not add that file')}};
@@ -980,7 +1007,7 @@ document.addEventListener('keydown',e=>{if(e.key=='Escape')closeRec()});
  +'.rmh{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}.rmh h3{margin:0}.rmh .x{width:34px;height:34px;padding:0}'
  +'.rmb{overflow-y:auto;flex:1;min-height:0}.rg{background:var(--card);border:1px solid var(--ln);border-radius:14px;padding:4px 14px;margin:0 0 10px}'
  +'.rr{display:flex;justify-content:space-between;gap:12px;padding:7px 0;font-size:14px}.rr+.rr{border-top:1px solid var(--ln)}.rr span{color:var(--mut)}.rr b{text-align:right;overflow-wrap:anywhere}.rr.hl b{background:#fff2a8;padding:0 4px;border-radius:4px}.rr.tt{font-weight:700}'
- +'.acts{margin-top:20px;padding-bottom:8px}.acl{font:600 11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--mut);margin:16px 0 6px}.acr{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:8px}.acts .ab{min-height:46px;padding:8px 6px;font-size:15px;white-space:nowrap;background:transparent;border:1px solid var(--ln);border-radius:12px;color:var(--fg)}.acts .ab.pri{background:linear-gradient(180deg,#2a9cc5,#1c6f96);border-color:transparent;color:#fff;font-weight:600}.acts .del{display:block;margin:22px auto 6px;background:none;border:0;color:#ff8f86;font-size:15px;padding:10px 18px;min-height:44px}.rmf button{flex:1 1 40%}';document.head.appendChild(s)})();
+ +'#morepg{margin:10px 0 4px}#morepg img{width:100%;display:block;border-radius:12px;border:1px solid var(--ln);margin:4px 0 12px}#morepg .pgl{font:600 11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--mut)}.acts{margin-top:20px;padding-bottom:8px}.acl{font:600 11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--mut);margin:16px 0 6px}.acr{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:8px}.acts .ab{min-height:46px;padding:8px 6px;font-size:15px;white-space:nowrap;background:transparent;border:1px solid var(--ln);border-radius:12px;color:var(--fg)}.acts .ab.pri{background:linear-gradient(180deg,#2a9cc5,#1c6f96);border-color:transparent;color:#fff;font-weight:600}.acts .del{display:block;margin:22px auto 6px;background:none;border:0;color:#ff8f86;font-size:15px;padding:10px 18px;min-height:44px}.rmf button{flex:1 1 40%}';document.head.appendChild(s)})();
 (function(){const s=document.createElement('style');s.textContent=['.sv{display:flex;flex-direction:column;gap:10px}.sv .sl{margin:0}.sv>button{width:100%}.sv .seg{margin:0}','.chips{display:flex;flex-wrap:wrap;gap:6px}.chips button{padding:6px 12px;border-radius:999px;font-size:13px;font-weight:600;background:#fff;color:var(--mut);border-color:var(--ln)}.chips button.on{background:var(--g);color:#fff;border-color:var(--g)}','.srt{display:flex;align-items:center;gap:10px}','.svs{position:relative}.svs input{padding-right:44px;-webkit-appearance:none;appearance:none}.svs input::-webkit-search-cancel-button{-webkit-appearance:none;display:none}.svs button{position:absolute;right:2px;top:50%;transform:translateY(-50%);border:0;background:transparent;padding:8px 12px;color:var(--mut);width:auto}.sv>.svs{margin:0}#svbody>button{width:100%}.tr{display:grid;grid-template-columns:minmax(0,1fr) 88px 88px;column-gap:6px;align-items:baseline;padding:9px 0;font-size:14px;overflow-wrap:anywhere}.tr+.tr{border-top:1px solid var(--ln)}.tr>:not(:first-child){text-align:right;white-space:nowrap}.tr b{font-weight:600}.tr .z,.tr b.z{color:var(--mut);font-weight:400}.tr.tot{font-weight:700}.tr.tot b{font-weight:700}.tr.th{border:0;padding:10px 0 2px;font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}.fixn{font-size:12px;color:var(--gd,#2f6b4f);margin-top:4px;line-height:1.4}.fixn[hidden]{display:none}.fixn a{color:inherit;font-weight:700}.srt label{flex:0 0 auto;margin:0}','.svsum{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:var(--mut);padding:0 2px}.svsum b{color:var(--fg);font-size:17px}','.sm{flex:1;min-width:0}.s1{font-weight:600;overflow-wrap:anywhere}.s2{font-size:12px;color:var(--mut);margin-top:1px}','.empty2{border:2px dashed var(--ln);border-radius:16px;padding:28px 16px;text-align:center;color:var(--mut)}','@media(max-width:900px){.nav button{padding:10px 6px;font-size:14px}}'].join('');document.head.appendChild(s)})();
 (function(){const s=document.createElement('style');s.textContent='.sl{background:var(--card);border:1px solid var(--ln);border-radius:14px;padding:6px 14px;margin:10px 0}.sl h4{margin:10px 0 2px;font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}.srow{display:flex;align-items:center;gap:10px;padding:9px 0;font-size:14px}.srow+.srow{border-top:1px solid var(--ln)}.srow span{flex:1;min-width:0}.srow b{white-space:nowrap}.srow .x{flex:0 0 32px;height:32px;padding:0}#f_category{width:100%}input[type=time]{padding-inline:8px;font-size:15px;min-width:0}';document.head.appendChild(s)})();
 
@@ -1549,8 +1576,8 @@ window.csvGo=async function(){
    const PT_VER='v200'
    const PT_VER='vv200'
    ---------- */
-const PT_BUILD=255;
-const PT_LABEL='v57';
+const PT_BUILD=256;
+const PT_LABEL='v58';
 (function(){
  const paint=()=>{const e=document.getElementById('ver');if(e)e.textContent=PT_LABEL};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',paint);else paint();
